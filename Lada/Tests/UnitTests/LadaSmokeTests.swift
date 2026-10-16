@@ -1,7 +1,7 @@
 import Testing
 @testable import Lada
 
-@Suite("Låda Smoke Tests")
+@Suite("Lada Smoke Tests")
 struct LadaSmokeTests {
     @Test("Semantic version comparison")
     func semanticVersionComparison() {

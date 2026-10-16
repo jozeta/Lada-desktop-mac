@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		A10000010000000000000001 /* Låda.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Låda.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000010000000000000001 /* Lada.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Lada.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -61,7 +61,7 @@
 		A10000060000000000000001 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A10000010000000000000001 /* Låda.app */,
+				A10000010000000000000001 /* Lada.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -88,7 +88,7 @@
 			packageProductDependencies = (
 			);
 			productName = Lada;
-			productReference = A10000010000000000000001 /* Låda.app */;
+			productReference = A10000010000000000000001 /* Lada.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -198,7 +198,7 @@
 				);
 				MARKETING_VERSION = 1.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.lada.desktop;
-				PRODUCT_NAME = "Låda";
+				PRODUCT_NAME = "Lada";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
 			};
@@ -221,7 +221,7 @@
 				);
 				MARKETING_VERSION = 1.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.lada.desktop;
-				PRODUCT_NAME = "Låda";
+				PRODUCT_NAME = "Lada";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
 			};

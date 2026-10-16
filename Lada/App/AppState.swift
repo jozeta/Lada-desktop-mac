@@ -619,7 +619,7 @@ public final class AppState: ObservableObject {
     public func generateRedactedDiagnosticReport() -> String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         var lines: [String] = []
-        lines.append("=== LÅDA DIAGNOSTIC REPORT ===")
+        lines.append("=== LADA DIAGNOSTIC REPORT ===")
         lines.append("Generated: \(ISO8601DateFormatter().string(from: Date()))")
         lines.append("Host Architecture: \(hostEnvironment.cpuArchitecture) (\(hostEnvironment.cpuBrandString))")
         lines.append("macOS Version: \(hostEnvironment.macOSVersionString) [Build \(hostEnvironment.macOSBuildString)]")
@@ -732,12 +732,12 @@ public final class AppState: ObservableObject {
         let scriptContent = """
         #!/bin/sh
         clear
-        printf "\\033[1;36m==> Låda: Connected to Apple Container '%s'\\033[0m\\n" "\(id)"
+        printf "\\033[1;36m==> Lada: Connected to Apple Container '%s'\\033[0m\\n" "\(id)"
         printf "\\033[0;90m    Command: %s exec -it %s\\033[0m\\n\\n" "\(execPath)" "\(id)"
         \(shellLogic)
         status=$?
         if [ $status -ne 0 ]; then
-            printf "\\n\\033[1;31m[Låda] Container shell exited with status %d.\\033[0m\\n" "$status"
+            printf "\\n\\033[1;31m[Lada] Container shell exited with status %d.\\033[0m\\n" "$status"
             read -r -p "Press Enter to close this terminal window..." _
         fi
         """

@@ -106,7 +106,7 @@ final class UIWorkflowTests: XCTestCase {
         // Verify diagnostic report redacts secrets
         let report = appState.generateRedactedDiagnosticReport()
         XCTAssertFalse(report.contains("super-sensitive-pat-999"))
-        XCTAssertTrue(report.contains("=== LÅDA DIAGNOSTIC REPORT ==="))
+        XCTAssertTrue(report.contains("=== LADA DIAGNOSTIC REPORT ==="))
     }
 
     func testDockerfileParserExtractsAllInstructionsAndPrepopulatesCreateContainerRequest() {

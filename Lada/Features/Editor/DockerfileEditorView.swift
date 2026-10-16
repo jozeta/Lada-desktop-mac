@@ -24,7 +24,7 @@ public struct DockerfileTemplate: Identifiable, Sendable {
             ENV NGINX_PORT=80
 
             WORKDIR /usr/share/nginx/html
-            RUN echo "<h1>Running on Apple Container via Låda</h1>" > index.html
+            RUN echo "<h1>Running on Apple Container via Lada</h1>" > index.html
 
             EXPOSE 80/tcp
             CMD ["nginx", "-g", "daemon off;"]
@@ -62,7 +62,7 @@ public struct DockerfileTemplate: Identifiable, Sendable {
             USER node
 
             EXPOSE 3000/tcp
-            CMD ["node", "-e", "require('http').createServer((_, res) => res.end('Hello from Låda Node container')).listen(3000)"]
+            CMD ["node", "-e", "require('http').createServer((_, res) => res.end('Hello from Lada Node container')).listen(3000)"]
             """
         ),
         DockerfileTemplate(

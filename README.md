@@ -177,11 +177,11 @@ swift run Lada
 swift test
 ```
 
-### Package Native `Låda.app` Bundle & `.dmg`
+### Package Native `Lada.app` Bundle & `.dmg`
 ```bash
 chmod +x Scripts/package-app.sh
 ./Scripts/package-app.sh
-open "build/Låda.app"
+open "build/Lada.app"
 ```
 
 ---

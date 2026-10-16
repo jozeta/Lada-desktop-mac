@@ -31,7 +31,7 @@ public final class PTYTerminalSession: ObservableObject {
 
         guard container.state == .running else {
             statusMessage = "Container '\(container.id)' is \(container.state.displayTitle.lowercased()). Start the container to open an interactive shell."
-            setBuffer("[Låda Terminal] Container '\(container.id)' is not running.\n")
+            setBuffer("[Lada Terminal] Container '\(container.id)' is not running.\n")
             return
         }
 

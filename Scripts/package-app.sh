@@ -4,13 +4,16 @@ set -euo pipefail
 SCRIPT_DIR="${0:A:h}"
 PROJECT_ROOT="${SCRIPT_DIR:h}"
 BUILD_DIR="${PROJECT_ROOT}/build"
-APP_BUNDLE="${BUILD_DIR}/Låda.app"
-DMG_PATH="${BUILD_DIR}/Låda-1.5.0.dmg"
-ZIP_PATH="${BUILD_DIR}/Låda-1.5.0-macOS-arm64.zip"
+APP_BUNDLE="${BUILD_DIR}/Lada.app"
+DMG_PATH="${BUILD_DIR}/Lada-1.5.0.dmg"
+ZIP_PATH="${BUILD_DIR}/Lada-1.5.0-macOS-arm64.zip"
 CONTENTS_DIR="${APP_BUNDLE}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"
 ICNS_PATH="${PROJECT_ROOT}/Lada/Resources/AppIcon.icns"
+
+# Clean up any legacy non-ASCII build outputs
+rm -rf "${BUILD_DIR}/Låda.app" "${BUILD_DIR}/Låda-1.5.0.dmg" "${BUILD_DIR}/Låda-1.5.0-macOS-arm64.zip"
 
 if [[ ! -f "${ICNS_PATH}" ]]; then
   echo "==> Generating Technical Nordic macOS AppIcon.icns..."
@@ -21,7 +24,7 @@ if [[ ! -f "${ICNS_PATH}" ]]; then
   rm -rf "${ICONSET_DIR}"
 fi
 
-echo "==> Building Låda (Release configuration)..."
+echo "==> Building Lada (Release configuration)..."
 swift build -c release --package-path "${PROJECT_ROOT}"
 
 BIN_PATH="$(swift build -c release --package-path "${PROJECT_ROOT}" --show-bin-path)/Lada"
@@ -72,7 +75,7 @@ rm -rf "${STAGE_DIR}" "${DMG_PATH}" "${ZIP_PATH}"
 mkdir -p "${STAGE_DIR}"
 cp -R "${APP_BUNDLE}" "${STAGE_DIR}/"
 ln -s /Applications "${STAGE_DIR}/Applications"
-hdiutil create -volname "Låda" -srcfolder "${STAGE_DIR}" -ov -format UDZO "${DMG_PATH}" >/dev/null
+hdiutil create -volname "Lada" -srcfolder "${STAGE_DIR}" -ov -format UDZO "${DMG_PATH}" >/dev/null
 rm -rf "${STAGE_DIR}"
 
 if [[ -n "${SIGN_IDENTITY}" ]]; then
