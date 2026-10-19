@@ -7,6 +7,8 @@ BUILD_DIR="${PROJECT_ROOT}/build"
 APP_BUNDLE="${BUILD_DIR}/Lada.app"
 DMG_PATH="${BUILD_DIR}/Lada-1.5.0.dmg"
 ZIP_PATH="${BUILD_DIR}/Lada-1.5.0-macOS-arm64.zip"
+NOTARIZE_ZIP="${BUILD_DIR}/Lada-notarize.zip"
+NOTARY_PROFILE="${LADA_NOTARY_PROFILE:-MySpacesNotary}"
 CONTENTS_DIR="${APP_BUNDLE}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"
@@ -69,11 +71,33 @@ fi
 echo "==> Verifying application bundle code signature..."
 codesign --verify --deep --strict --verbose=2 "${APP_BUNDLE}"
 
+if [[ "${SIGN_IDENTITY}" == *"Developer ID Application"* ]]; then
+  echo "==> Creating clean archive (--norsrc --noextattr) for Apple Notary Service (profile: ${NOTARY_PROFILE})..."
+  rm -f "${NOTARIZE_ZIP}"
+  ditto -c -k --norsrc --noextattr --keepParent "${APP_BUNDLE}" "${NOTARIZE_ZIP}"
+  xcrun notarytool submit "${NOTARIZE_ZIP}" --keychain-profile "${NOTARY_PROFILE}" --wait
+  rm -f "${NOTARIZE_ZIP}"
+
+  echo "==> Stapling notarization ticket to ${APP_BUNDLE}..."
+  xcrun stapler staple "${APP_BUNDLE}"
+  xcrun stapler validate "${APP_BUNDLE}"
+fi
+
+echo "==> Creating clean distribution ZIP archive (--norsrc --noextattr) at ${ZIP_PATH}..."
+rm -f "${ZIP_PATH}"
+ditto -c -k --norsrc --noextattr --keepParent "${APP_BUNDLE}" "${ZIP_PATH}"
+
+APPLE_DOUBLE_COUNT="$(unzip -l "${ZIP_PATH}" | grep -c '/\._' || true)"
+if [[ "${APPLE_DOUBLE_COUNT}" -ne 0 ]]; then
+  echo "Error: Distribution zip still contains ${APPLE_DOUBLE_COUNT} AppleDouble (._) files!" >&2
+  exit 1
+fi
+
 echo "==> Creating distributable disk image at ${DMG_PATH}..."
 STAGE_DIR="${BUILD_DIR}/dmg-staging"
-rm -rf "${STAGE_DIR}" "${DMG_PATH}" "${ZIP_PATH}"
+rm -rf "${STAGE_DIR}" "${DMG_PATH}"
 mkdir -p "${STAGE_DIR}"
-cp -R "${APP_BUNDLE}" "${STAGE_DIR}/"
+ditto --norsrc --noextattr "${APP_BUNDLE}" "${STAGE_DIR}/Lada.app"
 ln -s /Applications "${STAGE_DIR}/Applications"
 hdiutil create -volname "Lada" -srcfolder "${STAGE_DIR}" -ov -format UDZO "${DMG_PATH}" >/dev/null
 rm -rf "${STAGE_DIR}"
@@ -84,10 +108,18 @@ if [[ -n "${SIGN_IDENTITY}" ]]; then
   codesign --verify --verbose=2 "${DMG_PATH}"
 fi
 
-echo "==> Creating signed ZIP archive at ${ZIP_PATH}..."
-ditto -c -k --keepParent "${APP_BUNDLE}" "${ZIP_PATH}"
+if [[ "${SIGN_IDENTITY}" == *"Developer ID Application"* ]]; then
+  echo "==> Notarizing and stapling disk image ${DMG_PATH}..."
+  xcrun notarytool submit "${DMG_PATH}" --keychain-profile "${NOTARY_PROFILE}" --wait
+  xcrun stapler staple "${DMG_PATH}"
+  xcrun stapler validate "${DMG_PATH}"
 
-echo "==> Successfully built and signed:"
+  echo "==> Running Gatekeeper & syspolicy_check distribution verification..."
+  spctl -a -t exec -vv "${APP_BUNDLE}"
+  syspolicy_check distribution "${APP_BUNDLE}"
+fi
+
+echo "==> Successfully built, signed, notarized, and packaged (0 AppleDouble files):"
 echo "    App Bundle: ${APP_BUNDLE}"
 echo "    DMG Image:  ${DMG_PATH}"
 echo "    ZIP Build:  ${ZIP_PATH}"
