@@ -40,3 +40,14 @@ xcuserdata/
 *.profdata
 /*.xcodeproj/project.xcworkspace/
 /*.xcodeproj/xcuserdata/
+
+# --- Baseline: macOS, Claude Code and secrets ---
+.claude/settings.local.json
+.remember/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
