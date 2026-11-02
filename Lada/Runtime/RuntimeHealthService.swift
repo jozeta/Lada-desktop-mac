@@ -339,7 +339,7 @@ public final class RuntimeHealthService: Sendable {
             )
         }
 
-        onProgress("Downloading \(release.assetName) (\(ByteCountFormatter.string(fromByteCount: release.sizeBytes, countStyle: .file)))…")
+        onProgress("Downloading \(release.assetName) (\(NordicFormat.bytes(fromByteCount: release.sizeBytes, countStyle: .file)))…")
 
         let (tempURL, response) = try await URLSession.shared.download(from: release.downloadURL)
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {

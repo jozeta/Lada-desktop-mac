@@ -57,7 +57,7 @@ public struct MenuBarPopoverView: View {
                         Image(systemName: "memorychip")
                             .font(.system(size: 10))
                             .foregroundStyle(NordicTheme.statusGreen)
-                        Text(verbatim: "RAM \(ByteCountFormatter.string(fromByteCount: Int64(sample.memoryUsageBytes), countStyle: .memory))")
+                        Text(verbatim: "RAM \(NordicFormat.bytes(fromByteCount: Int64(sample.memoryUsageBytes), countStyle: .memory))")
                             .font(NordicTheme.monoFontSmall)
                     }
                     Spacer()

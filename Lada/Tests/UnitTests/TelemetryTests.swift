@@ -69,5 +69,26 @@ final class TelemetryTests: XCTestCase {
         XCTAssertLessThanOrEqual(bounds.maxY, 100.001)
         XCTAssertEqual(bounds.width, 70, accuracy: 0.001)
     }
+
+    func testChartFormattingAndScale() {
+        XCTAssertEqual(NordicPerformanceChartCard.formatRate(512), "512 B/s")
+        XCTAssertEqual(NordicPerformanceChartCard.formatRate(5 * 1024), "5.0 KB/s")
+        XCTAssertEqual(NordicPerformanceChartCard.formatRate(150 * 1024), "150 KB/s")
+        XCTAssertEqual(NordicPerformanceChartCard.formatRate(3.5 * 1024 * 1024), "3.5 MB/s")
+        XCTAssertEqual(NordicPerformanceChartCard.formatPercent(7.25), "7.2%")
+        XCTAssertEqual(NordicPerformanceChartCard.formatPercent(45), "45%")
+        XCTAssertEqual(NordicPerformanceChartCard.formatAgo(1), "now")
+        XCTAssertEqual(NordicPerformanceChartCard.formatAgo(42), "42s ago")
+        XCTAssertEqual(NordicPerformanceChartCard.formatAgo(298), "4m 58s ago")
+        XCTAssertEqual(NordicPerformanceChartCard.formatAgo(300), "5m ago")
+        XCTAssertEqual(NordicPerformanceChartCard.niceCeiling(0.83), 1)
+        XCTAssertEqual(NordicPerformanceChartCard.niceCeiling(37), 50)
+        XCTAssertEqual(NordicPerformanceChartCard.niceCeiling(180_000), 200_000)
+        XCTAssertEqual(NordicPerformanceChartCard.niceCeiling(2_100), 2_500)
+    }
+
+    func testHistoryKeepsFiveMinutes() {
+        XCTAssertEqual(AppState.telemetryHistoryLength * 2, 300)
+    }
 }
 

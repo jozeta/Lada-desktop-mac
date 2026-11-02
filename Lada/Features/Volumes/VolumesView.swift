@@ -220,7 +220,7 @@ public struct VolumesView: View {
 
             TableColumn("Capacity") { vol in
                 if let size = vol.sizeInBytes {
-                    Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
+                    Text(NordicFormat.bytes(fromByteCount: Int64(size), countStyle: .file))
                         .font(NordicTheme.monoFontSmall)
                 } else {
                     Text("512 MB (Sparse)")
@@ -279,7 +279,7 @@ public struct VolumesView: View {
                         NordicSectionHeader("Volume Metadata")
                         LabeledContent("Driver", value: volume.driver)
                         LabeledContent("Filesystem", value: volume.format)
-                        LabeledContent("Sparse Capacity", value: ByteCountFormatter.string(fromByteCount: Int64(volume.sizeInBytes ?? 0), countStyle: .file))
+                        LabeledContent("Sparse Capacity", value: NordicFormat.bytes(fromByteCount: Int64(volume.sizeInBytes ?? 0), countStyle: .file))
                         LabeledContent("Anonymous", value: volume.isAnonymous ? "Yes" : "No")
                         LabeledContent("Created", value: volume.creationDate.formatted(date: .abbreviated, time: .shortened))
                         if !volume.options.isEmpty {

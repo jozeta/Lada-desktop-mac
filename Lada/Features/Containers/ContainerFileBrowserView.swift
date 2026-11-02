@@ -16,7 +16,7 @@ public struct ContainerFileEntry: Identifiable, Equatable, Sendable {
 
     public var formattedSize: String {
         if isDirectory { return "—" }
-        return ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file)
+        return NordicFormat.bytes(fromByteCount: sizeBytes, countStyle: .file)
     }
 }
 
@@ -453,7 +453,7 @@ public struct ContainerFileBrowserView: View {
                 editorNotice = nil
                 fileEditorText = text
             case .tooLarge(let bytes):
-                editorNotice = "\(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)) is too large to edit here (limit \(ByteCountFormatter.string(fromByteCount: ContainerFileOperations.maxEditableBytes, countStyle: .file))). Use Download… instead."
+                editorNotice = "\(NordicFormat.bytes(fromByteCount: bytes, countStyle: .file)) is too large to edit here (limit \(NordicFormat.bytes(fromByteCount: ContainerFileOperations.maxEditableBytes, countStyle: .file))). Use Download… instead."
                 fileEditorText = ""
             case .binary:
                 editorNotice = "This looks like a binary file, so it can't be edited as text. Use Download… instead."

@@ -94,7 +94,7 @@ final class TerminalScreenTests: XCTestCase {
         XCTAssertNotNil(rendered.attribute(.backgroundColor, at: rendered.length - 1, effectiveRange: nil), "cursor cell is highlighted")
     }
 
-    func testKeyEncodingForCommonKeys() throws {
+    @MainActor func testKeyEncodingForCommonKeys() throws {
         func key(_ code: UInt16, _ chars: String = "", _ flags: NSEvent.ModifierFlags = []) -> String? {
             let e = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0, context: nil, characters: chars, charactersIgnoringModifiers: chars, isARepeat: false, keyCode: code)!
             return InteractivePTYCanvasRepresentable.PTYKeyCapturingTextView.sequence(for: e)

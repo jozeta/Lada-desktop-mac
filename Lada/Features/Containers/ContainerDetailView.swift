@@ -333,7 +333,9 @@ public struct ContainerDetailView: View {
                         primaryLegend: "Utilization",
                         fixedMaxY: 100.0,
                         placeholder: isRunning ? "Collecting…" : "Not running",
-                        primaryColor: NordicTheme.accent(for: appState.preferences.accentThemeChoice)
+                        primaryColor: NordicTheme.accent(for: appState.preferences.accentThemeChoice),
+                        timestamps: isRunning ? samples.map(\.timestamp) : [],
+                        valueFormatter: NordicPerformanceChartCard.formatPercent
                     )
 
                     // 2. RAM / Memory Usage Graph
@@ -344,14 +346,16 @@ public struct ContainerDetailView: View {
                         title: "Memory",
                         iconName: "memorychip",
                         primaryMetricText: isRunning
-                            ? "\(ByteCountFormatter.string(fromByteCount: Int64(memUsed), countStyle: .memory)) (\(String(format: "%.1f%%", memPct)))"
+                            ? "\(NordicFormat.bytes(fromByteCount: Int64(memUsed), countStyle: .memory)) (\(String(format: "%.1f%%", memPct)))"
                             : "0 MB (0.0%)",
-                        secondaryMetricText: "Limit: \(ByteCountFormatter.string(fromByteCount: Int64(memLimit), countStyle: .memory))",
+                        secondaryMetricText: "Limit: \(NordicFormat.bytes(fromByteCount: Int64(memLimit), countStyle: .memory))",
                         primarySeries: isRunning ? samples.map(\.memoryPercent) : [],
                         primaryLegend: "Used %",
                         fixedMaxY: 100.0,
                         placeholder: isRunning ? "Collecting…" : "Not running",
-                        primaryColor: NordicTheme.statusGreen
+                        primaryColor: NordicTheme.statusGreen,
+                        timestamps: isRunning ? samples.map(\.timestamp) : [],
+                        valueFormatter: NordicPerformanceChartCard.formatPercent
                     )
 
                     // 3. Network I/O Graph (RX & TX)
@@ -365,14 +369,16 @@ public struct ContainerDetailView: View {
                         primaryMetricText: isRunning
                             ? "↓ \(formatRate(rxRate))  ↑ \(formatRate(txRate))"
                             : "↓ 0 B/s  ↑ 0 B/s",
-                        secondaryMetricText: "Total RX \(ByteCountFormatter.string(fromByteCount: Int64(totalRx), countStyle: .file)) • TX \(ByteCountFormatter.string(fromByteCount: Int64(totalTx), countStyle: .file))",
+                        secondaryMetricText: "Total RX \(NordicFormat.bytes(fromByteCount: Int64(totalRx), countStyle: .file)) • TX \(NordicFormat.bytes(fromByteCount: Int64(totalTx), countStyle: .file))",
                         primarySeries: isRunning ? samples.map(\.networkRxRateBps) : [],
                         secondarySeries: isRunning ? samples.map(\.networkTxRateBps) : [],
                         primaryLegend: "RX",
                         secondaryLegend: "TX",
                         placeholder: isRunning ? "Collecting…" : "Not running",
                         primaryColor: NordicTheme.accent(for: appState.preferences.accentThemeChoice),
-                        secondaryColor: NordicTheme.statusAmber
+                        secondaryColor: NordicTheme.statusAmber,
+                        timestamps: isRunning ? samples.map(\.timestamp) : [],
+                        valueFormatter: NordicPerformanceChartCard.formatRate
                     )
 
                     // 4. HD / Block Disk I/O Graph (Read & Write)
@@ -386,14 +392,16 @@ public struct ContainerDetailView: View {
                         primaryMetricText: isRunning
                             ? "R \(formatRate(readRate))  W \(formatRate(writeRate))"
                             : "R 0 B/s  W 0 B/s",
-                        secondaryMetricText: "Total Read \(ByteCountFormatter.string(fromByteCount: Int64(totalRead), countStyle: .file)) • Write \(ByteCountFormatter.string(fromByteCount: Int64(totalWrite), countStyle: .file))",
+                        secondaryMetricText: "Total Read \(NordicFormat.bytes(fromByteCount: Int64(totalRead), countStyle: .file)) • Write \(NordicFormat.bytes(fromByteCount: Int64(totalWrite), countStyle: .file))",
                         primarySeries: isRunning ? samples.map(\.diskReadRateBps) : [],
                         secondarySeries: isRunning ? samples.map(\.diskWriteRateBps) : [],
                         primaryLegend: "Read",
                         secondaryLegend: "Write",
                         placeholder: isRunning ? "Collecting…" : "Not running",
                         primaryColor: NordicTheme.statusGreen,
-                        secondaryColor: NordicTheme.statusAmber
+                        secondaryColor: NordicTheme.statusAmber,
+                        timestamps: isRunning ? samples.map(\.timestamp) : [],
+                        valueFormatter: NordicPerformanceChartCard.formatRate
                     )
                 }
 
@@ -445,7 +453,7 @@ public struct ContainerDetailView: View {
         if clamped < 1024 {
             return "\(clamped) B/s"
         }
-        return "\(ByteCountFormatter.string(fromByteCount: clamped, countStyle: .file))/s"
+        return "\(NordicFormat.bytes(fromByteCount: clamped, countStyle: .file))/s"
     }
 
     // MARK: - Logs Tab

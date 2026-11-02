@@ -244,3 +244,15 @@ private struct NordicReducibleAnimation<V: Equatable>: ViewModifier {
     }
 }
 
+/// Shared value formatting.
+public enum NordicFormat {
+    /// Like `ByteCountFormatter.string(fromByteCount:countStyle:)` but always numeric
+    /// ("0 KB", never "Zero KB").
+    public static func bytes(fromByteCount count: Int64, countStyle: ByteCountFormatter.CountStyle) -> String {
+        let f = ByteCountFormatter()
+        f.countStyle = countStyle
+        f.allowsNonnumericFormatting = false
+        return f.string(fromByteCount: count)
+    }
+}
+

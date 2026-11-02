@@ -6,6 +6,11 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Graphs are more detailed: a value scale (rounded to readable steps), the time span, peak and
+  average over the window, and a hover crosshair with exact values and how long ago they were
+  measured. History covers 5 minutes (was ~80 s). Dashboard network/disk graphs plot real bytes per
+  second (they were pre-divided to KB/s) and use the same short titles as the inspector
+- Byte sizes are always numeric ("0 bytes", not "Zero KB")
 - Terminal tab works like a traditional terminal: a VT100/xterm screen model (cursor movement,
   carriage-return rewrites, erase/insert/delete, scroll regions, alternate screen for `vi`/`top`,
   16/256/true colour, OSC titles ignored, cursor position reports) on a dark background with a

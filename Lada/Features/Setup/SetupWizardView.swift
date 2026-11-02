@@ -165,7 +165,7 @@ public struct SetupWizardView: View {
                                     .foregroundStyle(NordicTheme.primaryText)
                                 NordicStatusBadge(label: "Signed .pkg", tone: .positive, showDot: false)
                             }
-                            Text("Publisher: \(release.publisher) • Asset: \(release.assetName) (\(ByteCountFormatter.string(fromByteCount: release.sizeBytes, countStyle: .file)))")
+                            Text("Publisher: \(release.publisher) • Asset: \(release.assetName) (\(NordicFormat.bytes(fromByteCount: release.sizeBytes, countStyle: .file)))")
                                 .font(.system(size: 11))
                                 .foregroundStyle(NordicTheme.secondaryText)
                             if let sha = release.sha256Digest {

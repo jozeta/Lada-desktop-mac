@@ -66,7 +66,7 @@ public struct DashboardView: View {
                     metricTile(
                         title: "OCI Images",
                         primaryValue: "\(appState.images.count)",
-                        secondaryValue: ByteCountFormatter.string(fromByteCount: Int64(appState.diskUsage.images.sizeInBytes), countStyle: .file) + " on disk",
+                        secondaryValue: NordicFormat.bytes(fromByteCount: Int64(appState.diskUsage.images.sizeInBytes), countStyle: .file) + " on disk",
                         icon: .images,
                         tone: .accent
                     )
@@ -144,53 +144,61 @@ public struct DashboardView: View {
                 spacing: 12
             ) {
                 NordicPerformanceChartCard(
-                    title: "Cluster CPU Load",
+                    title: "CPU",
                     iconName: "cpu",
                     primaryMetricText: String(format: "%.1f%%", latest?.cpuPercent ?? 0),
                     secondaryMetricText: String(format: "%.2f", latest?.cpuCoresUsed ?? 0) + " of \(totalAllocatedCPUs) vCPUs busy across \(runningContainers.count) VM(s)",
                     primarySeries: samples.map(\.cpuPercent),
                     fixedMaxY: 100.0,
-                    primaryColor: NordicTheme.accent(for: appState.preferences.accentThemeChoice)
+                    primaryColor: NordicTheme.accent(for: appState.preferences.accentThemeChoice),
+                    timestamps: samples.map(\.timestamp),
+                    valueFormatter: NordicPerformanceChartCard.formatPercent
                 )
 
                 NordicPerformanceChartCard(
-                    title: "Memory Usage (RAM)",
+                    title: "Memory",
                     iconName: "memorychip",
-                    primaryMetricText: ByteCountFormatter.string(fromByteCount: Int64(totalMemUsedBytes), countStyle: .memory),
+                    primaryMetricText: NordicFormat.bytes(fromByteCount: Int64(totalMemUsedBytes), countStyle: .memory),
                     secondaryMetricText: String(
                         format: "%.1f%% of %@",
                         latest?.memoryPercent ?? 0,
-                        ByteCountFormatter.string(fromByteCount: Int64(totalMemLimitBytes), countStyle: .memory)
+                        NordicFormat.bytes(fromByteCount: Int64(totalMemLimitBytes), countStyle: .memory)
                     ),
                     primarySeries: samples.map(\.memoryPercent),
                     fixedMaxY: 100.0,
-                    primaryColor: NordicTheme.statusGreen
+                    primaryColor: NordicTheme.statusGreen,
+                    timestamps: samples.map(\.timestamp),
+                    valueFormatter: NordicPerformanceChartCard.formatPercent
                 )
 
                 NordicPerformanceChartCard(
-                    title: "Network I/O",
+                    title: "Network",
                     iconName: "network",
                     primaryMetricText: "↓ \(formatTransferRate(latest?.networkRxRateBps ?? 0))  ↑ \(formatTransferRate(latest?.networkTxRateBps ?? 0))",
-                    secondaryMetricText: "Total RX: \(ByteCountFormatter.string(fromByteCount: Int64(latest?.totalNetworkRxBytes ?? 0), countStyle: .file)) • TX: \(ByteCountFormatter.string(fromByteCount: Int64(latest?.totalNetworkTxBytes ?? 0), countStyle: .file))",
-                    primarySeries: samples.map { $0.networkRxRateBps / 1024.0 },
-                    secondarySeries: samples.map { $0.networkTxRateBps / 1024.0 },
-                    primaryLegend: "RX (KB/s)",
-                    secondaryLegend: "TX (KB/s)",
+                    secondaryMetricText: "Total RX: \(NordicFormat.bytes(fromByteCount: Int64(latest?.totalNetworkRxBytes ?? 0), countStyle: .file)) • TX: \(NordicFormat.bytes(fromByteCount: Int64(latest?.totalNetworkTxBytes ?? 0), countStyle: .file))",
+                    primarySeries: samples.map(\.networkRxRateBps),
+                    secondarySeries: samples.map(\.networkTxRateBps),
+                    primaryLegend: "RX",
+                    secondaryLegend: "TX",
                     primaryColor: Color.cyan,
-                    secondaryColor: NordicTheme.statusAmber
+                    secondaryColor: NordicTheme.statusAmber,
+                    timestamps: samples.map(\.timestamp),
+                    valueFormatter: NordicPerformanceChartCard.formatRate
                 )
 
                 NordicPerformanceChartCard(
-                    title: "Storage / HD I/O",
+                    title: "Disk",
                     iconName: "internaldrive",
                     primaryMetricText: "R: \(formatTransferRate(latest?.diskReadRateBps ?? 0))  W: \(formatTransferRate(latest?.diskWriteRateBps ?? 0))",
-                    secondaryMetricText: "Total Read: \(ByteCountFormatter.string(fromByteCount: Int64(latest?.totalDiskReadBytes ?? 0), countStyle: .file)) • Write: \(ByteCountFormatter.string(fromByteCount: Int64(latest?.totalDiskWriteBytes ?? 0), countStyle: .file))",
-                    primarySeries: samples.map { $0.diskReadRateBps / 1024.0 },
-                    secondarySeries: samples.map { $0.diskWriteRateBps / 1024.0 },
-                    primaryLegend: "Read (KB/s)",
-                    secondaryLegend: "Write (KB/s)",
+                    secondaryMetricText: "Total Read: \(NordicFormat.bytes(fromByteCount: Int64(latest?.totalDiskReadBytes ?? 0), countStyle: .file)) • Write: \(NordicFormat.bytes(fromByteCount: Int64(latest?.totalDiskWriteBytes ?? 0), countStyle: .file))",
+                    primarySeries: samples.map(\.diskReadRateBps),
+                    secondarySeries: samples.map(\.diskWriteRateBps),
+                    primaryLegend: "Read",
+                    secondaryLegend: "Write",
                     primaryColor: Color.purple,
-                    secondaryColor: NordicTheme.statusAmber
+                    secondaryColor: NordicTheme.statusAmber,
+                    timestamps: samples.map(\.timestamp),
+                    valueFormatter: NordicPerformanceChartCard.formatRate
                 )
             }
         }
@@ -370,7 +378,7 @@ public struct DashboardView: View {
         VStack(alignment: .leading, spacing: 10) {
             NordicSectionHeader(
                 "Runtime Disk Usage (`container system df`)",
-                trailingText: ByteCountFormatter.string(fromByteCount: Int64(appState.diskUsage.totalBytes), countStyle: .file)
+                trailingText: NordicFormat.bytes(fromByteCount: Int64(appState.diskUsage.totalBytes), countStyle: .file)
             )
 
             // Stacked Visual Storage Bar
@@ -417,10 +425,10 @@ public struct DashboardView: View {
                 .font(NordicTheme.monoFontSmall)
                 .foregroundStyle(NordicTheme.secondaryText)
             Spacer()
-            Text(ByteCountFormatter.string(fromByteCount: Int64(usage.sizeInBytes), countStyle: .file))
+            Text(NordicFormat.bytes(fromByteCount: Int64(usage.sizeInBytes), countStyle: .file))
                 .font(NordicTheme.monoFontSmall)
                 .foregroundStyle(NordicTheme.primaryText)
-            Text("(\(ByteCountFormatter.string(fromByteCount: Int64(usage.reclaimable), countStyle: .file)) reclaimable)")
+            Text("(\(NordicFormat.bytes(fromByteCount: Int64(usage.reclaimable), countStyle: .file)) reclaimable)")
                 .font(NordicTheme.monoFontSmall)
                 .foregroundStyle(NordicTheme.secondaryText)
         }
@@ -472,7 +480,7 @@ public struct DashboardView: View {
                                         .font(NordicTheme.monoFontSmall)
                                         .foregroundStyle(NordicTheme.primaryText)
                                 }
-                                Text("\(ByteCountFormatter.string(fromByteCount: Int64(stats.memoryUsageBytes), countStyle: .memory)) • \(stats.numProcesses) pids")
+                                Text("\(NordicFormat.bytes(fromByteCount: Int64(stats.memoryUsageBytes), countStyle: .memory)) • \(stats.numProcesses) pids")
                                     .font(NordicTheme.monoFontSmall)
                                     .foregroundStyle(NordicTheme.secondaryText)
                                 ProgressView(value: min(100, max(0, stats.memoryPercentage)), total: 100)

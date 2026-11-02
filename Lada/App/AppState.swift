@@ -355,8 +355,8 @@ public final class AppState: ObservableObject {
 
             var history = self.containerTelemetryHistory[s.id] ?? []
             history.append(sample)
-            if history.count > 40 {
-                history.removeFirst(history.count - 40)
+            if history.count > Self.telemetryHistoryLength {
+                history.removeFirst(history.count - Self.telemetryHistoryLength)
             }
             self.containerTelemetryHistory[s.id] = history
         }
@@ -368,6 +368,9 @@ public final class AppState: ObservableObject {
             recordAggregateSystemTelemetrySample(at: now)
         }
     }
+
+    /// Telemetry points kept per container and for the dashboard: 5 minutes at the 2 s sample rate.
+    static let telemetryHistoryLength = 150
 
     struct TelemetryRates: Equatable {
         let cpuPercent: Double
@@ -404,8 +407,8 @@ public final class AppState: ObservableObject {
         guard !activeSamples.isEmpty else { return }
         var sysHistory = self.systemTelemetryHistory
         sysHistory.append(aggregate)
-        if sysHistory.count > 40 {
-            sysHistory.removeFirst(sysHistory.count - 40)
+        if sysHistory.count > Self.telemetryHistoryLength {
+            sysHistory.removeFirst(sysHistory.count - Self.telemetryHistoryLength)
         }
         self.systemTelemetryHistory = sysHistory
     }
@@ -616,7 +619,7 @@ public final class AppState: ObservableObject {
         lines.append("Generated: \(ISO8601DateFormatter().string(from: Date()))")
         lines.append("Host Architecture: \(hostEnvironment.cpuArchitecture) (\(hostEnvironment.cpuBrandString))")
         lines.append("macOS Version: \(hostEnvironment.macOSVersionString) [Build \(hostEnvironment.macOSBuildString)]")
-        lines.append("Physical Memory: \(ByteCountFormatter.string(fromByteCount: Int64(hostEnvironment.physicalMemoryBytes), countStyle: .memory))")
+        lines.append("Physical Memory: \(NordicFormat.bytes(fromByteCount: Int64(hostEnvironment.physicalMemoryBytes), countStyle: .memory))")
         lines.append("Hypervisor Available: \(hostEnvironment.hypervisorFrameworkAvailable)")
         lines.append("")
         lines.append("=== RUNTIME INSTALLATION ===")

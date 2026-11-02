@@ -194,7 +194,7 @@ public struct MachinesView: View {
             .width(min: 65, ideal: 80)
 
             TableColumn("Memory") { m in
-                Text(m.memoryBytes > 0 ? ByteCountFormatter.string(fromByteCount: Int64(m.memoryBytes), countStyle: .memory) : "—")
+                Text(m.memoryBytes > 0 ? NordicFormat.bytes(fromByteCount: Int64(m.memoryBytes), countStyle: .memory) : "—")
                     .font(NordicTheme.monoFontSmall)
             }
             .width(min: 80, ideal: 100)

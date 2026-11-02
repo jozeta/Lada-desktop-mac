@@ -216,7 +216,7 @@ public struct ImagesView: View {
             .width(min: 95, ideal: 120)
 
             TableColumn("Size") { img in
-                Text(ByteCountFormatter.string(fromByteCount: img.totalSizeBytes, countStyle: .file))
+                Text(NordicFormat.bytes(fromByteCount: img.totalSizeBytes, countStyle: .file))
                     .font(NordicTheme.monoFontSmall)
             }
             .width(min: 80, ideal: 95)
@@ -359,7 +359,7 @@ public struct ImagesView: View {
                         LabeledContent("Registry Origin", value: image.registryOrigin)
                         LabeledContent("Media Type", value: image.mediaType)
                             .font(NordicTheme.monoFontSmall)
-                        LabeledContent("Total Size", value: ByteCountFormatter.string(fromByteCount: image.totalSizeBytes, countStyle: .file))
+                        LabeledContent("Total Size", value: NordicFormat.bytes(fromByteCount: image.totalSizeBytes, countStyle: .file))
                         LabeledContent("Created", value: image.creationDate.formatted(date: .abbreviated, time: .shortened))
                     }
                     .padding(14)
@@ -369,7 +369,7 @@ public struct ImagesView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             NordicSectionHeader(
                                 "Variant: \(variant.platformString)",
-                                trailingText: ByteCountFormatter.string(fromByteCount: variant.sizeBytes, countStyle: .file)
+                                trailingText: NordicFormat.bytes(fromByteCount: variant.sizeBytes, countStyle: .file)
                             )
                             if let ep = variant.entrypoint, !ep.isEmpty {
                                 LabeledContent("Entrypoint", value: ep.joined(separator: " "))

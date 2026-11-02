@@ -61,9 +61,38 @@ final class ViewSnapshotTests: XCTestCase {
         }
     }
 
+    /// Varied, realistic-looking samples (snapshot only) so curves, axis labels and the
+    /// peak/average footer are visible; the mock's counters grow linearly and plot flat.
+    private func injectVariedTelemetry(into state: AppState) {
+        let now = Date()
+        func sample(_ i: Int) -> ContainerPerformanceSample {
+            let t = Double(i)
+            return ContainerPerformanceSample(
+                timestamp: now.addingTimeInterval(-Double(149 - i) * 2),
+                cpuPercent: 18 + 12 * sin(t / 9) + (i % 37 == 0 ? 35 : 0),
+                memoryUsageBytes: UInt64(160_000_000 + 20_000_000 * sin(t / 25)),
+                memoryLimitBytes: 1_073_741_824,
+                memoryPercent: 15 + 2 * sin(t / 25),
+                networkRxRateBps: max(0, 60_000 + 50_000 * sin(t / 7)),
+                networkTxRateBps: max(0, 25_000 + 20_000 * cos(t / 11)),
+                diskReadRateBps: i % 29 < 3 ? 2_400_000 : 40_000,
+                diskWriteRateBps: max(0, 300_000 + 250_000 * sin(t / 13)),
+                numProcesses: 4,
+                cpuCoresUsed: (18 + 12 * sin(t / 9)) / 50,
+                allocatedCPUs: 2
+            )
+        }
+        let series = (0..<150).map(sample)
+        for c in state.containers where c.state == .running {
+            state.containerTelemetryHistory[c.id] = series
+        }
+        state.systemTelemetryHistory = series
+    }
+
     func testMainWindowSnapshots() async throws {
         _ = try outputDirectory()
         let state = await makeAppState()
+        injectVariedTelemetry(into: state)
         for section in NavigationSection.allCases {
             state.selectedSection = section
             let slug = section.rawValue.lowercased().replacingOccurrences(of: " ", with: "-")

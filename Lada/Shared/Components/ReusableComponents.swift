@@ -827,6 +827,11 @@ public struct NordicPerformanceChartCard: View {
     public let placeholder: String
     public let primaryColor: Color
     public let secondaryColor: Color
+    /// When each point was measured (same count as the series); drives the time axis and hover.
+    public let timestamps: [Date]
+    /// Formats axis labels, the hover readout and peak/average (e.g. "45%", "1.2 MB/s").
+    public let valueFormatter: (Double) -> String
+    @State private var hoverIndex: Int?
 
     public init(
         title: String,
@@ -840,7 +845,9 @@ public struct NordicPerformanceChartCard: View {
         fixedMaxY: Double? = nil,
         placeholder: String = "Collecting…",
         primaryColor: Color = NordicTheme.accent(),
-        secondaryColor: Color = NordicTheme.statusGreen
+        secondaryColor: Color = NordicTheme.statusGreen,
+        timestamps: [Date] = [],
+        valueFormatter: @escaping (Double) -> String = NordicPerformanceChartCard.formatPlain
     ) {
         self.title = title
         self.iconName = iconName
@@ -854,6 +861,43 @@ public struct NordicPerformanceChartCard: View {
         self.placeholder = placeholder
         self.primaryColor = primaryColor
         self.secondaryColor = secondaryColor
+        self.timestamps = timestamps
+        self.valueFormatter = valueFormatter
+    }
+
+    // MARK: Formatters
+
+    public nonisolated static func formatPlain(_ v: Double) -> String { String(format: v < 10 ? "%.1f" : "%.0f", v) }
+
+    public nonisolated static func formatPercent(_ v: Double) -> String { String(format: v < 10 ? "%.1f%%" : "%.0f%%", v) }
+
+    /// Bytes per second with binary units.
+    public nonisolated static func formatRate(_ bytesPerSecond: Double) -> String {
+        let v = max(0, bytesPerSecond)
+        if v < 1024 { return String(format: "%.0f B/s", v) }
+        if v < 1024 * 1024 { return String(format: v < 10 * 1024 ? "%.1f KB/s" : "%.0f KB/s", v / 1024) }
+        if v < 1024 * 1024 * 1024 { return String(format: "%.1f MB/s", v / (1024 * 1024)) }
+        return String(format: "%.2f GB/s", v / (1024 * 1024 * 1024))
+    }
+
+    /// "now", "45s", "4m 58s" for the time axis and hover readout.
+    public nonisolated static func formatAgo(_ seconds: TimeInterval) -> String {
+        let s = Int(seconds.rounded())
+        if s < 2 { return "now" }
+        if s < 60 { return "\(s)s ago" }
+        return s % 60 == 0 ? "\(s / 60)m ago" : "\(s / 60)m \(s % 60)s ago"
+    }
+
+    private var summaryText: String? {
+        guard primarySeries.count >= 2 else { return nil }
+        let peak = primarySeries.max() ?? 0
+        let avg = primarySeries.reduce(0, +) / Double(primarySeries.count)
+        return "peak \(valueFormatter(peak)) · avg \(valueFormatter(avg))"
+    }
+
+    private var spanText: String? {
+        guard let first = timestamps.first, let last = timestamps.last, timestamps.count >= 2 else { return nil }
+        return "−" + Self.formatAgo(last.timeIntervalSince(first)).replacingOccurrences(of: " ago", with: "")
     }
 
     private var computedMaxY: Double {
@@ -863,7 +907,17 @@ public struct NordicPerformanceChartCard: View {
         let maxPrimary = primarySeries.max() ?? 0
         let maxSecondary = secondarySeries?.max() ?? 0
         let peak = max(maxPrimary, maxSecondary)
-        return peak > 0 ? peak * 1.2 : 100.0
+        return peak > 0 ? Self.niceCeiling(peak * 1.15) : 100.0
+    }
+
+    /// Rounds up to 1, 2, 2.5 or 5 × 10ⁿ so axis labels are readable values.
+    nonisolated static func niceCeiling(_ v: Double) -> Double {
+        guard v > 0 else { return 1 }
+        let magnitude = pow(10, floor(log10(v)))
+        for step in [1.0, 2.0, 2.5, 5.0, 10.0] where step * magnitude >= v {
+            return step * magnitude
+        }
+        return 10 * magnitude
     }
 
     public var body: some View {
@@ -917,23 +971,35 @@ public struct NordicPerformanceChartCard: View {
                 let size = geo.size
                 let maxY = computedMaxY
 
-                ZStack {
-                    // Horizontal Grid Lines (25%, 50%, 75%)
+                ZStack(alignment: .topLeading) {
+                    // Grid at 0, ½ and the top of the scale, matching the plotted y range.
                     Path { path in
-                        for fraction in [0.25, 0.5, 0.75] {
-                            let y = size.height * CGFloat(fraction)
+                        for fraction in [0.0, 0.5, 1.0] {
+                            let y = plotY(fraction, height: size.height)
                             path.move(to: CGPoint(x: 0, y: y))
                             path.addLine(to: CGPoint(x: size.width, y: y))
                         }
                     }
-                    .stroke(NordicTheme.borderSubtle.opacity(0.7), style: StrokeStyle(lineWidth: 0.5))
+                    .stroke(NordicTheme.borderSubtle.opacity(0.8), style: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+
+                    if primarySeries.count >= 2 {
+                        ForEach([1.0, 0.5], id: \.self) { fraction in
+                            Text(valueFormatter(maxY * fraction))
+                                .font(.system(size: 9).monospacedDigit())
+                                .foregroundStyle(NordicTheme.secondaryText.opacity(0.85))
+                                .padding(.horizontal, 3)
+                                .background(NordicTheme.elevatedSurface.opacity(0.75))
+                                // Top label just inside the chart, the middle one above its line.
+                                .offset(x: 2, y: plotY(fraction, height: size.height) + (fraction == 1 ? 1 : -13))
+                        }
+                    }
 
                     // Secondary Series (if present, e.g. TX or Disk Write)
                     if let secondary = secondarySeries, secondary.count >= 2 {
                         seriesAreaPath(values: secondary, in: size, maxY: maxY)
                             .fill(
                                 LinearGradient(
-                                    colors: [secondaryColor.opacity(0.24), secondaryColor.opacity(0.02)],
+                                    colors: [secondaryColor.opacity(0.22), secondaryColor.opacity(0.02)],
                                     startPoint: .top,
                                     endPoint: .bottom
                                 )
@@ -947,13 +1013,28 @@ public struct NordicPerformanceChartCard: View {
                         seriesAreaPath(values: primarySeries, in: size, maxY: maxY)
                             .fill(
                                 LinearGradient(
-                                    colors: [primaryColor.opacity(0.30), primaryColor.opacity(0.03)],
+                                    colors: [primaryColor.opacity(0.28), primaryColor.opacity(0.03)],
                                     startPoint: .top,
                                     endPoint: .bottom
                                 )
                             )
                         seriesLinePath(values: primarySeries, in: size, maxY: maxY)
                             .stroke(primaryColor, style: StrokeStyle(lineWidth: 1.75, lineCap: .round, lineJoin: .round))
+                    }
+
+                    if let index = hoverIndex, primarySeries.count >= 2, index < primarySeries.count {
+                        hoverOverlay(index: index, size: size, maxY: maxY)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onContinuousHover { phase in
+                    guard primarySeries.count >= 2 else { hoverIndex = nil; return }
+                    switch phase {
+                    case .active(let location):
+                        let step = size.width / CGFloat(primarySeries.count - 1)
+                        hoverIndex = max(0, min(primarySeries.count - 1, Int((location.x / step).rounded())))
+                    case .ended:
+                        hoverIndex = nil
                     }
                 }
                 .overlay {
@@ -965,11 +1046,72 @@ public struct NordicPerformanceChartCard: View {
                     }
                 }
             }
-            .frame(height: 76)
+            .frame(height: 96)
+
+            // Time span · peak and average · now
+            if primarySeries.count >= 2 {
+                HStack(spacing: 6) {
+                    if let spanText { Text(spanText) }
+                    Spacer(minLength: 4)
+                    if let summaryText { Text(summaryText).lineLimit(1) }
+                    Spacer(minLength: 4)
+                    Text("now")
+                }
+                .font(.system(size: 9.5).monospacedDigit())
+                .foregroundStyle(NordicTheme.secondaryText)
+            }
         }
         .padding(NordicTheme.Spacing.m + 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .nordicSurface()
+    }
+
+    /// Y position for a fraction of the scale, using the same 3 pt margins as the plotted points.
+    private func plotY(_ fraction: Double, height: CGFloat) -> CGFloat {
+        height - CGFloat(fraction) * (height - 6) - 3
+    }
+
+    @ViewBuilder
+    private func hoverOverlay(index: Int, size: CGSize, maxY: Double) -> some View {
+        let step = size.width / CGFloat(primarySeries.count - 1)
+        let x = CGFloat(index) * step
+        let primaryY = plotY(max(0, min(1, primarySeries[index] / maxY)), height: size.height)
+        let secondaryValue = secondarySeries.flatMap { index < $0.count ? $0[index] : nil }
+        Path { p in
+            p.move(to: CGPoint(x: x, y: 0))
+            p.addLine(to: CGPoint(x: x, y: size.height))
+        }
+        .stroke(NordicTheme.secondaryText.opacity(0.5), lineWidth: 0.75)
+        Circle().fill(primaryColor).frame(width: 6, height: 6).position(x: x, y: primaryY)
+        if let secondaryValue {
+            Circle().fill(secondaryColor).frame(width: 6, height: 6)
+                .position(x: x, y: plotY(max(0, min(1, secondaryValue / maxY)), height: size.height))
+        }
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 4) {
+                Circle().fill(primaryColor).frame(width: 5, height: 5)
+                Text("\(primaryLegend.map { "\($0) " } ?? "")\(valueFormatter(primarySeries[index]))")
+            }
+            if let secondaryValue {
+                HStack(spacing: 4) {
+                    Circle().fill(secondaryColor).frame(width: 5, height: 5)
+                    Text("\(secondaryLegend.map { "\($0) " } ?? "")\(valueFormatter(secondaryValue))")
+                }
+            }
+            if index < timestamps.count, let last = timestamps.last {
+                Text(Self.formatAgo(last.timeIntervalSince(timestamps[index])))
+                    .foregroundStyle(NordicTheme.secondaryText)
+            }
+        }
+        .font(.system(size: 10, weight: .medium).monospacedDigit())
+        .foregroundStyle(NordicTheme.primaryText)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(NordicTheme.elevatedSurface))
+        .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+        .fixedSize()
+        // Keep the readout inside the chart: flip to the left of the crosshair near the right edge.
+        .offset(x: x > size.width * 0.6 ? x - 110 : x + 8, y: 2)
     }
 
     private func seriesPoints(values: [Double], in size: CGSize, maxY: Double) -> [CGPoint] {
@@ -1009,7 +1151,7 @@ public struct NordicPerformanceChartCard: View {
 
     /// Monotone cubic interpolation (Fritsch–Carlson): smooth curves that never overshoot the
     /// samples, so a rate never appears to dip below zero or peak above what was measured.
-    static func addSmoothCurve(through pts: [CGPoint], to path: inout Path, moveToStart: Bool) {
+    nonisolated static func addSmoothCurve(through pts: [CGPoint], to path: inout Path, moveToStart: Bool) {
         guard let first = pts.first else { return }
         if moveToStart { path.move(to: first) }
         guard pts.count > 2 else {
