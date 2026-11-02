@@ -47,6 +47,8 @@ public final class AppState: ObservableObject {
     @Published public var systemStatus: RuntimeSystemStatus
     @Published public var prerequisites: [PrerequisiteItem] = []
     @Published public var diskUsage: DiskUsageSummary = .init()
+    /// Capacity of the drive holding the runtime's data (for the dashboard's disk donut).
+    @Published public var hostDiskSpace: DiskSpaceSnapshot?
     @Published public var systemProperties: SystemProperties = .init()
     @Published public var dnsDomains: [String] = []
     @Published public var latestReleaseInfo: ReleaseAssetInfo? = nil
@@ -284,6 +286,8 @@ public final class AppState: ObservableObject {
             if let m = await machinesTask { self.machines = m }
             if let r = await registriesTask { self.registries = r }
             if let df = await dfTask { self.diskUsage = df }
+            let dataRoot = installation.appRootPath ?? (NSHomeDirectory() as NSString).appendingPathComponent("Library/Application Support/com.apple.container")
+            self.hostDiskSpace = DiskSpaceSnapshot.read(path: dataRoot)
             if let p = await propsTask { self.systemProperties = p }
             if let b = await builderTask { self.builderStatus = b }
             if let dns = await dnsTask { self.dnsDomains = dns }

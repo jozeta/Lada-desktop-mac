@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 
 public struct DashboardView: View {
     @ObservedObject var appState: AppState
@@ -381,6 +382,11 @@ public struct DashboardView: View {
                 trailingText: NordicFormat.bytes(fromByteCount: Int64(appState.diskUsage.totalBytes), countStyle: .file)
             )
 
+            if let disk = appState.hostDiskSpace {
+                diskDonut(disk)
+                Divider().overlay(NordicTheme.borderSubtle)
+            }
+
             // Stacked Visual Storage Bar
             GeometryReader { geo in
                 let w = max(10, geo.size.width)
@@ -410,6 +416,66 @@ public struct DashboardView: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .nordicSurface()
+    }
+
+    private func segmentColor(_ kind: DiskBreakdown.Segment.Kind) -> Color {
+        switch kind {
+        case .images: return NordicTheme.accent(for: appState.preferences.accentThemeChoice)
+        case .containers: return NordicTheme.statusGreen
+        case .volumes: return NordicTheme.statusAmber
+        case .other: return NordicTheme.secondaryText.opacity(0.45)
+        case .free: return NordicTheme.secondaryText.opacity(0.14)
+        }
+    }
+
+    /// Hollow pie of the drive holding the runtime's data: what the runtime uses, everything else,
+    /// and free space, with the free amount in the middle.
+    private func diskDonut(_ disk: DiskSpaceSnapshot) -> some View {
+        let segments = DiskBreakdown.segments(runtime: appState.diskUsage, disk: disk)
+        let freeFraction = Double(disk.availableBytes) / Double(max(1, disk.totalBytes))
+        return HStack(alignment: .center, spacing: NordicTheme.Spacing.l) {
+            Chart(segments) { segment in
+                SectorMark(
+                    angle: .value("Bytes", max(segment.bytes, 0)),
+                    innerRadius: .ratio(0.68),
+                    angularInset: 1.2
+                )
+                .cornerRadius(3)
+                .foregroundStyle(segmentColor(segment.kind))
+            }
+            .chartLegend(.hidden)
+            .frame(width: 128, height: 128)
+            .overlay {
+                VStack(spacing: 1) {
+                    Text(NordicFormat.bytes(fromByteCount: disk.availableBytes, countStyle: .file))
+                        .font(.system(size: 15, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(NordicTheme.primaryText)
+                    Text("free")
+                        .font(.system(size: 11))
+                        .foregroundStyle(NordicTheme.secondaryText)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Disk: \(NordicFormat.bytes(fromByteCount: disk.availableBytes, countStyle: .file)) free of \(NordicFormat.bytes(fromByteCount: disk.totalBytes, countStyle: .file))")
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("This Mac's disk · \(NordicFormat.bytes(fromByteCount: disk.totalBytes, countStyle: .file)) · \(Int((freeFraction * 100).rounded()))% free")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(NordicTheme.primaryText)
+                ForEach(segments) { segment in
+                    HStack(spacing: 6) {
+                        Circle().fill(segmentColor(segment.kind)).frame(width: 8, height: 8)
+                        Text(segment.label)
+                            .font(.system(size: 12))
+                            .foregroundStyle(NordicTheme.primaryText)
+                        Spacer()
+                        Text(NordicFormat.bytes(fromByteCount: segment.bytes, countStyle: .file))
+                            .font(.system(size: 12).monospacedDigit())
+                            .foregroundStyle(NordicTheme.secondaryText)
+                    }
+                }
+            }
+        }
     }
 
     private func diskRow(label: String, color: Color, usage: ResourceDiskUsage) -> some View {

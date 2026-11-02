@@ -6,6 +6,8 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Dashboard: a hollow pie (donut) of the drive that holds the runtime's data, split into images,
+  containers, volumes, other files and free space, with the free space in the middle
 - Every panel uses the same frosted glass (Image Library cards and filter bar, menu-bar rows, drop
   overlays, chart hover readouts); small chips use one translucent chip style instead of opaque
   fills

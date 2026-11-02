@@ -28,6 +28,7 @@
 				Tests/UnitTests/ComposeDocumentTests.swift,
 				Tests/UnitTests/ContainerFileOperationsTests.swift,
 				Tests/UnitTests/DNSAliasTests.swift,
+				Tests/UnitTests/DiskSpaceTests.swift,
 				Tests/UnitTests/ImageReferenceSuggesterTests.swift,
 				Tests/UnitTests/LadaSmokeTests.swift,
 				Tests/UnitTests/OutputParserTests.swift,
