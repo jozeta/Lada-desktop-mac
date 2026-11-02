@@ -256,9 +256,7 @@ public struct NetworksView: View {
                         LabeledContent("Created", value: network.creationDate.formatted(date: .abbreviated, time: .shortened))
                     }
                     .padding(14)
-                    .background(NordicTheme.elevatedSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+                    .nordicSurface()
 
                     VStack(alignment: .leading, spacing: 8) {
                         NordicSectionHeader("Attached Containers (\(attached.count))")
@@ -286,9 +284,7 @@ public struct NetworksView: View {
                         }
                     }
                     .padding(14)
-                    .background(NordicTheme.elevatedSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+                    .nordicSurface()
                 }
                 .padding(16)
             }

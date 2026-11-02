@@ -124,7 +124,7 @@ public struct ContainersView: View {
                     )
                 } else {
                     Table(filteredContainers, selection: $appState.selectedContainerID, sortOrder: $sortOrder) {
-                        TableColumn("Name / ID", value: \.id) { container in
+                        TableColumn("Name", value: \.id) { container in
                             HStack(spacing: 7) {
                                 LadaIcon(.containers, size: 14)
                                     .foregroundStyle(container.state == .running ? NordicTheme.statusGreen : NordicTheme.secondaryText)
@@ -133,22 +133,24 @@ public struct ContainersView: View {
                                     .foregroundStyle(NordicTheme.primaryText)
                             }
                         }
-                        .width(min: 130, ideal: 160)
+                        .width(min: 120, ideal: 150)
 
                         TableColumn("Status", value: \.rawState) { container in
                             NordicStatusBadge(containerState: container.state)
                         }
-                        .width(min: 95, ideal: 105)
+                        .width(min: 90, ideal: 95)
 
                         TableColumn("Image", value: \.imageReference) { container in
-                            Text(container.imageReference)
-                                .font(NordicTheme.monoFontSmall)
+                            Text(container.shortImageReference)
+                                .font(.system(size: 12))
                                 .foregroundStyle(NordicTheme.secondaryText)
                                 .lineLimit(1)
+                                .truncationMode(.middle)
+                                .help(container.imageReference)
                         }
-                        .width(min: 140, ideal: 200)
+                        .width(min: 110, ideal: 150)
 
-                        TableColumn("IP / Ports") { container in
+                        TableColumn("Ports") { container in
                             HStack(spacing: 5) {
                                 if container.state == .running, let firstPort = container.configuration.publishedPorts.first {
                                     let probe = appState.portHealthMap[firstPort.hostPort]
@@ -161,20 +163,14 @@ public struct ContainersView: View {
                                         .frame(width: 6, height: 6)
                                         .help(probe?.tooltipDescription ?? "Port \(firstPort.hostPort)")
                                 }
-                                Text([container.primaryIPv4, container.portsSummary == "—" ? nil : container.portsSummary].compactMap { $0 }.joined(separator: " • "))
-                                    .font(NordicTheme.monoFontSmall)
+                                Text(container.configuration.publishedPorts.isEmpty ? "—" : container.configuration.publishedPorts.map { "\($0.hostPort) → \($0.containerPort)" }.joined(separator: ", "))
+                                    .font(.system(size: 12).monospacedDigit())
                                     .foregroundStyle(NordicTheme.secondaryText)
                                     .lineLimit(1)
+                                    .help(container.primaryIPv4.map { "IP \($0)" } ?? "")
                             }
                         }
-                        .width(min: 115, ideal: 155)
-
-                        TableColumn("Resources") { container in
-                            Text("\(container.configuration.cpus)c / \(container.memoryFormatted) (\(container.configuration.arch))")
-                                .font(NordicTheme.monoFontSmall)
-                                .foregroundStyle(NordicTheme.secondaryText)
-                        }
-                        .width(min: 100, ideal: 130)
+                        .width(min: 90, ideal: 110)
 
                         TableColumn("Actions") { container in
                             HStack(spacing: 6) {
@@ -242,6 +238,10 @@ public struct ContainersView: View {
                         }
                         .width(88)
                     }
+                    // No striped filler rows below the last container: a calmer, flat list.
+                    .alternatingRowBackgrounds(.disabled)
+                    .scrollContentBackground(.hidden)
+                    .background(NordicTheme.contentSurface)
                     .accessibilityIdentifier(AccessibilityID.containerTable)
                 }
             }
@@ -255,7 +255,7 @@ public struct ContainersView: View {
                 NordicEmptyState(
                     icon: .containers,
                     title: "Select a Container",
-                    description: "Choose a container from the list to inspect its overview, live logs, interactive PTY terminal, networking, mounts, and environment."
+                    description: "Pick a container to see its details, logs, terminal, files and network."
                 )
                 .frame(minWidth: 440, idealWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
                 .background(NordicTheme.contentSurface)

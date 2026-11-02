@@ -320,9 +320,7 @@ public struct SettingsView: View {
                 .padding(.top, 4)
             }
             .padding(14)
-            .background(NordicTheme.elevatedSurface)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+            .nordicSurface()
 
             VStack(alignment: .leading, spacing: 8) {
                 NordicSectionHeader("Prerequisite Verification Summary")
@@ -339,9 +337,7 @@ public struct SettingsView: View {
                 }
             }
             .padding(14)
-            .background(NordicTheme.elevatedSurface)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+            .nordicSurface()
         }
     }
 
@@ -417,9 +413,7 @@ public struct SettingsView: View {
                 }
             }
             .padding(14)
-            .background(NordicTheme.elevatedSurface)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+            .nordicSurface()
         }
     }
 

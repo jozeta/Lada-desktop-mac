@@ -181,6 +181,21 @@ public extension View {
             )
     }
 
+    /// The panel look (surface, continuous corners, hairline border) without padding or sizing,
+    /// for views that lay out their own insets.
+    func nordicSurface(cornerRadius: CGFloat = NordicTheme.Radius.card) -> some View {
+        self
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(NordicTheme.elevatedSurface)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(NordicTheme.borderSubtle, lineWidth: 1)
+            )
+    }
+
     /// Hover feedback for clickable cards: the border picks up the accent and the card lifts a
     /// little. No movement with Reduce Motion.
     func nordicHoverHighlight(accent: Color = NordicTheme.accent()) -> some View {

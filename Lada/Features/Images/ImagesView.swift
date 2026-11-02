@@ -363,9 +363,7 @@ public struct ImagesView: View {
                         LabeledContent("Created", value: image.creationDate.formatted(date: .abbreviated, time: .shortened))
                     }
                     .padding(14)
-                    .background(NordicTheme.elevatedSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+                    .nordicSurface()
 
                     ForEach(image.variants) { variant in
                         VStack(alignment: .leading, spacing: 8) {
@@ -421,9 +419,7 @@ public struct ImagesView: View {
                             }
                         }
                         .padding(14)
-                        .background(NordicTheme.elevatedSurface)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+                        .nordicSurface()
                     }
                 }
                 .padding(16)

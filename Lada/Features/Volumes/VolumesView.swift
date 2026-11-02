@@ -291,9 +291,7 @@ public struct VolumesView: View {
                         }
                     }
                     .padding(14)
-                    .background(NordicTheme.elevatedSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+                    .nordicSurface()
 
                     VStack(alignment: .leading, spacing: 8) {
                         NordicSectionHeader("Mounted By (\(attached.count))")
@@ -318,9 +316,7 @@ public struct VolumesView: View {
                         }
                     }
                     .padding(14)
-                    .background(NordicTheme.elevatedSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+                    .nordicSurface()
                 }
                 .padding(16)
             }

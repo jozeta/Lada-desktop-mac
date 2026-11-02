@@ -25,20 +25,14 @@ public struct NordicStatusBadge: View {
     public let label: String
     public let tone: OperationalBadgeTone
     public var showDot: Bool = true
-    /// A soft pulse on the dot for live states (a running container).
-    public var isLive: Bool = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pulse = false
 
-    public init(label: String, tone: OperationalBadgeTone, showDot: Bool = true, isLive: Bool = false) {
+    public init(label: String, tone: OperationalBadgeTone, showDot: Bool = true) {
         self.label = label
         self.tone = tone
         self.showDot = showDot
-        self.isLive = isLive
     }
 
     public init(containerState: ContainerState) {
-        self.isLive = containerState == .running
         self.label = containerState.displayTitle
         switch containerState {
         case .running: self.tone = .positive
@@ -61,23 +55,9 @@ public struct NordicStatusBadge: View {
     public var body: some View {
         HStack(spacing: 5) {
             if showDot {
-                ZStack {
-                    if isLive && !reduceMotion {
-                        Circle()
-                            .fill(tone.color.opacity(0.35))
-                            .frame(width: 6, height: 6)
-                            .scaleEffect(pulse ? 2.2 : 1)
-                            .opacity(pulse ? 0 : 1)
-                    }
-                    Circle()
-                        .fill(tone.color)
-                        .frame(width: 6, height: 6)
-                }
-                .frame(width: 8, height: 8)
-                .onAppear {
-                    guard isLive && !reduceMotion else { return }
-                    withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) { pulse = true }
-                }
+                Circle()
+                    .fill(tone.color)
+                    .frame(width: 6, height: 6)
             }
             Text(label)
                 .font(.system(size: 11, weight: .medium))
@@ -843,6 +823,8 @@ public struct NordicPerformanceChartCard: View {
     public let primaryLegend: String?
     public let secondaryLegend: String?
     public let fixedMaxY: Double?
+    /// Shown instead of the chart while there are fewer than two points.
+    public let placeholder: String
     public let primaryColor: Color
     public let secondaryColor: Color
 
@@ -856,6 +838,7 @@ public struct NordicPerformanceChartCard: View {
         primaryLegend: String? = nil,
         secondaryLegend: String? = nil,
         fixedMaxY: Double? = nil,
+        placeholder: String = "Collecting…",
         primaryColor: Color = NordicTheme.accent(),
         secondaryColor: Color = NordicTheme.statusGreen
     ) {
@@ -868,6 +851,7 @@ public struct NordicPerformanceChartCard: View {
         self.primaryLegend = primaryLegend
         self.secondaryLegend = secondaryLegend
         self.fixedMaxY = fixedMaxY
+        self.placeholder = placeholder
         self.primaryColor = primaryColor
         self.secondaryColor = secondaryColor
     }
@@ -889,10 +873,10 @@ public struct NordicPerformanceChartCard: View {
                 Image(systemName: iconName)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(primaryColor)
-                Text(title.uppercased())
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(0.5)
-                    .foregroundStyle(NordicTheme.secondaryText)
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(NordicTheme.primaryText)
+                    .lineLimit(1)
                 Spacer()
                 if let primaryLegend {
                     HStack(spacing: 4) {
@@ -915,12 +899,14 @@ public struct NordicPerformanceChartCard: View {
             // Live Values (stacked on two lines so neither truncates)
             VStack(alignment: .leading, spacing: 2) {
                 Text(primaryMetricText)
-                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 17, weight: .semibold).monospacedDigit())
                     .foregroundStyle(NordicTheme.primaryText)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                    .minimumScaleFactor(0.8)
+                    .contentTransition(.numericText())
+                    .nordicMotion(NordicTheme.Motion.data, value: primaryMetricText)
                 Text(secondaryMetricText)
-                    .font(NordicTheme.monoFontSmall)
+                    .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(NordicTheme.secondaryText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -940,10 +926,10 @@ public struct NordicPerformanceChartCard: View {
                             path.addLine(to: CGPoint(x: size.width, y: y))
                         }
                     }
-                    .stroke(NordicTheme.borderSubtle.opacity(0.6), style: StrokeStyle(lineWidth: 0.75, dash: [3, 3]))
+                    .stroke(NordicTheme.borderSubtle.opacity(0.7), style: StrokeStyle(lineWidth: 0.5))
 
                     // Secondary Series (if present, e.g. TX or Disk Write)
-                    if let secondary = secondarySeries, !secondary.isEmpty {
+                    if let secondary = secondarySeries, secondary.count >= 2 {
                         seriesAreaPath(values: secondary, in: size, maxY: maxY)
                             .fill(
                                 LinearGradient(
@@ -957,7 +943,7 @@ public struct NordicPerformanceChartCard: View {
                     }
 
                     // Primary Series
-                    if !primarySeries.isEmpty {
+                    if primarySeries.count >= 2 {
                         seriesAreaPath(values: primarySeries, in: size, maxY: maxY)
                             .fill(
                                 LinearGradient(
@@ -970,23 +956,20 @@ public struct NordicPerformanceChartCard: View {
                             .stroke(primaryColor, style: StrokeStyle(lineWidth: 1.75, lineCap: .round, lineJoin: .round))
                     }
                 }
-                .background(NordicTheme.codeSurface.opacity(0.65))
-                .clipShape(RoundedRectangle(cornerRadius: 5))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 5)
-                        .strokeBorder(NordicTheme.borderSubtle.opacity(0.8), lineWidth: 1)
-                )
+                .overlay {
+                    // Rates need two snapshots; say so instead of drawing a flat line.
+                    if primarySeries.count < 2 {
+                        Text(placeholder)
+                            .font(.system(size: 11))
+                            .foregroundStyle(NordicTheme.secondaryText)
+                    }
+                }
             }
-            .frame(height: 82)
+            .frame(height: 76)
         }
-        .padding(12)
+        .padding(NordicTheme.Spacing.m + 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(NordicTheme.elevatedSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(NordicTheme.borderSubtle, lineWidth: 1)
-        )
+        .nordicSurface()
     }
 
     private func seriesPoints(values: [Double], in size: CGSize, maxY: Double) -> [CGPoint] {

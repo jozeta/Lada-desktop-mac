@@ -37,7 +37,7 @@ public struct ContainerDetailView: View {
             // Header with Lifecycle Controls
             NordicDetailHeader(
                 title: container.id,
-                subtitle: "\(container.imageReference) • \(container.configuration.os)/\(container.configuration.arch) • \(container.configuration.cpus) CPUs, \(container.memoryFormatted)",
+                subtitle: "\(container.shortImageReference) · \(container.configuration.os)/\(container.configuration.arch) · \(container.configuration.cpus) vCPU · \(container.memoryFormatted)",
                 badge: NordicStatusBadge(containerState: container.state)
             ) {
                 if container.state == .running {
@@ -222,15 +222,15 @@ public struct ContainerDetailView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                NordicSectionHeader("Container Identity & Runtime Telemetry")
+                NordicSectionHeader("Details")
 
                 Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 8) {
                     GridRow {
-                        Text("Container ID / Name").foregroundStyle(NordicTheme.secondaryText)
+                        Text("Name").foregroundStyle(NordicTheme.secondaryText)
                         Text(container.id).font(NordicTheme.monoFontRegular).textSelection(.enabled)
                     }
                     GridRow {
-                        Text("OCI Image").foregroundStyle(NordicTheme.secondaryText)
+                        Text("Image").foregroundStyle(NordicTheme.secondaryText)
                         Text(container.imageReference).font(NordicTheme.monoFontRegular).textSelection(.enabled)
                     }
                     GridRow {
@@ -260,7 +260,7 @@ public struct ContainerDetailView: View {
                     }
                     if !container.configuration.publishedPorts.isEmpty {
                         GridRow {
-                            Text("Published Ports").foregroundStyle(NordicTheme.secondaryText)
+                            Text("Ports").foregroundStyle(NordicTheme.secondaryText)
                             HStack(spacing: 8) {
                                 ForEach(container.configuration.publishedPorts) { p in
                                     let probe = appState.portHealthMap[p.hostPort]
@@ -297,17 +297,13 @@ public struct ContainerDetailView: View {
                 .font(.system(size: 12))
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(NordicTheme.elevatedSurface)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+                .nordicSurface()
 
                 // Performance Graphs (CPU, RAM, Network, HD / Disk I/O)
                 NordicSectionHeader(
-                    "Performance & Resource Graphs",
-                    subtitle: isRunning
-                        ? "Live telemetry sampled from the lightweight Linux VM (`container stats`)"
-                        : "Container is stopped — start the container to stream live CPU, RAM, Network, and Disk I/O graphs.",
-                    trailingText: isRunning ? "\(stats?.numProcesses ?? latestSample?.numProcesses ?? 1) active PIDs" : "Stopped"
+                    "Performance",
+                    subtitle: isRunning ? nil : "Start the container to see live CPU, memory, network and disk activity.",
+                    trailingText: isRunning ? (stats?.numProcesses ?? latestSample?.numProcesses).map { "\($0) processes" } : nil
                 )
 
                 LazyVGrid(
@@ -319,15 +315,16 @@ public struct ContainerDetailView: View {
                 ) {
                     // 1. CPU Usage Graph
                     NordicPerformanceChartCard(
-                        title: "CPU Usage",
+                        title: "CPU",
                         iconName: "cpu",
                         primaryMetricText: isRunning
                             ? String(format: "%.1f%%", latestSample?.cpuPercent ?? 0.0)
                             : "0.0%",
-                        secondaryMetricText: String(format: "%.2f", isRunning ? (latestSample?.cpuCoresUsed ?? 0) : 0) + " of \(container.configuration.cpus) vCPU busy • \((stats?.cpuUsageUsec ?? 0) / 1000) ms total",
-                        primarySeries: isRunning ? samples.map(\.cpuPercent) : [0, 0],
+                        secondaryMetricText: String(format: "%.2f", isRunning ? (latestSample?.cpuCoresUsed ?? 0) : 0) + " of \(container.configuration.cpus) vCPU busy",
+                        primarySeries: isRunning ? samples.map(\.cpuPercent) : [],
                         primaryLegend: "Utilization",
                         fixedMaxY: 100.0,
+                        placeholder: isRunning ? "Collecting…" : "Not running",
                         primaryColor: NordicTheme.accent(for: appState.preferences.accentThemeChoice)
                     )
 
@@ -336,15 +333,16 @@ public struct ContainerDetailView: View {
                     let memLimit = stats?.memoryLimitBytes ?? latestSample?.memoryLimitBytes ?? container.configuration.memoryInBytes
                     let memPct = stats?.memoryPercentage ?? latestSample?.memoryPercent ?? 0
                     NordicPerformanceChartCard(
-                        title: "RAM / Memory",
+                        title: "Memory",
                         iconName: "memorychip",
                         primaryMetricText: isRunning
                             ? "\(ByteCountFormatter.string(fromByteCount: Int64(memUsed), countStyle: .memory)) (\(String(format: "%.1f%%", memPct)))"
                             : "0 MB (0.0%)",
                         secondaryMetricText: "Limit: \(ByteCountFormatter.string(fromByteCount: Int64(memLimit), countStyle: .memory))",
-                        primarySeries: isRunning ? samples.map(\.memoryPercent) : [0, 0],
+                        primarySeries: isRunning ? samples.map(\.memoryPercent) : [],
                         primaryLegend: "Used %",
                         fixedMaxY: 100.0,
+                        placeholder: isRunning ? "Collecting…" : "Not running",
                         primaryColor: NordicTheme.statusGreen
                     )
 
@@ -354,16 +352,17 @@ public struct ContainerDetailView: View {
                     let totalRx = stats?.networkRxBytes ?? latestSample?.totalNetworkRxBytes ?? 0
                     let totalTx = stats?.networkTxBytes ?? latestSample?.totalNetworkTxBytes ?? 0
                     NordicPerformanceChartCard(
-                        title: "Network Traffic",
+                        title: "Network",
                         iconName: "network",
                         primaryMetricText: isRunning
                             ? "↓ \(formatRate(rxRate))  ↑ \(formatRate(txRate))"
                             : "↓ 0 B/s  ↑ 0 B/s",
                         secondaryMetricText: "Total RX \(ByteCountFormatter.string(fromByteCount: Int64(totalRx), countStyle: .file)) • TX \(ByteCountFormatter.string(fromByteCount: Int64(totalTx), countStyle: .file))",
-                        primarySeries: isRunning ? samples.map(\.networkRxRateBps) : [0, 0],
-                        secondarySeries: isRunning ? samples.map(\.networkTxRateBps) : [0, 0],
+                        primarySeries: isRunning ? samples.map(\.networkRxRateBps) : [],
+                        secondarySeries: isRunning ? samples.map(\.networkTxRateBps) : [],
                         primaryLegend: "RX",
                         secondaryLegend: "TX",
+                        placeholder: isRunning ? "Collecting…" : "Not running",
                         primaryColor: NordicTheme.accent(for: appState.preferences.accentThemeChoice),
                         secondaryColor: NordicTheme.statusAmber
                     )
@@ -374,26 +373,27 @@ public struct ContainerDetailView: View {
                     let totalRead = stats?.blockReadBytes ?? latestSample?.totalDiskReadBytes ?? 0
                     let totalWrite = stats?.blockWriteBytes ?? latestSample?.totalDiskWriteBytes ?? 0
                     NordicPerformanceChartCard(
-                        title: "HD / Disk I/O",
+                        title: "Disk",
                         iconName: "internaldrive",
                         primaryMetricText: isRunning
                             ? "R \(formatRate(readRate))  W \(formatRate(writeRate))"
                             : "R 0 B/s  W 0 B/s",
                         secondaryMetricText: "Total Read \(ByteCountFormatter.string(fromByteCount: Int64(totalRead), countStyle: .file)) • Write \(ByteCountFormatter.string(fromByteCount: Int64(totalWrite), countStyle: .file))",
-                        primarySeries: isRunning ? samples.map(\.diskReadRateBps) : [0, 0],
-                        secondarySeries: isRunning ? samples.map(\.diskWriteRateBps) : [0, 0],
+                        primarySeries: isRunning ? samples.map(\.diskReadRateBps) : [],
+                        secondarySeries: isRunning ? samples.map(\.diskWriteRateBps) : [],
                         primaryLegend: "Read",
                         secondaryLegend: "Write",
+                        placeholder: isRunning ? "Collecting…" : "Not running",
                         primaryColor: NordicTheme.statusGreen,
                         secondaryColor: NordicTheme.statusAmber
                     )
                 }
 
                 // Maintenance Actions
-                NordicSectionHeader("Filesystem & Maintenance")
+                NordicSectionHeader("Maintenance")
                 HStack(spacing: 10) {
                     if container.state == .running {
-                        Button("Reclaim Unused Space (`container clean`)") {
+                        Button("Reclaim Space") {
                             Task {
                                 await appState.performOperation(
                                     category: "Containers",
@@ -408,7 +408,7 @@ public struct ContainerDetailView: View {
                         .controlSize(.small)
                     }
 
-                    Button("Export Root Filesystem Archive (`container export`)…") {
+                    Button("Export Filesystem…") {
                         let panel = NSSavePanel()
                         panel.nameFieldStringValue = "\(container.id)-rootfs.tar"
                         if panel.runModal() == .OK, let url = panel.url {
@@ -489,9 +489,7 @@ public struct ContainerDetailView: View {
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(NordicTheme.elevatedSurface)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+                .nordicSurface()
 
                 NordicSectionHeader("Effective Configuration (`container inspect \(container.id)`)")
 
@@ -548,9 +546,7 @@ public struct ContainerDetailView: View {
                             }
                         }
                         .padding(12)
-                        .background(NordicTheme.elevatedSurface)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+                        .nordicSurface()
                     }
                 }
 
@@ -590,9 +586,7 @@ public struct ContainerDetailView: View {
                             }
                         }
                         .padding(10)
-                        .background(NordicTheme.elevatedSurface)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+                        .nordicSurface()
                         .help(probe?.tooltipDescription ?? "Published port \(p.hostPort)")
                     }
                 }
@@ -646,9 +640,7 @@ public struct ContainerDetailView: View {
                             )
                         }
                         .padding(10)
-                        .background(NordicTheme.elevatedSurface)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+                        .nordicSurface()
                     }
                 }
             }

@@ -364,6 +364,17 @@ public struct ContainerModel: Identifiable, Codable, Sendable, Equatable {
         return ["builder", "machine"].contains(labels["com.apple.container.plugin"] ?? "")
     }
 
+    /// `nginx:1.27-alpine` for `docker.io/library/nginx:1.27-alpine`; other registries keep
+    /// their host so the source stays visible.
+    public var shortImageReference: String {
+        let ref = imageReference
+        let first = ref.split(separator: "/").first.map(String.init) ?? ""
+        let hasRegistryHost = ref.contains("/") && (first.contains(".") || first.contains(":") || first == "localhost")
+        guard !hasRegistryHost || first == "docker.io" else { return ref }
+        let tag = ImageReferenceSuggester.tag(of: ref).map { ":\($0)" } ?? ""
+        return ImageReferenceSuggester.shortName(ref) + tag
+    }
+
     public var primaryIPv4: String? {
         guard let first = networks.first?.ipv4Address else { return nil }
         return first.components(separatedBy: "/").first

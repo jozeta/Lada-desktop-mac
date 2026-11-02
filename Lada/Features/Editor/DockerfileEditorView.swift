@@ -637,9 +637,7 @@ public struct DockerfileEditorView: View {
                         }
                     }
                     .padding(10)
-                    .background(NordicTheme.elevatedSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+                    .nordicSurface()
                 }
 
                 // Conflict Warning & One-Click Resolution Card

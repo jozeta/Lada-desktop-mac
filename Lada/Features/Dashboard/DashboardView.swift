@@ -294,12 +294,7 @@ public struct DashboardView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(NordicTheme.elevatedSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(NordicTheme.borderSubtle, lineWidth: 1)
-        )
+        .nordicSurface()
     }
 
     @ViewBuilder
@@ -362,12 +357,7 @@ public struct DashboardView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(NordicTheme.elevatedSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(NordicTheme.borderSubtle, lineWidth: 1)
-        )
+        .nordicSurface()
     }
 
     @ViewBuilder
@@ -411,12 +401,7 @@ public struct DashboardView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(NordicTheme.elevatedSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(NordicTheme.borderSubtle, lineWidth: 1)
-        )
+        .nordicSurface()
     }
 
     private func diskRow(label: String, color: Color, usage: ResourceDiskUsage) -> some View {
@@ -522,12 +507,7 @@ public struct DashboardView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(NordicTheme.elevatedSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(NordicTheme.borderSubtle, lineWidth: 1)
-        )
+        .nordicSurface()
     }
 
     @ViewBuilder
@@ -574,11 +554,6 @@ public struct DashboardView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(NordicTheme.elevatedSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(NordicTheme.borderSubtle, lineWidth: 1)
-        )
+        .nordicSurface()
     }
 }

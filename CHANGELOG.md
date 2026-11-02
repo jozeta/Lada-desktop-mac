@@ -6,6 +6,12 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Redesign, step 2 (Containers): a flat list without striped filler rows, short image names
+  (`nginx:1.27-alpine`), compact port mappings, and columns that fit beside the inspector;
+  inspector sections are "Details", "Performance" and "Maintenance" with plain labels; chart cards
+  (also on the dashboard) use sentence-case titles, numbers that roll to new values, and show
+  "Collecting…" / "Not running" instead of a flat line when there is no measured data. All panels
+  share one `nordicSurface()` style. The running status dot no longer pulses
 - Fix: opening a container's Terminal tab crashed the app (regression from the Swift 6 switch: the
   PTY read handler, written inside a main-actor class, was treated as main-actor code and trapped
   when called on a background queue). Background callbacks (PTY, drag-and-drop loading,

@@ -89,9 +89,7 @@ public struct ImageReferenceField: View {
                     }
                 }
                 .padding(3)
-                .background(NordicTheme.elevatedSurface)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+                .nordicSurface()
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
