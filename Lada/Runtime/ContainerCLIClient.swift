@@ -46,13 +46,14 @@ public final class ContainerCLIClient: ContainerRuntimeService, @unchecked Senda
     private func runCLI(
         _ arguments: [String],
         stdinData: Data? = nil,
+        environment: [String: String]? = nil,
         timeoutSeconds: TimeInterval = 45
     ) async throws -> CommandExecutionResult {
         let exec = try await resolveExecutable()
         let result = try await runner.execute(
             executablePath: exec,
             arguments: arguments,
-            environment: nil,
+            environment: environment,
             stdinData: stdinData,
             timeoutSeconds: timeoutSeconds
         )
@@ -211,7 +212,8 @@ public final class ContainerCLIClient: ContainerRuntimeService, @unchecked Senda
             )
         }
         let args = request.buildCLIArguments()
-        let res = try await runCLI(args, timeoutSeconds: 180)
+        let secrets = request.secretEnvironment()
+        let res = try await runCLI(args, environment: secrets.isEmpty ? nil : secrets, timeoutSeconds: 180)
         let id = res.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         return id.isEmpty ? request.name : id
     }

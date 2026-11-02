@@ -730,6 +730,28 @@ public struct ContainerCreateRequest: Codable, Sendable, Equatable {
         )
     }
 
+    /// Environment entries passed by name only (`-e KEY`) with the value in the CLI's environment.
+    static func isSecretEnvironmentEntry(_ env: KeyValueEntry) -> Bool {
+        let key = env.key.trimmingCharacters(in: .whitespaces)
+        return !key.isEmpty && !env.value.isEmpty && (env.isSecret || SecretRedactor.isSensitiveKey(key))
+    }
+
+    /// Values for the secret entries named in `buildCLIArguments()`, to set in the environment of
+    /// the `container` process.
+    public func secretEnvironment() -> [String: String] {
+        var env: [String: String] = [:]
+        for entry in environmentVariables where Self.isSecretEnvironmentEntry(entry) {
+            env[entry.key.trimmingCharacters(in: .whitespaces)] = entry.value
+        }
+        return env
+    }
+
+    /// Repository name without registry, namespace `library/`, tag or digest
+    /// (`docker.io/library/postgres:17` → `postgres`, `bitnami/postgresql` → `bitnami/postgresql`).
+    static func repositoryName(_ reference: String) -> String {
+        ImageReferenceSuggester.shortName(reference)
+    }
+
     /// Whether an image's default command is an interactive shell (alpine, ubuntu, …), matched on
     /// the repository name so `alpine:3.24`, `docker.io/library/alpine:latest` and
     /// `alpine@sha256:…` all count.
@@ -758,7 +780,6 @@ public struct ContainerCreateRequest: Codable, Sendable, Equatable {
         if removeWhenStopped {
             args.append("--rm")
         }
-        let lowerImage = imageReference.lowercased()
         let isShellBaseImage = Self.isShellBaseImage(imageReference)
             && commandArguments.isEmpty && entrypointOverride.trimmingCharacters(in: .whitespaces).isEmpty
 
@@ -849,8 +870,6 @@ public struct ContainerCreateRequest: Codable, Sendable, Equatable {
             args.append(contentsOf: ["--env-file", envFilePath.trimmingCharacters(in: .whitespaces)])
         }
         var hasPGDataSubdir = false
-        var hasPostgresPassword = false
-        var hasMySQLAuth = false
         for env in environmentVariables {
             let key = env.key.trimmingCharacters(in: .whitespaces)
             guard !key.isEmpty else { continue }
@@ -861,30 +880,19 @@ public struct ContainerCreateRequest: Codable, Sendable, Equatable {
                 args.append(contentsOf: ["-e", "\(key)=\(val)"])
                 continue
             }
-            if key == "POSTGRES_PASSWORD" || key == "POSTGRES_HOST_AUTH_METHOD" {
-                hasPostgresPassword = true
-            }
-            if key == "MYSQL_ROOT_PASSWORD" || key == "MYSQL_ALLOW_EMPTY_PASSWORD" || key == "MYSQL_RANDOM_ROOT_PASSWORD" || key == "MARIADB_ROOT_PASSWORD" {
-                hasMySQLAuth = true
-            }
-            if env.value.isEmpty {
+            if Self.isSecretEnvironmentEntry(env) {
+                // Secrets stay out of the argument list (readable by any local user via `ps`):
+                // `-e KEY` makes the CLI read the value from its own environment, which
+                // `secretEnvironment()` supplies.
                 args.append(contentsOf: ["-e", key])
             } else {
+                // `KEY=` for an empty value: a bare `-e KEY` would copy Låda's own environment
+                // variable of that name (HOME, PATH, a token…) into the container.
                 args.append(contentsOf: ["-e", "\(key)=\(env.value)"])
             }
         }
-        if lowerImage.contains("postgres") {
-            if !hasPGDataSubdir {
-                args.append(contentsOf: ["-e", "PGDATA=/var/lib/postgresql/data/pgdata"])
-            }
-            if !hasPostgresPassword {
-                args.append(contentsOf: ["-e", "POSTGRES_PASSWORD=postgres"])
-            }
-        }
-        if lowerImage.contains("mysql") || lowerImage.contains("mariadb") {
-            if !hasMySQLAuth {
-                args.append(contentsOf: ["-e", "MYSQL_ROOT_PASSWORD=rootpassword"])
-            }
+        if Self.repositoryName(imageReference) == "postgres" && !hasPGDataSubdir {
+            args.append(contentsOf: ["-e", "PGDATA=/var/lib/postgresql/data/pgdata"])
         }
 
         // Security & execution
@@ -950,7 +958,7 @@ public struct ContainerCreateRequest: Codable, Sendable, Equatable {
 
         args.append(imageReference.trimmingCharacters(in: .whitespaces))
         var finalCommandArgs = commandArguments.filter { !$0.isEmpty }
-        if (lowerImage.contains("mysql") || lowerImage.contains("mariadb")) &&
+        if ["mysql", "mariadb"].contains(Self.repositoryName(imageReference)) &&
             mounts.contains(where: { $0.destination == "/var/lib/mysql" }) &&
             !finalCommandArgs.contains(where: { $0.hasPrefix("--datadir") }) {
             finalCommandArgs.append("--datadir=/var/lib/mysql/data")

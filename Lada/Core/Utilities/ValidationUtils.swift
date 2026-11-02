@@ -174,6 +174,26 @@ public enum ValidationUtils {
         if req.memoryMB < 64 {
             issues.append("Memory allocation must be at least 64 MiB.")
         }
+        // Databases that refuse to initialise without credentials. Låda used to inject well-known
+        // passwords here; now the user (or the preset's generated secret) must provide them.
+        let envValue: (String) -> String? = { name in
+            req.environmentVariables.first { $0.key.trimmingCharacters(in: .whitespaces) == name }?.value
+        }
+        let hasValue: (String) -> Bool = { !(envValue($0) ?? "").isEmpty }
+        switch ContainerCreateRequest.repositoryName(req.imageReference) {
+        case "postgres":
+            if !hasValue("POSTGRES_PASSWORD") && !hasValue("POSTGRES_PASSWORD_FILE") && !hasValue("POSTGRES_HOST_AUTH_METHOD") {
+                issues.append("PostgreSQL needs POSTGRES_PASSWORD. Add it under Environment Variables (the key button generates a random one).")
+            }
+        case "mysql", "mariadb":
+            let auth = ["MYSQL_ROOT_PASSWORD", "MYSQL_ALLOW_EMPTY_PASSWORD", "MYSQL_RANDOM_ROOT_PASSWORD",
+                        "MARIADB_ROOT_PASSWORD", "MARIADB_ALLOW_EMPTY_ROOT_PASSWORD", "MARIADB_RANDOM_ROOT_PASSWORD"]
+            if !auth.contains(where: hasValue) {
+                issues.append("MySQL/MariaDB need a root password (MYSQL_ROOT_PASSWORD or MARIADB_ROOT_PASSWORD). Add it under Environment Variables (the key button generates a random one).")
+            }
+        default:
+            break
+        }
         let aliases = req.dnsAliases.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         if aliases.count > maximumDNSAliasesPerNetwork {
             issues.append("At most \(maximumDNSAliasesPerNetwork) DNS aliases are allowed per network.")

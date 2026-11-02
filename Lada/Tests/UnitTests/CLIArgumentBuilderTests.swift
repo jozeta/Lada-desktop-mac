@@ -79,7 +79,9 @@ final class CLIArgumentBuilderTests: XCTestCase {
         XCTAssertTrue(args.contains("type=bind,source=/Users/dev/project,target=/workspace,readonly"))
         XCTAssertTrue(args.contains("type=tmpfs,target=/tmp/scratch"))
         XCTAssertTrue(args.contains("PORT=8080"))
-        XCTAssertTrue(args.contains("API_SECRET=s3cr3t-token"))
+        // Secrets are passed by name; the value goes through the CLI's environment, not argv.
+        XCTAssertTrue(args.contains("API_SECRET"))
+        XCTAssertFalse(args.contains { $0.contains("s3cr3t-token") })
         XCTAssertTrue(args.contains("com.example.env=staging"))
         XCTAssertTrue(args.contains("nofile=65535:65535"))
         XCTAssertTrue(args.contains("NET_ADMIN"))

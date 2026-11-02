@@ -43,7 +43,8 @@ final class UIWorkflowTests: XCTestCase {
 
         let createReq = ContainerCreateRequest(
             name: "ui-test-service",
-            imageReference: "docker.io/library/postgres:16-alpine"
+            imageReference: "docker.io/library/postgres:16-alpine",
+            environmentVariables: [KeyValueEntry(key: "POSTGRES_PASSWORD", value: SecretGenerator.password(), isSecret: true)]
         )
         await appState.performOperation(
             category: "Containers",

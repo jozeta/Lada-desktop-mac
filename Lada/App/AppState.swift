@@ -555,7 +555,9 @@ public final class AppState: ObservableObject {
     }
 
     public func sendUserNotification(title: String, body: String) {
-        guard Bundle.main.bundleIdentifier != nil else { return }
+        // UNUserNotificationCenter needs a real app bundle; it raises an exception in a bare
+        // executable (`swift run`) or a test process.
+        guard Bundle.main.bundleIdentifier != nil, Bundle.main.bundleURL.pathExtension == "app" else { return }
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
             guard granted else { return }

@@ -6,6 +6,16 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Security: no more well-known database passwords. Låda no longer injects
+  `POSTGRES_PASSWORD=postgres` / `MYSQL_ROOT_PASSWORD=rootpassword`; presets get a fresh random
+  24-character secret per deploy, the environment editor has a generate button, and creating a
+  Postgres/MySQL/MariaDB container without credentials is blocked with a clear message
+- Security: secret environment values are no longer passed as `-e KEY=value` (readable by any local
+  user via `ps`); they go through the `container` process's environment (`-e KEY`)
+- Fix: an empty environment value was sent as `-e KEY`, which copies Låda's own variable of that
+  name (HOME, PATH, tokens…) into the container; it is now sent as `KEY=`
+- Fix: database tweaks matched image names by substring (e.g. `postgres-exporter`); they now match
+  the repository name. System notifications are only used inside a real `.app` bundle
 - Fix: the Xcode build compiled the new test files into the app target; all test files are now
   excluded from it
 - Fix: with the inspector open, the Containers filter overlapped "Prune Stopped…" and the

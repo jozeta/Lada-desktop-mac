@@ -131,7 +131,11 @@ public struct DockerHubRepositoryItem: Identifiable, Codable, Sendable, Equatabl
             allocateTTY: false,
             publishedPorts: recommendedPorts,
             mounts: recommendedVolumes,
-            environmentVariables: recommendedEnv,
+            // Secret values in the catalog are placeholders: every deploy gets fresh random ones.
+            environmentVariables: recommendedEnv.map { entry in
+                guard entry.isSecret else { return entry }
+                return KeyValueEntry(key: entry.key, value: SecretGenerator.password(), isSecret: true)
+            },
             cpus: defaultCPUs,
             memoryMB: defaultMemoryMB
         )
@@ -266,7 +270,7 @@ public actor DockerHubService {
                 [PortMapping(hostAddress: "127.0.0.1", hostPort: 5432, containerPort: 5432, proto: "tcp")],
                 [
                     KeyValueEntry(key: "POSTGRES_USER", value: "postgres"),
-                    KeyValueEntry(key: "POSTGRES_PASSWORD", value: "postgres", isSecret: true),
+                    KeyValueEntry(key: "POSTGRES_PASSWORD", value: "generated-on-deploy", isSecret: true),
                     KeyValueEntry(key: "POSTGRES_DB", value: "appdb"),
                     KeyValueEntry(key: "PGDATA", value: "/var/lib/postgresql/data/pgdata")
                 ],
@@ -339,7 +343,7 @@ public actor DockerHubService {
             ],
             recommendedEnv: [
                 KeyValueEntry(key: "POSTGRES_USER", value: "postgres"),
-                KeyValueEntry(key: "POSTGRES_PASSWORD", value: "postgres", isSecret: true),
+                KeyValueEntry(key: "POSTGRES_PASSWORD", value: "generated-on-deploy", isSecret: true),
                 KeyValueEntry(key: "POSTGRES_DB", value: "appdb"),
                 KeyValueEntry(key: "PGDATA", value: "/var/lib/postgresql/data/pgdata")
             ],
@@ -448,7 +452,7 @@ public actor DockerHubService {
                 PortMapping(hostAddress: "127.0.0.1", hostPort: 3306, containerPort: 3306, proto: "tcp")
             ],
             recommendedEnv: [
-                KeyValueEntry(key: "MYSQL_ROOT_PASSWORD", value: "rootpassword", isSecret: true),
+                KeyValueEntry(key: "MYSQL_ROOT_PASSWORD", value: "generated-on-deploy", isSecret: true),
                 KeyValueEntry(key: "MYSQL_DATABASE", value: "appdb")
             ],
             recommendedVolumes: [
@@ -631,7 +635,7 @@ public actor DockerHubService {
                 PortMapping(hostAddress: "127.0.0.1", hostPort: 3307, containerPort: 3306, proto: "tcp")
             ],
             recommendedEnv: [
-                KeyValueEntry(key: "MARIADB_ROOT_PASSWORD", value: "change-me", isSecret: true),
+                KeyValueEntry(key: "MARIADB_ROOT_PASSWORD", value: "generated-on-deploy", isSecret: true),
                 KeyValueEntry(key: "MARIADB_DATABASE", value: "appdb")
             ],
             recommendedVolumes: [
@@ -658,7 +662,7 @@ public actor DockerHubService {
             ],
             recommendedEnv: [
                 KeyValueEntry(key: "CLICKHOUSE_USER", value: "default"),
-                KeyValueEntry(key: "CLICKHOUSE_PASSWORD", value: "change-me", isSecret: true),
+                KeyValueEntry(key: "CLICKHOUSE_PASSWORD", value: "generated-on-deploy", isSecret: true),
                 KeyValueEntry(key: "CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT", value: "1")
             ],
             updatedAt: DockerHubService.hubDate("2026-11-02")
@@ -797,7 +801,7 @@ public actor DockerHubService {
                 PortMapping(hostAddress: "127.0.0.1", hostPort: 8200, containerPort: 8200, proto: "tcp")
             ],
             recommendedEnv: [
-                KeyValueEntry(key: "VAULT_DEV_ROOT_TOKEN_ID", value: "change-me", isSecret: true),
+                KeyValueEntry(key: "VAULT_DEV_ROOT_TOKEN_ID", value: "generated-on-deploy", isSecret: true),
                 KeyValueEntry(key: "VAULT_DEV_LISTEN_ADDRESS", value: "0.0.0.0:8200")
             ],
             updatedAt: DockerHubService.hubDate("2026-10-22")

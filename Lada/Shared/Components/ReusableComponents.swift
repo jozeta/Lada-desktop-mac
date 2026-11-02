@@ -443,6 +443,17 @@ public struct NordicKeyValueEditor: View {
                             }
                             .buttonStyle(.borderless)
                             .help(entry.isSecret ? "Toggle secret visibility" : "Mask as secret")
+
+                            if entry.isSecret {
+                                Button {
+                                    entry.value = SecretGenerator.password()
+                                } label: {
+                                    Image(systemName: "key")
+                                        .font(.system(size: 11))
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Generate a random 24-character value")
+                            }
                         }
 
                         Button {

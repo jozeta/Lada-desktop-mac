@@ -30,6 +30,7 @@
 				Tests/UnitTests/OutputParserTests.swift,
 				Tests/UnitTests/RealOutputParserTests.swift,
 				Tests/UnitTests/RuntimeCapabilitiesAndHealthTests.swift,
+				Tests/UnitTests/SecretHandlingTests.swift,
 				Tests/UnitTests/TelemetryTests.swift,
 				Tests/UnitTests/ValidationAndRedactionTests.swift,
 			);
