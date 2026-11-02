@@ -245,7 +245,10 @@ final class UIWorkflowTests: XCTestCase {
         XCTAssertGreaterThan(samples.last?.memoryUsageBytes ?? 0, 0)
         XCTAssertGreaterThan(samples.last?.totalNetworkRxBytes ?? 0, 0)
         XCTAssertGreaterThan(samples.last?.totalDiskReadBytes ?? 0, 0)
-        XCTAssertFalse(appState.systemTelemetryHistory.isEmpty)
+        // A single-container (inspector) refresh does not add a system-wide point.
+        XCTAssertTrue(appState.systemTelemetryHistory.isEmpty)
+        await appState.sampleAllRunningContainersTelemetry()
+        XCTAssertEqual(appState.systemTelemetryHistory.count, 1)
 
         // Verify name and port conflict resolution
         let conflictingReq = ContainerCreateRequest(

@@ -6,6 +6,12 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Fix: dashboard "Cluster CPU Load" averaged per-container percentages; it is now weighted by
+  allotted vCPUs (cores in use ÷ vCPUs). System points only combine containers measured in the
+  same round, and an inspector refresh no longer adds a system point mixing fresh and stale data
+- CPU cards show cores in use ("0.70 of 4 vCPU busy"); the dashboard's Active Containers list is
+  sorted by live CPU and shows CPU and network rates. Counter semantics were checked against a
+  real 1.6.1 container (CPU time = cgroup `usage_usec`, block and network bytes exact)
 - DNS aliases (container 1.6): set them in the Create Container wizard (validated against
   upstream's rules), see them in the container's Networking tab, and keep them when cloning
 - Compose stacks give each service its name, plus any `networks: <net>: aliases:`, as DNS aliases

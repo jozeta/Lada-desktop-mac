@@ -432,6 +432,10 @@ public struct ContainerPerformanceSample: Identifiable, Sendable, Equatable {
     public let totalDiskReadBytes: UInt64
     public let totalDiskWriteBytes: UInt64
     public let numProcesses: Int
+    /// CPU time used per second of wall time, in cores (1.0 = one vCPU fully busy).
+    public let cpuCoresUsed: Double
+    /// vCPUs allotted to the container(s) this sample covers.
+    public let allocatedCPUs: Int
 
     public init(
         id: UUID = UUID(),
@@ -448,11 +452,15 @@ public struct ContainerPerformanceSample: Identifiable, Sendable, Equatable {
         diskWriteRateBps: Double = 0,
         totalDiskReadBytes: UInt64 = 0,
         totalDiskWriteBytes: UInt64 = 0,
-        numProcesses: Int = 0
+        numProcesses: Int = 0,
+        cpuCoresUsed: Double = 0,
+        allocatedCPUs: Int = 0
     ) {
         self.id = id
         self.timestamp = timestamp
         self.cpuPercent = max(0, min(100, cpuPercent))
+        self.cpuCoresUsed = max(0, cpuCoresUsed)
+        self.allocatedCPUs = max(0, allocatedCPUs)
         self.memoryUsageBytes = memoryUsageBytes
         self.memoryLimitBytes = memoryLimitBytes
         self.memoryPercent = max(0, min(100, memoryPercent))

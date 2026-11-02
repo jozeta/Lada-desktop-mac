@@ -324,7 +324,7 @@ public struct ContainerDetailView: View {
                         primaryMetricText: isRunning
                             ? String(format: "%.1f%%", latestSample?.cpuPercent ?? 0.0)
                             : "0.0%",
-                        secondaryMetricText: "\(container.configuration.cpus) vCPU • \((stats?.cpuUsageUsec ?? 0) / 1000) ms total",
+                        secondaryMetricText: String(format: "%.2f", isRunning ? (latestSample?.cpuCoresUsed ?? 0) : 0) + " of \(container.configuration.cpus) vCPU busy • \((stats?.cpuUsageUsec ?? 0) / 1000) ms total",
                         primarySeries: isRunning ? samples.map(\.cpuPercent) : [0, 0],
                         primaryLegend: "Utilization",
                         fixedMaxY: 100.0,

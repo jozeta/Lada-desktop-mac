@@ -36,4 +36,24 @@ final class TelemetryTests: XCTestCase {
         XCTAssertEqual(appState.containerTelemetryHistory[running.id]?.count, 1, "one measured point after two snapshots")
         XCTAssertEqual(appState.systemTelemetryHistory.count, 1)
     }
+
+    func testClusterCPUIsWeightedByAllottedVCPUs() {
+        let now = Date()
+        let busy = ContainerPerformanceSample(timestamp: now, cpuPercent: 100, cpuCoresUsed: 4, allocatedCPUs: 4)
+        let idle = ContainerPerformanceSample(timestamp: now, cpuPercent: 0, cpuCoresUsed: 0, allocatedCPUs: 1)
+        let agg = AppState.aggregateSample([busy, idle], at: now)
+        XCTAssertEqual(agg.cpuPercent, 80, accuracy: 0.0001)
+        XCTAssertEqual(agg.cpuCoresUsed, 4)
+        XCTAssertEqual(agg.allocatedCPUs, 5)
+    }
+
+    func testCoresUsedMatchesMeasuredLoad() {
+        // Measured on container 1.6.1: a 5 s single-core busy loop added 5,051,627 µs of CPU time
+        // over 7.2 s on a 4-vCPU container.
+        let a = ContainerStatsModel(id: "m", cpuUsageUsec: 115_186)
+        let b = ContainerStatsModel(id: "m", cpuUsageUsec: 5_166_813)
+        let rates = AppState.telemetryRates(current: b, previous: a, interval: 7.2, cpus: 4)
+        XCTAssertEqual(rates.cpuCoresUsed, 0.70, accuracy: 0.01)
+        XCTAssertEqual(rates.cpuPercent, 17.5, accuracy: 0.2)
+    }
 }

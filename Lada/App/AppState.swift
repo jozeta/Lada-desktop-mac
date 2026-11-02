@@ -346,7 +346,9 @@ public final class AppState: ObservableObject {
                 diskWriteRateBps: rates.writeBps,
                 totalDiskReadBytes: s.blockReadBytes,
                 totalDiskWriteBytes: s.blockWriteBytes,
-                numProcesses: s.numProcesses
+                numProcesses: s.numProcesses,
+                cpuCoresUsed: rates.cpuCoresUsed,
+                allocatedCPUs: containerCPUs
             )
 
             var history = self.containerTelemetryHistory[s.id] ?? []
@@ -358,11 +360,16 @@ public final class AppState: ObservableObject {
         }
 
         self.containerStats = updatedStatsMap
-        recordAggregateSystemTelemetrySample(at: now)
+        // A single-container refresh (inspector) must not produce a system point mixing one fresh
+        // value with stale ones.
+        if onlyUpdateIDs == nil {
+            recordAggregateSystemTelemetrySample(at: now)
+        }
     }
 
     struct TelemetryRates: Equatable {
         let cpuPercent: Double
+        let cpuCoresUsed: Double
         let rxBps: Double
         let txBps: Double
         let readBps: Double
@@ -373,9 +380,11 @@ public final class AppState: ObservableObject {
     /// CPU is a share of the container's allotted vCPUs, clamped to 0–100 %.
     static func telemetryRates(current s: ContainerStatsModel, previous p: ContainerStatsModel, interval: TimeInterval, cpus: Int) -> TelemetryRates {
         let availableUsec = interval * 1_000_000 * Double(max(1, cpus))
-        let cpu = Double(s.cpuUsageUsec - p.cpuUsageUsec) / availableUsec * 100
+        let usedUsec = Double(s.cpuUsageUsec - p.cpuUsageUsec)
+        let cpu = usedUsec / availableUsec * 100
         return TelemetryRates(
             cpuPercent: min(100, max(0, cpu)),
+            cpuCoresUsed: max(0, usedUsec / (interval * 1_000_000)),
             rxBps: Double(s.networkRxBytes - p.networkRxBytes) / interval,
             txBps: Double(s.networkTxBytes - p.networkTxBytes) / interval,
             readBps: Double(s.blockReadBytes - p.blockReadBytes) / interval,
@@ -385,13 +394,27 @@ public final class AppState: ObservableObject {
 
     private func recordAggregateSystemTelemetrySample(at now: Date) {
         let runningIDs = containers.filter { $0.state == .running }.map(\.id)
+        // Only containers measured in this round, so every point covers the same interval.
         let activeSamples: [ContainerPerformanceSample] = runningIDs.compactMap { id in
-            containerTelemetryHistory[id]?.last
+            containerTelemetryHistory[id]?.last.flatMap { $0.timestamp == now ? $0 : nil }
         }
+        let aggregate = Self.aggregateSample(activeSamples, at: now)
+        guard !activeSamples.isEmpty else { return }
+        var sysHistory = self.systemTelemetryHistory
+        sysHistory.append(aggregate)
+        if sysHistory.count > 40 {
+            sysHistory.removeFirst(sysHistory.count - 40)
+        }
+        self.systemTelemetryHistory = sysHistory
+    }
 
-        let avgCPU: Double = activeSamples.isEmpty
-            ? 0
-            : min(100.0, activeSamples.reduce(0.0) { $0 + $1.cpuPercent } / Double(max(1, activeSamples.count)))
+    /// Combines per-container samples. CPU is weighted by allotted vCPUs (total cores used ÷ total
+    /// vCPUs), so a busy 4-vCPU container and an idle 1-vCPU one read 80 %, not the 50 % a plain
+    /// average of percentages would give.
+    static func aggregateSample(_ activeSamples: [ContainerPerformanceSample], at now: Date) -> ContainerPerformanceSample {
+        let totalCores = activeSamples.reduce(0.0) { $0 + $1.cpuCoresUsed }
+        let totalAllocated = activeSamples.reduce(0) { $0 + $1.allocatedCPUs }
+        let avgCPU = totalAllocated > 0 ? min(100.0, totalCores / Double(totalAllocated) * 100) : 0
         let totalMemUsed = activeSamples.reduce(UInt64(0)) { $0 + $1.memoryUsageBytes }
         let totalMemLimit = max(1, activeSamples.reduce(UInt64(0)) { $0 + $1.memoryLimitBytes })
         let memPct = min(100.0, (Double(totalMemUsed) / Double(totalMemLimit)) * 100.0)
@@ -405,7 +428,7 @@ public final class AppState: ObservableObject {
         let totalDiskWBytes = activeSamples.reduce(UInt64(0)) { $0 + $1.totalDiskWriteBytes }
         let totalProcs = activeSamples.reduce(0) { $0 + $1.numProcesses }
 
-        let aggregate = ContainerPerformanceSample(
+        return ContainerPerformanceSample(
             timestamp: now,
             cpuPercent: avgCPU,
             memoryUsageBytes: totalMemUsed,
@@ -419,16 +442,10 @@ public final class AppState: ObservableObject {
             diskWriteRateBps: totalDiskWRate,
             totalDiskReadBytes: totalDiskRBytes,
             totalDiskWriteBytes: totalDiskWBytes,
-            numProcesses: totalProcs
+            numProcesses: totalProcs,
+            cpuCoresUsed: totalCores,
+            allocatedCPUs: totalAllocated
         )
-
-        guard !activeSamples.isEmpty else { return }
-        var sysHistory = self.systemTelemetryHistory
-        sysHistory.append(aggregate)
-        if sysHistory.count > 40 {
-            sysHistory.removeFirst(sysHistory.count - 40)
-        }
-        self.systemTelemetryHistory = sysHistory
     }
 
     // MARK: - Activity & Notifications

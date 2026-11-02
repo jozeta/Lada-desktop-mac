@@ -11,6 +11,13 @@ public struct DashboardView: View {
         appState.containers.filter { $0.state == .running }
     }
 
+    /// Running containers sorted by their latest measured CPU share, then the stopped ones.
+    private var containersByLoad: [ContainerModel] {
+        let cpu: (ContainerModel) -> Double = { appState.containerTelemetryHistory[$0.id]?.last?.cpuPercent ?? -1 }
+        let running = appState.containers.filter { $0.state == .running }.sorted { cpu($0) > cpu($1) }
+        return running + appState.containers.filter { $0.state != .running }
+    }
+
     private var setupWarnings: [PrerequisiteItem] {
         appState.prerequisites.filter { $0.status != .ready }
     }
@@ -140,7 +147,7 @@ public struct DashboardView: View {
                     title: "Cluster CPU Load",
                     iconName: "cpu",
                     primaryMetricText: String(format: "%.1f%%", latest?.cpuPercent ?? 0),
-                    secondaryMetricText: "\(totalAllocatedCPUs) vCPUs across \(runningContainers.count) VM(s)",
+                    secondaryMetricText: String(format: "%.2f", latest?.cpuCoresUsed ?? 0) + " of \(totalAllocatedCPUs) vCPUs busy across \(runningContainers.count) VM(s)",
                     primarySeries: samples.map(\.cpuPercent),
                     fixedMaxY: 100.0,
                     primaryColor: NordicTheme.accent(for: appState.preferences.accentThemeChoice)
@@ -439,6 +446,7 @@ public struct DashboardView: View {
         VStack(alignment: .leading, spacing: 10) {
             NordicSectionHeader(
                 "Active Containers",
+                subtitle: "Running containers first, busiest CPU first.",
                 trailingText: "\(runningContainers.count) running"
             )
 
@@ -459,7 +467,7 @@ public struct DashboardView: View {
                 )
                 .frame(height: 190)
             } else {
-                ForEach(appState.containers.prefix(6)) { container in
+                ForEach(containersByLoad.prefix(6)) { container in
                     HStack(spacing: 10) {
                         NordicStatusBadge(containerState: container.state)
                         VStack(alignment: .leading, spacing: 2) {
@@ -474,6 +482,11 @@ public struct DashboardView: View {
                         Spacer()
                         if let stats = appState.containerStats[container.id] {
                             VStack(alignment: .trailing, spacing: 3) {
+                                if container.state == .running, let sample = appState.containerTelemetryHistory[container.id]?.last {
+                                    Text(String(format: "CPU %.1f%%", sample.cpuPercent) + " • ↓ \(formatTransferRate(sample.networkRxRateBps)) ↑ \(formatTransferRate(sample.networkTxRateBps))")
+                                        .font(NordicTheme.monoFontSmall)
+                                        .foregroundStyle(NordicTheme.primaryText)
+                                }
                                 Text("\(ByteCountFormatter.string(fromByteCount: Int64(stats.memoryUsageBytes), countStyle: .memory)) • \(stats.numProcesses) pids")
                                     .font(NordicTheme.monoFontSmall)
                                     .foregroundStyle(NordicTheme.secondaryText)
