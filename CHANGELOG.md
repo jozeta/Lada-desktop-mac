@@ -6,6 +6,9 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Settings: the section list is drawn with Nordic surfaces instead of a second translucent system
+  sidebar (in light mode its selected row was unreadable), and forms sit in standard Nordic panels
+  instead of the system's grouped inset box. Adds a shared `nordicPanel()` modifier
 - Image Library: 17 new presets (httpd, MariaDB, ClickHouse, Memcached, Valkey, NATS, PHP, Ruby,
   Eclipse Temurin, Bun, a local OCI registry, Vault dev mode, Gitea, Mailpit, Adminer, BusyBox,
   Fedora). All 35 presets were launched against container 1.6.1 and stay running

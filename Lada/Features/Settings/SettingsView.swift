@@ -108,12 +108,57 @@ public struct ActivityView: View {
     }
 }
 
+private struct SettingsNavRow: View {
+    let title: String
+    let systemImage: String
+    let isSelected: Bool
+    let accent: Color
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: 18)
+                    .foregroundStyle(isSelected ? accent : NordicTheme.secondaryText)
+                Text(title)
+                    .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(NordicTheme.primaryText)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isSelected ? accent.opacity(0.14) : (isHovered ? NordicTheme.borderSubtle.opacity(0.5) : .clear))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+    }
+}
+
 public struct SettingsView: View {
     @ObservedObject var appState: AppState
     @ObservedObject private var prefs: AppPreferences
     @State private var selectedTab = "runtime"
     @State private var systemLogsText = ""
     @State private var diagnosticSummaryCopied = false
+
+    private static let tabs: [(id: String, title: String, icon: String)] = [
+        ("general", "General", "gearshape"),
+        ("runtime", "System & Runtime", "cpu"),
+        ("resources", "Resources & DNS", "memorychip"),
+        ("registries", "Registries", "key"),
+        ("appearance", "Appearance", "paintbrush"),
+        ("notifications", "Notifications", "bell"),
+        ("diagnostics", "Diagnostics", "stethoscope"),
+        ("advanced", "Advanced", "wrench.and.screwdriver")
+    ]
 
     public init(appState: AppState, initialTab: String = "runtime") {
         self.appState = appState
@@ -123,18 +168,26 @@ public struct SettingsView: View {
 
     public var body: some View {
         HSplitView {
-            List(selection: $selectedTab) {
-                Label("General", systemImage: "gearshape").tag("general")
-                Label("System & Runtime", systemImage: "cpu").tag("runtime")
-                Label("Resources & DNS", systemImage: "memorychip").tag("resources")
-                Label("Registries", systemImage: "key").tag("registries")
-                Label("Appearance", systemImage: "paintbrush").tag("appearance")
-                Label("Notifications", systemImage: "bell").tag("notifications")
-                Label("Diagnostics", systemImage: "stethoscope").tag("diagnostics")
-                Label("Advanced", systemImage: "wrench.and.screwdriver").tag("advanced")
+            // Section navigation drawn with Nordic surfaces rather than a second system sidebar,
+            // whose translucent material clashed with the solid panels around it.
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Self.tabs, id: \.id) { tab in
+                    SettingsNavRow(
+                        title: tab.title,
+                        systemImage: tab.icon,
+                        isSelected: selectedTab == tab.id,
+                        accent: NordicTheme.accent(for: prefs.accentThemeChoice)
+                    ) {
+                        withAnimation(.easeOut(duration: 0.15)) { selectedTab = tab.id }
+                    }
+                    .accessibilityIdentifier("lada.settings.tab.\(tab.id)")
+                }
+                Spacer()
             }
-            .listStyle(.sidebar)
-            .frame(minWidth: 190, idealWidth: 210, maxWidth: 230)
+            .padding(10)
+            .frame(minWidth: 190, idealWidth: 210, maxWidth: 230, maxHeight: .infinity, alignment: .top)
+            .background(NordicTheme.sidebarBackground)
+            .overlay(alignment: .trailing) { Rectangle().fill(NordicTheme.borderSubtle).frame(width: 1) }
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
@@ -182,7 +235,7 @@ public struct SettingsView: View {
                 Toggle("Confirm Destructive Actions (Delete / Prune)", isOn: $prefs.confirmDestructiveActions)
                 Toggle("Confirm Before Stopping Running Containers", isOn: $prefs.confirmStopContainer)
             }
-            .formStyle(.grouped)
+            .nordicFormPanel()
         }
     }
 
@@ -320,7 +373,7 @@ public struct SettingsView: View {
                     Text("8 GB").tag(8192)
                 }
             }
-            .formStyle(.grouped)
+            .nordicFormPanel()
 
             VStack(alignment: .leading, spacing: 8) {
                 NordicSectionHeader("Runtime System Properties (`container system property list`)")
@@ -390,7 +443,7 @@ public struct SettingsView: View {
                     }
                 }
             }
-            .formStyle(.grouped)
+            .nordicFormPanel()
         }
     }
 
@@ -402,7 +455,7 @@ public struct SettingsView: View {
                 Toggle("Notify on Container Operations Failure", isOn: $prefs.notifyContainerFailures)
                 Toggle("Notify on Runtime Health Degradation", isOn: $prefs.notifyRuntimeFailures)
             }
-            .formStyle(.grouped)
+            .nordicFormPanel()
         }
     }
 
@@ -490,7 +543,7 @@ public struct SettingsView: View {
                         Task { await appState.refreshAll() }
                     }
             }
-            .formStyle(.grouped)
+            .nordicFormPanel()
         }
     }
 }

@@ -130,3 +130,26 @@ public enum NordicTheme {
     public static let titleFont = Font.system(size: 18, weight: .semibold, design: .default)
     public static let subtitleFont = Font.system(size: 13, weight: .medium, design: .default)
 }
+
+// MARK: - Panels
+
+public extension View {
+    /// The standard Låda panel: elevated surface, 6 pt corners and a hairline border.
+    func nordicPanel(padding: CGFloat = 14) -> some View {
+        self
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(NordicTheme.elevatedSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+    }
+
+    /// A settings form drawn as a Nordic panel. `.columns` (labels in a leading column) instead of
+    /// `.grouped`, whose system-drawn translucent inset box did not match the rest of the app.
+    func nordicFormPanel() -> some View {
+        self
+            .formStyle(.columns)
+            .nordicPanel(padding: 16)
+    }
+}
+
