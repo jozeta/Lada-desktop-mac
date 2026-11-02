@@ -24,30 +24,28 @@ public struct ContainerFileBrowserView: View {
     @ObservedObject var appState: AppState
     public let container: ContainerModel
 
-    @State private var currentPath: String = "/"
-    @State private var entries: [ContainerFileEntry] = []
-    @State private var selectedEntryID: String? = nil
     @State private var isLoadingDirectory: Bool = false
     @State private var directoryError: String? = nil
 
     // File Editor / Preview state
-    @State private var previewingEntry: ContainerFileEntry? = nil
-    @State private var fileEditorText: String = ""
-    /// Set when the selected file can't be edited (too large or binary); the editor is hidden.
-    @State private var editorNotice: String? = nil
     @State private var isSavingFile: Bool = false
     @State private var fileStatusBanner: String? = nil
     @State private var isFileDropTargeted: Bool = false
     @State private var showNewFolderSheet: Bool = false
     @State private var newFolderName: String = ""
 
-    public init(appState: AppState, container: ContainerModel) {
+    /// Folder, listing, open file and unsaved edits, owned by the container's workspace so they
+    /// survive switching containers and sections.
+    @ObservedObject private var state: ContainerFilesState
+
+    public init(appState: AppState, container: ContainerModel, state: ContainerFilesState) {
         self.appState = appState
         self.container = container
+        self.state = state
     }
 
     private var breadcrumbSegments: [(label: String, path: String)] {
-        let trimmed = currentPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let trimmed = state.currentPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         if trimmed.isEmpty {
             return [("/", "/")]
         }
@@ -95,7 +93,7 @@ public struct ContainerFileBrowserView: View {
                         Image(systemName: "arrow.up.doc.fill")
                             .font(.system(size: 32, weight: .semibold))
                             .foregroundStyle(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
-                        Text("Drop File to Upload into \(currentPath)")
+                        Text("Drop File to Upload into \(state.currentPath)")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(NordicTheme.primaryText)
                     }
@@ -110,7 +108,7 @@ public struct ContainerFileBrowserView: View {
         }
         .task(id: "\(container.id)-\(container.state.rawValue)") {
             if container.state == .running {
-                await loadDirectory(path: currentPath)
+                await loadDirectory(path: state.currentPath)
             }
         }
     }
@@ -126,7 +124,7 @@ public struct ContainerFileBrowserView: View {
                     Image(systemName: "chevron.up")
                 }
                 .controlSize(.small)
-                .disabled(currentPath == "/" || container.state != .running)
+                .disabled(state.currentPath == "/" || container.state != .running)
                 .help("Go to Parent Directory")
 
                 // Breadcrumbs
@@ -147,7 +145,7 @@ public struct ContainerFileBrowserView: View {
                             .padding(.vertical, 2)
                             .background(
                                 RoundedRectangle(cornerRadius: 4)
-                                    .fill(seg.path == currentPath ? Color.primary.opacity(0.12) : Color.clear)
+                                    .fill(seg.path == state.currentPath ? Color.primary.opacity(0.12) : Color.clear)
                             )
                         }
                     }
@@ -182,7 +180,7 @@ public struct ContainerFileBrowserView: View {
                 .fixedSize(horizontal: true, vertical: false)
 
                 Button {
-                    Task { await loadDirectory(path: currentPath) }
+                    Task { await loadDirectory(path: state.currentPath) }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -205,7 +203,7 @@ public struct ContainerFileBrowserView: View {
                     .disabled(container.state != .running)
                 }
                 Spacer()
-                Text(verbatim: "\(entries.count) items")
+                Text(verbatim: "\(state.entries.count) items")
                     .font(NordicTheme.monoFontSmall)
                     .foregroundStyle(NordicTheme.secondaryText)
             }
@@ -222,7 +220,7 @@ public struct ContainerFileBrowserView: View {
             if isLoadingDirectory {
                 VStack(spacing: 8) {
                     ProgressView()
-                    Text("Listing \(currentPath)…")
+                    Text("Listing \(state.currentPath)…")
                         .font(NordicTheme.monoFontSmall)
                         .foregroundStyle(NordicTheme.secondaryText)
                 }
@@ -244,8 +242,8 @@ public struct ContainerFileBrowserView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(selection: $selectedEntryID) {
-                    ForEach(entries) { entry in
+                List(selection: $state.selectedEntryID) {
+                    ForEach(state.entries) { entry in
                         HStack(spacing: 8) {
                             Image(systemName: entry.isDirectory ? "folder.fill" : (entry.isSymlink ? "arrow.turn.down.right" : "doc.text"))
                                 .foregroundStyle(
@@ -279,7 +277,7 @@ public struct ContainerFileBrowserView: View {
                             handleDoubleClick(on: entry)
                         }
                         .onTapGesture(count: 1) {
-                            selectedEntryID = entry.id
+                            state.selectedEntryID = entry.id
                             handleSingleClick(on: entry)
                         }
                         .contextMenu {
@@ -311,7 +309,7 @@ public struct ContainerFileBrowserView: View {
 
     private var fileInspectorPane: some View {
         VStack(spacing: 0) {
-            if let entry = previewingEntry {
+            if let entry = state.previewingEntry {
                 HStack(spacing: 8) {
                     Image(systemName: "doc.text")
                         .foregroundStyle(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
@@ -346,7 +344,7 @@ public struct ContainerFileBrowserView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .disabled(isSavingFile || editorNotice != nil)
+                    .disabled(isSavingFile || state.editorNotice != nil)
                     .fixedSize(horizontal: true, vertical: false)
                 }
                 .padding(.horizontal, 12)
@@ -356,7 +354,7 @@ public struct ContainerFileBrowserView: View {
                     Divider().overlay(NordicTheme.borderSubtle)
                 }
 
-                if let editorNotice {
+                if let editorNotice = state.editorNotice {
                     Text(editorNotice)
                         .font(.system(size: 12))
                         .foregroundStyle(NordicTheme.secondaryText)
@@ -365,7 +363,7 @@ public struct ContainerFileBrowserView: View {
                         .background(NordicTheme.codeSurface)
                         .accessibilityIdentifier(AccessibilityID.filesEditorNotice)
                 } else {
-                    TextEditor(text: $fileEditorText)
+                    TextEditor(text: $state.fileEditorText)
                         .font(NordicTheme.monoFontRegular)
                         .scrollContentBackground(.hidden)
                         .padding(8)
@@ -384,7 +382,7 @@ public struct ContainerFileBrowserView: View {
 
     private var newFolderSheetView: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Create New Directory in \(currentPath)")
+            Text("Create New Directory in \(state.currentPath)")
                 .font(.system(size: 14, weight: .semibold))
             TextField("Folder name (e.g. config)", text: $newFolderName)
                 .textFieldStyle(.roundedBorder)
@@ -408,8 +406,8 @@ public struct ContainerFileBrowserView: View {
     // MARK: - Filesystem Operations via `container exec`
 
     private func navigateUp() {
-        guard currentPath != "/" else { return }
-        let parent = (currentPath as NSString).deletingLastPathComponent
+        guard state.currentPath != "/" else { return }
+        let parent = (state.currentPath as NSString).deletingLastPathComponent
         Task { await loadDirectory(path: parent.isEmpty ? "/" : parent) }
     }
 
@@ -421,7 +419,7 @@ public struct ContainerFileBrowserView: View {
 
     private func handleDoubleClick(on entry: ContainerFileEntry) {
         if entry.isDirectory {
-            previewingEntry = nil
+            state.previewingEntry = nil
             Task { await loadDirectory(path: entry.fullPath) }
         } else {
             Task { await loadFileContent(for: entry) }
@@ -439,8 +437,8 @@ public struct ContainerFileBrowserView: View {
 
         let normalizedPath = path.isEmpty ? "/" : path
         do {
-            entries = try await fileOps.listDirectory(normalizedPath)
-            currentPath = normalizedPath
+            state.entries = try await fileOps.listDirectory(normalizedPath)
+            state.currentPath = normalizedPath
         } catch {
             directoryError = Self.message(for: error)
         }
@@ -450,29 +448,29 @@ public struct ContainerFileBrowserView: View {
         do {
             switch try await fileOps.loadText(entry) {
             case .text(let text):
-                editorNotice = nil
-                fileEditorText = text
+                state.editorNotice = nil
+                state.fileEditorText = text
             case .tooLarge(let bytes):
-                editorNotice = "\(NordicFormat.bytes(fromByteCount: bytes, countStyle: .file)) is too large to edit here (limit \(NordicFormat.bytes(fromByteCount: ContainerFileOperations.maxEditableBytes, countStyle: .file))). Use Download… instead."
-                fileEditorText = ""
+                state.editorNotice = "\(NordicFormat.bytes(fromByteCount: bytes, countStyle: .file)) is too large to edit here (limit \(NordicFormat.bytes(fromByteCount: ContainerFileOperations.maxEditableBytes, countStyle: .file))). Use Download… instead."
+                state.fileEditorText = ""
             case .binary:
-                editorNotice = "This looks like a binary file, so it can't be edited as text. Use Download… instead."
-                fileEditorText = ""
+                state.editorNotice = "This looks like a binary file, so it can't be edited as text. Use Download… instead."
+                state.fileEditorText = ""
             }
-            previewingEntry = entry
+            state.previewingEntry = entry
         } catch {
             showBanner("Failed to read \(entry.name): \(Self.message(for: error))")
         }
     }
 
     private func saveEditedFileContent(for entry: ContainerFileEntry) async {
-        guard editorNotice == nil else { return }
+        guard state.editorNotice == nil else { return }
         isSavingFile = true
         defer { isSavingFile = false }
         do {
-            try await fileOps.saveText(fileEditorText, to: entry.fullPath)
+            try await fileOps.saveText(state.fileEditorText, to: entry.fullPath)
             showBanner("Saved \(entry.name)")
-            await loadDirectory(path: currentPath)
+            await loadDirectory(path: state.currentPath)
         } catch {
             showBanner("Save failed: \(Self.message(for: error))")
         }
@@ -493,25 +491,25 @@ public struct ContainerFileBrowserView: View {
 
     private func createNewDirectory(named folderName: String) async {
         do {
-            try await fileOps.makeDirectory(named: folderName, in: currentPath)
+            try await fileOps.makeDirectory(named: folderName, in: state.currentPath)
             showBanner("Created folder \(folderName)")
         } catch {
             showBanner("Create folder failed: \(Self.message(for: error))")
         }
-        await loadDirectory(path: currentPath)
+        await loadDirectory(path: state.currentPath)
     }
 
     private func deleteEntry(_ entry: ContainerFileEntry) async {
         do {
             try await fileOps.remove(entry.fullPath)
-            if previewingEntry?.id == entry.id {
-                previewingEntry = nil
+            if state.previewingEntry?.id == entry.id {
+                state.previewingEntry = nil
             }
             showBanner("Deleted \(entry.name)")
         } catch {
             showBanner("Delete failed: \(Self.message(for: error))")
         }
-        await loadDirectory(path: currentPath)
+        await loadDirectory(path: state.currentPath)
     }
 
     private static func message(for error: Error) -> String {
@@ -524,7 +522,7 @@ public struct ContainerFileBrowserView: View {
 
     private func uploadFileViaOpenPanel() {
         let panel = NSOpenPanel()
-        panel.title = "Upload File to Container (\(currentPath))"
+        panel.title = "Upload File to Container (\(state.currentPath))"
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
@@ -534,7 +532,7 @@ public struct ContainerFileBrowserView: View {
                 for url in urls {
                     await uploadHostFile(url: url)
                 }
-                await loadDirectory(path: currentPath)
+                await loadDirectory(path: state.currentPath)
             }
         }
     }
@@ -548,7 +546,7 @@ public struct ContainerFileBrowserView: View {
                 guard let url else { return }
                 Task { @MainActor in
                     await uploadHostFile(url: url)
-                    await loadDirectory(path: currentPath)
+                    await loadDirectory(path: state.currentPath)
                 }
             }
         }
@@ -557,7 +555,7 @@ public struct ContainerFileBrowserView: View {
 
     private func uploadHostFile(url: URL) async {
         do {
-            try await fileOps.upload(url, into: currentPath)
+            try await fileOps.upload(url, into: state.currentPath)
             showBanner("Uploaded \(url.lastPathComponent)")
         } catch {
             showBanner("Upload of \(url.lastPathComponent) failed: \(Self.message(for: error))")

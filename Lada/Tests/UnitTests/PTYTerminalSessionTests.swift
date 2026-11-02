@@ -86,5 +86,23 @@ final class PTYTerminalSessionTests: XCTestCase {
         XCTAssertTrue(session.outputBuffer.contains("second"), "banner should name the new container")
         session.terminateSession()
     }
+
+    /// Each container keeps its own shell: two sessions must be able to run at the same time.
+    func testTwoSessionsRunConcurrently() async throws {
+        let shell = try makeEchoShell()
+        let a = PTYTerminalSession(), b = PTYTerminalSession()
+        a.startContainerSession(executablePath: shell, container: ContainerModel(id: "a", imageReference: "x", state: .running))
+        try await waitFor(a.isRunning)
+        b.startContainerSession(executablePath: shell, container: ContainerModel(id: "b", imageReference: "x", state: .running))
+        try await Task.sleep(for: .milliseconds(500))
+        XCTAssertTrue(a.isRunning)
+        XCTAssertTrue(b.isRunning, b.statusMessage)
+        b.sendInput("from-b\r")
+        a.sendInput("from-a\r")
+        try await waitFor(b.outputBuffer.contains("from-b") && a.outputBuffer.contains("from-a"))
+        XCTAssertTrue(b.outputBuffer.contains("from-b"))
+        XCTAssertFalse(a.outputBuffer.contains("from-b"))
+        a.terminateSession(); b.terminateSession()
+    }
 }
 

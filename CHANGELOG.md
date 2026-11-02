@@ -6,6 +6,11 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Each container keeps its own workspace while the app runs: its tab, a terminal shell that keeps
+  running in the background (screen and scrollback intact), the Files folder, selection and
+  unsaved editor text, and the Logs search/pause/boot-log settings. It all survives switching
+  containers and visiting other sections. A container opened for the first time starts on the tab
+  you used last; shells end when a container stops, and workspaces are dropped when it is deleted
 - Graphs are more detailed: a value scale (rounded to readable steps), the time span, peak and
   average over the window, and a hover crosshair with exact values and how long ago they were
   measured. History covers 5 minutes (was ~80 s). Dashboard network/disk graphs plot real bytes per

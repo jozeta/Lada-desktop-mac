@@ -5,11 +5,9 @@ public struct ContainerDetailView: View {
     @ObservedObject var appState: AppState
     public let container: ContainerModel
 
-    @State private var logText: String = ""
-    @State private var showBootLogs: Bool = false
-    @State private var logSearchText: String = ""
-    @State private var isLogPaused: Bool = false
-    @State private var logAutoScroll: Bool = true
+    /// This container's persistent inspector state (tab, shell, files, logs).
+    @ObservedObject private var workspace: ContainerWorkspace
+    @ObservedObject private var logs: ContainerLogsState
     @State private var revealedEnvKeys: Set<String> = []
     @State private var confirmDelete: Bool = false
 
@@ -29,6 +27,16 @@ public struct ContainerDetailView: View {
     public init(appState: AppState, container: ContainerModel) {
         self.appState = appState
         self.container = container
+        let ws = appState.workspaces.workspace(for: container.id)
+        self.workspace = ws
+        self.logs = ws.logs
+    }
+
+    private var tabBinding: Binding<DetailTab> {
+        Binding(
+            get: { workspace.tab },
+            set: { appState.workspaces.select($0, for: container.id) }
+        )
     }
 
     public var body: some View {
@@ -127,7 +135,7 @@ public struct ContainerDetailView: View {
             }
 
             // Segmented Tab Bar
-            Picker("", selection: $appState.containerInspectorTab) {
+            Picker("", selection: tabBinding) {
                 ForEach(DetailTab.allCases) { tab in
                     Text(tab.rawValue).tag(tab)
                 }
@@ -144,7 +152,7 @@ public struct ContainerDetailView: View {
 
             // Tab Content
             Group {
-                switch appState.containerInspectorTab {
+                switch workspace.tab {
                 case .overview:
                     overviewTab
                 case .logs:
@@ -153,12 +161,13 @@ public struct ContainerDetailView: View {
                     InteractiveTerminalView(
                         container: container,
                         executablePath: appState.installation.executablePath,
+                        session: workspace.terminal,
                         onOpenExternalTerminal: { shell in
                             appState.openExternalTerminalForContainer(id: container.id, preferredShell: shell)
                         }
                     )
                 case .files:
-                    ContainerFileBrowserView(appState: appState, container: container)
+                    ContainerFileBrowserView(appState: appState, container: container, state: workspace.files)
                 case .configuration:
                     configurationTab
                 case .networking:
@@ -201,8 +210,7 @@ public struct ContainerDetailView: View {
             Text("Deleting '\(container.id)' permanently removes its writable root filesystem image. Named volumes and host bind-mounted directories are preserved.")
         }
         .task(id: container.id) {
-            // Never show the previous container's logs while this one's load.
-            logText = ""
+            // Cached logs of this container show at once; then refresh.
             await loadLogs()
             await appState.sampleContainerTelemetry(for: container.id)
             while !Task.isCancelled {
@@ -211,7 +219,7 @@ public struct ContainerDetailView: View {
                 if container.state == .running {
                     await appState.sampleContainerTelemetry(for: container.id)
                     // Live tail while the Logs tab is open, unless paused.
-                    if appState.containerInspectorTab == .logs && !isLogPaused {
+                    if workspace.tab == .logs && !logs.isPaused {
                         await loadLogs()
                     }
                 }
@@ -462,14 +470,14 @@ public struct ContainerDetailView: View {
     private var logsTab: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                Picker("Log Source", selection: $showBootLogs) {
+                Picker("Log Source", selection: $logs.showBootLogs) {
                     Text("App Logs (`container logs`)").tag(false)
                     Text("VM Boot Log (`--boot`)").tag(true)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .frame(maxWidth: 340)
-                .onChange(of: showBootLogs) { _, _ in
+                .onChange(of: logs.showBootLogs) { _, _ in
                     Task { await loadLogs() }
                 }
                 Spacer()
@@ -479,10 +487,10 @@ public struct ContainerDetailView: View {
             .background(NordicTheme.windowBackground)
 
             NordicLogViewer(
-                rawLogText: logText,
-                searchText: $logSearchText,
-                isPaused: $isLogPaused,
-                autoScroll: $logAutoScroll,
+                rawLogText: logs.text,
+                searchText: $logs.searchText,
+                isPaused: $logs.isPaused,
+                autoScroll: $logs.autoScroll,
                 onRefresh: {
                     Task { await loadLogs() }
                 }
@@ -727,13 +735,13 @@ public struct ContainerDetailView: View {
     private func loadLogs() async {
         let id = container.id
         do {
-            let fetched = try await appState.runtimeService.fetchContainerLogs(id: id, bootLogs: showBootLogs, tailLines: 500)
+            let fetched = try await appState.runtimeService.fetchContainerLogs(id: id, bootLogs: logs.showBootLogs, tailLines: 500)
             guard id == container.id else { return }
-            logText = fetched
+            logs.text = fetched
         } catch {
             guard id == container.id else { return }
             let message = (error as? LadaError)?.explanation ?? error.localizedDescription
-            logText = "Could not load logs for \(id): \(message)"
+            logs.text = "Could not load logs for \(id): \(message)"
         }
     }
 

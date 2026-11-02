@@ -35,13 +35,17 @@ final class ContainerInspectorTests: XCTestCase {
         ((try? String(contentsOf: log, encoding: .utf8)) ?? "").split(separator: "\n").map(String.init)
     }
 
-    func testTerminalFollowsContainerAndTabSwitches() async throws {
+    private func waitUntil(_ condition: @autoclosure () -> Bool, seconds: Double = 5) async throws {
+        let deadline = Date().addingTimeInterval(seconds)
+        while !condition(), Date() < deadline { try await Task.sleep(for: .milliseconds(50)) }
+    }
+
+    func testWorkSurvivesContainerTabAndSectionSwitches() async throws {
         let mock = MockContainerRuntimeService()
         let preferences = AppPreferences()
         preferences.hasCompletedFirstLaunchSetup = true
         let appState = AppState(preferences: preferences, injectedService: mock)
         await appState.refreshAll(isUserInitiated: false)
-        // Two running containers.
         if let stopped = appState.containers.first(where: { $0.state != .running }) {
             try await mock.startContainer(id: stopped.id)
             await appState.refreshAll(isUserInitiated: false)
@@ -51,34 +55,80 @@ final class ContainerInspectorTests: XCTestCase {
         let (a, b) = (running[0], running[1])
 
         let cli = try makeRecordingCLI()
-        appState.installation = RuntimeInstallation(isInstalled: true, executablePath: cli.path)
+        // Through the mock too, so a refresh's runtime discovery keeps the stand-in CLI.
+        mock.simulatedInstallation = RuntimeInstallation(isInstalled: true, executablePath: cli.path, cliVersion: SemanticVersion(major: 1, minor: 6, patch: 1), helperPluginsPresent: true, defaultKernelInstalled: true)
+        appState.installation = mock.simulatedInstallation
         appState.selectedSection = .containers
         appState.selectedContainerID = a
-        appState.containerInspectorTab = .terminal
+        appState.workspaces.select(.terminal, for: a)
 
-        let win = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 1300, height: 820), styleMask: [.titled], backing: .buffered, defer: false)
-        win.contentView = NSHostingView(rootView: ContainersView(appState: appState).frame(width: 1300, height: 820))
+        let win = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 1400, height: 880), styleMask: [.titled], backing: .buffered, defer: false)
+        win.contentView = NSHostingView(rootView: MainWindowView(appState: appState).frame(width: 1400, height: 880))
         win.orderBack(nil)
         window = win
-        pump()
-        XCTAssertEqual(sessions(cli.log), [a], "terminal opens for the selected container")
+        try await Task.sleep(for: .milliseconds(600))
+        XCTAssertEqual(sessions(cli.log), [a], "terminal opens for A")
 
+        // Work in A's shell.
+        let shellA = appState.workspaces.workspace(for: a).terminal
+        try await waitUntil(shellA.isRunning)
+        shellA.sendInput("work-in-A\r")
+        try await waitUntil(shellA.outputBuffer.contains("work-in-A"))
+
+        // Unsaved edit in A's Files tab state.
+        let filesA = appState.workspaces.workspace(for: a).files
+        filesA.currentPath = "/etc/nginx"
+        filesA.fileEditorText = "unsaved change"
+
+        // A → B: B gets its own shell and inherits the Terminal tab.
         appState.selectedContainerID = b
-        pump()
-        XCTAssertEqual(sessions(cli.log), [a, b], "selecting another container reconnects the terminal to it")
-        XCTAssertEqual(appState.containerInspectorTab, .terminal, "the tab stays on Terminal")
+        try await Task.sleep(for: .milliseconds(600))
+        XCTAssertEqual(sessions(cli.log), [a, b])
+        XCTAssertEqual(appState.workspaces.workspace(for: b).tab, .terminal)
+        appState.workspaces.select(.logs, for: b)
+        try await Task.sleep(for: .milliseconds(300))
 
-        appState.containerInspectorTab = .logs
-        pump()
-        appState.containerInspectorTab = .terminal
-        pump()
-        XCTAssertEqual(sessions(cli.log), [a, b, b], "returning to the Terminal tab starts a fresh session")
+        // Leave for Networks and the Image Library, then come back.
+        appState.selectedSection = .networks
+        try await Task.sleep(for: .milliseconds(400))
+        appState.selectedSection = .imageLibrary
+        try await Task.sleep(for: .milliseconds(400))
+        appState.selectedSection = .containers
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertEqual(appState.selectedContainerID, b, "selection survives other sections")
+        XCTAssertEqual(appState.workspaces.workspace(for: b).tab, .logs, "B is still on Logs")
 
-        for tab in ContainerDetailView.DetailTab.allCases {
-            appState.containerInspectorTab = tab
-            pump(0.15)
-        }
-        XCTAssertEqual(appState.containerInspectorTab, ContainerDetailView.DetailTab.allCases.last)
+        // B → A: the same shell, still running, with the earlier work on screen.
+        appState.selectedContainerID = a
+        try await Task.sleep(for: .milliseconds(600))
+        XCTAssertEqual(sessions(cli.log), [a, b], "no new session: A's shell kept running")
+        XCTAssertTrue(shellA.isRunning)
+        XCTAssertTrue(shellA.outputBuffer.contains("work-in-A"), shellA.outputBuffer)
+        XCTAssertEqual(appState.workspaces.workspace(for: a).tab, .terminal, "A is still on Terminal")
+        XCTAssertEqual(filesA.currentPath, "/etc/nginx")
+        XCTAssertEqual(filesA.fileEditorText, "unsaved change")
+
+        // Switching tabs inside A keeps the shell too.
+        appState.workspaces.select(.files, for: a)
+        try await Task.sleep(for: .milliseconds(300))
+        appState.workspaces.select(.terminal, for: a)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(sessions(cli.log), [a, b])
+        XCTAssertTrue(shellA.isRunning)
+    }
+
+    func testWorkspacesCloseWhenContainersGoAway() async throws {
+        let store = ContainerWorkspaceStore()
+        let cli = try makeRecordingCLI()
+        let a = ContainerModel(id: "gone", imageReference: "alpine", state: .running)
+        let ws = store.workspace(for: a.id)
+        ws.terminal.startContainerSession(executablePath: cli.path, container: a)
+        try await waitUntil(ws.terminal.isRunning)
+        store.reconcile(with: [ContainerModel(id: "gone", imageReference: "alpine", state: .stopped)])
+        XCTAssertFalse(ws.terminal.isRunning, "a stopped container's shell is ended")
+        XCTAssertTrue(store.openContainerIDs.contains("gone"), "but its workspace is kept")
+        store.reconcile(with: [])
+        XCTAssertFalse(store.openContainerIDs.contains("gone"), "deleted containers lose their workspace")
     }
 
     /// Opt-in: types into the real terminal view (synthesized key events, like a keyboard) against
@@ -89,7 +139,7 @@ final class ContainerInspectorTests: XCTestCase {
             throw XCTSkip("Set LADA_LIVE_CONTAINER to a running container ID.")
         }
         let container = ContainerModel(id: id, imageReference: "live", state: .running)
-        let view = InteractiveTerminalView(container: container, executablePath: "/usr/local/bin/container")
+        let view = InteractiveTerminalView(container: container, executablePath: "/usr/local/bin/container", session: PTYTerminalSession())
         let win = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 820, height: 420), styleMask: [.titled], backing: .buffered, defer: false)
         win.appearance = NSAppearance(named: .darkAqua)
         let host = NSHostingView(rootView: view.frame(width: 820, height: 420))

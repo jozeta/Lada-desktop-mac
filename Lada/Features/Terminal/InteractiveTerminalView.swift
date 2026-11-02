@@ -398,15 +398,19 @@ public struct InteractiveTerminalView: View {
     public let container: ContainerModel
     public let executablePath: String?
     public var onOpenExternalTerminal: ((String) -> Void)? = nil
-    @StateObject private var session = PTYTerminalSession()
+    /// Owned by the container's workspace, so the shell outlives this view (tab and container
+    /// switches, other sections) and its screen is there when you come back.
+    @ObservedObject private var session: PTYTerminalSession
 
     public init(
         container: ContainerModel,
         executablePath: String?,
+        session: PTYTerminalSession,
         onOpenExternalTerminal: ((String) -> Void)? = nil
     ) {
         self.container = container
         self.executablePath = executablePath
+        self.session = session
         self.onOpenExternalTerminal = onOpenExternalTerminal
     }
 
@@ -442,9 +446,6 @@ public struct InteractiveTerminalView: View {
             if newState == .running && !session.isRunning {
                 session.startContainerSession(executablePath: executablePath, container: container)
             }
-        }
-        .onDisappear {
-            session.terminateSession()
         }
     }
 

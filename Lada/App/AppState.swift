@@ -53,10 +53,13 @@ public final class AppState: ObservableObject {
 
     // MARK: - Resource Inventories
 
-    @Published public var containers: [ContainerModel] = []
+    @Published public var containers: [ContainerModel] = [] {
+        didSet { workspaces.reconcile(with: containers) }
+    }
     @Published public var selectedContainerID: String? = nil
-    /// The container inspector's tab; kept here so it stays the same when another container is selected.
-    @Published public var containerInspectorTab: ContainerDetailView.DetailTab = .overview
+    /// Per-container inspector state (tab, terminal session, files, logs) that survives switching
+    /// containers and leaving the Containers section.
+    public let workspaces = ContainerWorkspaceStore()
     @Published public var containerStats: [String: ContainerStatsModel] = [:]
     @Published public var containerTelemetryHistory: [String: [ContainerPerformanceSample]] = [:]
     @Published public var systemTelemetryHistory: [ContainerPerformanceSample] = []
