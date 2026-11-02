@@ -6,6 +6,13 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Fix: telemetry charts showed invented values. The first CPU value was derived from the raw
+  counter, first network/disk rates were totals divided by 30, ten jittered seed points were
+  back-filled, and CPU never went below 0.2 %. Charts now start after two real snapshots and
+  show only measured rates (0 % when idle)
+- Fix: missing fields were filled with invented values (DNS server 1.1.1.1, 4 cores / 8 GiB for
+  machines). DNS now means "runtime default" when empty and unknown machine resources show "—";
+  cloning a container no longer drops an explicit 1.1.1.1 resolver
 - Files tab moves data with `container copy` instead of base64 through `sh -c`: binary-exact
   transfers with no size cap (the old path hit Linux's 128 KiB per-argument limit), and no shell inside the
   container for listing, mkdir or delete

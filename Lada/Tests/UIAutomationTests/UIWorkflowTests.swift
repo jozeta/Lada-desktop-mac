@@ -240,7 +240,8 @@ final class UIWorkflowTests: XCTestCase {
 
         await appState.sampleContainerTelemetry(for: runningContainer.id)
         let samples = appState.containerTelemetryHistory[runningContainer.id] ?? []
-        XCTAssertGreaterThanOrEqual(samples.count, 2)
+        // refreshAll stores the baseline snapshot; the second snapshot yields the first measured point.
+        XCTAssertEqual(samples.count, 1)
         XCTAssertGreaterThan(samples.last?.memoryUsageBytes ?? 0, 0)
         XCTAssertGreaterThan(samples.last?.totalNetworkRxBytes ?? 0, 0)
         XCTAssertGreaterThan(samples.last?.totalDiskReadBytes ?? 0, 0)

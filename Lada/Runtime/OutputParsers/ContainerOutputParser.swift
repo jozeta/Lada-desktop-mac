@@ -282,7 +282,8 @@ public enum ContainerOutputParser {
 
         // DNS
         let dnsDict = configDict["dns"] as? [String: Any] ?? [:]
-        let nameservers = (dnsDict["nameservers"] as? [String]) ?? ["1.1.1.1"]
+        // Empty means "runtime default" (the network gateway); never substitute a resolver.
+        let nameservers = (dnsDict["nameservers"] as? [String]) ?? []
         let dnsDomain = dnsDict["domain"] as? String
         let dnsSearch = (dnsDict["searchDomains"] as? [String]) ?? []
         let dnsOpts = (dnsDict["options"] as? [String]) ?? []
@@ -626,9 +627,10 @@ public enum ContainerOutputParser {
             let statusStr = (dict["status"] as? String) ?? "stopped"
             let isDefault = (dict["default"] as? Bool) ?? false
             let ipAddress = dict["ipAddress"] as? String
-            let cpus = (dict["cpus"] as? Int) ?? (bootConfig["cpus"] as? Int) ?? 4
+            // 0 means "not reported"; the UI shows a dash instead of an invented value.
+            let cpus = (dict["cpus"] as? Int) ?? (bootConfig["cpus"] as? Int) ?? 0
 
-            var memoryBytes: UInt64 = 8_589_934_592
+            var memoryBytes: UInt64 = 0
             if let m = dict["memory"] as? UInt64 {
                 memoryBytes = m
             } else if let mInt = dict["memory"] as? Int {

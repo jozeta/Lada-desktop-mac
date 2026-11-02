@@ -315,92 +315,72 @@ public final class AppState: ObservableObject {
         for s in statsList {
             let prevStat = self.containerStats[s.id]
             let prevTime = self.previousStatsTimestamp[s.id]
-            let dt = max(0.25, prevTime.map { now.timeIntervalSince($0) } ?? 2.0)
+            updatedStatsMap[s.id] = s
+            self.previousStatsTimestamp[s.id] = now
 
-            let containerCPUs = max(1, containers.first(where: { $0.id == s.id })?.configuration.cpus ?? 4)
-            let cpuPercent: Double
-            if let prev = prevStat, s.cpuUsageUsec >= prev.cpuUsageUsec {
-                let deltaUsec = Double(s.cpuUsageUsec - prev.cpuUsageUsec)
-                let totalAvailableUsec = dt * 1_000_000.0 * Double(containerCPUs)
-                cpuPercent = min(100.0, max(0.2, (deltaUsec / max(1.0, totalAvailableUsec)) * 100.0))
-            } else {
-                // Initial sample estimate from cumulative CPU time
-                cpuPercent = min(100.0, max(0.5, Double(s.cpuUsageUsec % 1_000_000) / 10_000.0))
-            }
+            // `container stats` reports cumulative counters, so a rate needs two samples. The first
+            // snapshot (or one after a counter reset, e.g. a restart) is only stored as a baseline;
+            // nothing is estimated or back-filled, so charts show measured values only.
+            guard let prev = prevStat, let prevTime,
+                  s.cpuUsageUsec >= prev.cpuUsageUsec,
+                  s.networkRxBytes >= prev.networkRxBytes, s.networkTxBytes >= prev.networkTxBytes,
+                  s.blockReadBytes >= prev.blockReadBytes, s.blockWriteBytes >= prev.blockWriteBytes,
+                  let containerCPUs = containers.first(where: { $0.id == s.id })?.configuration.cpus
+            else { continue }
 
-            let rxRate: Double
-            let txRate: Double
-            if let prev = prevStat {
-                rxRate = s.networkRxBytes >= prev.networkRxBytes ? Double(s.networkRxBytes - prev.networkRxBytes) / dt : 0
-                txRate = s.networkTxBytes >= prev.networkTxBytes ? Double(s.networkTxBytes - prev.networkTxBytes) / dt : 0
-            } else {
-                rxRate = Double(s.networkRxBytes) / 30.0
-                txRate = Double(s.networkTxBytes) / 30.0
-            }
-
-            let diskReadRate: Double
-            let diskWriteRate: Double
-            if let prev = prevStat {
-                diskReadRate = s.blockReadBytes >= prev.blockReadBytes ? Double(s.blockReadBytes - prev.blockReadBytes) / dt : 0
-                diskWriteRate = s.blockWriteBytes >= prev.blockWriteBytes ? Double(s.blockWriteBytes - prev.blockWriteBytes) / dt : 0
-            } else {
-                diskReadRate = Double(s.blockReadBytes) / 30.0
-                diskWriteRate = Double(s.blockWriteBytes) / 30.0
-            }
+            let dt = now.timeIntervalSince(prevTime)
+            guard dt > 0 else { continue }
+            let rates = Self.telemetryRates(current: s, previous: prev, interval: dt, cpus: containerCPUs)
 
             let sample = ContainerPerformanceSample(
                 timestamp: now,
-                cpuPercent: cpuPercent,
+                cpuPercent: rates.cpuPercent,
                 memoryUsageBytes: s.memoryUsageBytes,
                 memoryLimitBytes: s.memoryLimitBytes,
                 memoryPercent: s.memoryPercentage,
-                networkRxRateBps: rxRate,
-                networkTxRateBps: txRate,
+                networkRxRateBps: rates.rxBps,
+                networkTxRateBps: rates.txBps,
                 totalNetworkRxBytes: s.networkRxBytes,
                 totalNetworkTxBytes: s.networkTxBytes,
-                diskReadRateBps: diskReadRate,
-                diskWriteRateBps: diskWriteRate,
+                diskReadRateBps: rates.readBps,
+                diskWriteRateBps: rates.writeBps,
                 totalDiskReadBytes: s.blockReadBytes,
                 totalDiskWriteBytes: s.blockWriteBytes,
                 numProcesses: s.numProcesses
             )
 
             var history = self.containerTelemetryHistory[s.id] ?? []
-            if history.isEmpty {
-                // Seed initial baseline points so the area chart renders a full timeline immediately
-                for offset in stride(from: 10, through: 1, by: -1) {
-                    let seedFactor = 0.85 + (Double(offset % 3) * 0.05)
-                    history.append(
-                        ContainerPerformanceSample(
-                            timestamp: now.addingTimeInterval(-Double(offset * 2)),
-                            cpuPercent: cpuPercent * seedFactor,
-                            memoryUsageBytes: s.memoryUsageBytes,
-                            memoryLimitBytes: s.memoryLimitBytes,
-                            memoryPercent: s.memoryPercentage,
-                            networkRxRateBps: rxRate * seedFactor,
-                            networkTxRateBps: txRate * seedFactor,
-                            totalNetworkRxBytes: s.networkRxBytes,
-                            totalNetworkTxBytes: s.networkTxBytes,
-                            diskReadRateBps: diskReadRate * seedFactor,
-                            diskWriteRateBps: diskWriteRate * seedFactor,
-                            totalDiskReadBytes: s.blockReadBytes,
-                            totalDiskWriteBytes: s.blockWriteBytes,
-                            numProcesses: s.numProcesses
-                        )
-                    )
-                }
-            }
             history.append(sample)
             if history.count > 40 {
                 history.removeFirst(history.count - 40)
             }
             self.containerTelemetryHistory[s.id] = history
-            self.previousStatsTimestamp[s.id] = now
-            updatedStatsMap[s.id] = s
         }
 
         self.containerStats = updatedStatsMap
         recordAggregateSystemTelemetrySample(at: now)
+    }
+
+    struct TelemetryRates: Equatable {
+        let cpuPercent: Double
+        let rxBps: Double
+        let txBps: Double
+        let readBps: Double
+        let writeBps: Double
+    }
+
+    /// Rates between two cumulative `container stats` snapshots taken `interval` seconds apart.
+    /// CPU is a share of the container's allotted vCPUs, clamped to 0–100 %.
+    static func telemetryRates(current s: ContainerStatsModel, previous p: ContainerStatsModel, interval: TimeInterval, cpus: Int) -> TelemetryRates {
+        let availableUsec = interval * 1_000_000 * Double(max(1, cpus))
+        let cpu = Double(s.cpuUsageUsec - p.cpuUsageUsec) / availableUsec * 100
+        return TelemetryRates(
+            cpuPercent: min(100, max(0, cpu)),
+            rxBps: Double(s.networkRxBytes - p.networkRxBytes) / interval,
+            txBps: Double(s.networkTxBytes - p.networkTxBytes) / interval,
+            readBps: Double(s.blockReadBytes - p.blockReadBytes) / interval,
+            writeBps: Double(s.blockWriteBytes - p.blockWriteBytes) / interval
+        )
     }
 
     private func recordAggregateSystemTelemetrySample(at now: Date) {
@@ -442,30 +422,8 @@ public final class AppState: ObservableObject {
             numProcesses: totalProcs
         )
 
+        guard !activeSamples.isEmpty else { return }
         var sysHistory = self.systemTelemetryHistory
-        if sysHistory.isEmpty {
-            for offset in stride(from: 10, through: 1, by: -1) {
-                let seedFactor = 0.85 + (Double(offset % 3) * 0.05)
-                sysHistory.append(
-                    ContainerPerformanceSample(
-                        timestamp: now.addingTimeInterval(-Double(offset * 2)),
-                        cpuPercent: avgCPU * seedFactor,
-                        memoryUsageBytes: totalMemUsed,
-                        memoryLimitBytes: totalMemLimit,
-                        memoryPercent: memPct,
-                        networkRxRateBps: totalRxRate * seedFactor,
-                        networkTxRateBps: totalTxRate * seedFactor,
-                        totalNetworkRxBytes: totalRxBytes,
-                        totalNetworkTxBytes: totalTxBytes,
-                        diskReadRateBps: totalDiskRRate * seedFactor,
-                        diskWriteRateBps: totalDiskWRate * seedFactor,
-                        totalDiskReadBytes: totalDiskRBytes,
-                        totalDiskWriteBytes: totalDiskWBytes,
-                        numProcesses: totalProcs
-                    )
-                )
-            }
-        }
         sysHistory.append(aggregate)
         if sysHistory.count > 40 {
             sysHistory.removeFirst(sysHistory.count - 40)

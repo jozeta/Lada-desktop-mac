@@ -106,7 +106,7 @@ public struct MachinesView: View {
         }
         .onChange(of: appState.selectedMachineID) { _, newValue in
             guard let id = newValue, let m = appState.machines.first(where: { $0.id == id }) else { return }
-            editCPUs = m.cpus
+            editCPUs = max(1, m.cpus)
             editMemoryGB = max(1, Int(m.memoryBytes / (1024 * 1024 * 1024)))
             editHomeMount = m.homeMount
             editVirtualization = m.virtualizationEnabled
@@ -186,13 +186,13 @@ public struct MachinesView: View {
             .width(min: 85, ideal: 100)
 
             TableColumn("CPUs") { m in
-                Text(verbatim: "\(m.cpus) cores")
+                Text(verbatim: m.cpus > 0 ? "\(m.cpus) cores" : "—")
                     .font(NordicTheme.monoFontSmall)
             }
             .width(min: 65, ideal: 80)
 
             TableColumn("Memory") { m in
-                Text(ByteCountFormatter.string(fromByteCount: Int64(m.memoryBytes), countStyle: .memory))
+                Text(m.memoryBytes > 0 ? ByteCountFormatter.string(fromByteCount: Int64(m.memoryBytes), countStyle: .memory) : "—")
                     .font(NordicTheme.monoFontSmall)
             }
             .width(min: 80, ideal: 100)

@@ -415,11 +415,12 @@ public final class MockContainerRuntimeService: ContainerRuntimeService, @unchec
             let uptime = max(1.0, Date().timeIntervalSince(c.startedDate ?? Date().addingTimeInterval(-60)))
             let wave = (sin(nowSec * 0.7) + 1.0) * 0.5 // 0.0 ... 1.0
             let baseMem = UInt64(Double(c.configuration.memoryInBytes) * (0.14 + wave * 0.08))
-            let cpuUsec = UInt64(uptime * 180_000) + UInt64(wave * 95_000)
-            let netRx = UInt64(uptime * 42_000) + UInt64(wave * 18_000)
-            let netTx = UInt64(uptime * 26_000) + UInt64(wave * 12_000)
-            let diskRead = UInt64(uptime * 84_000) + UInt64(wave * 32_000)
-            let diskWrite = UInt64(uptime * 38_000) + UInt64(wave * 16_000)
+            // Cumulative counters must only grow (like the real runtime), or rates read as a reset.
+            let cpuUsec = UInt64(uptime * 180_000)
+            let netRx = UInt64(uptime * 42_000)
+            let netTx = UInt64(uptime * 26_000)
+            let diskRead = UInt64(uptime * 84_000)
+            let diskWrite = UInt64(uptime * 38_000)
             return ContainerStatsModel(
                 id: c.id,
                 cpuUsageUsec: cpuUsec,
