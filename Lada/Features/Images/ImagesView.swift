@@ -273,11 +273,11 @@ public struct ImagesView: View {
                                 await appState.performOperation(
                                     category: "Images",
                                     title: "Push Image \(img.fullReference)",
-                                    redactedCommand: "container image push \(img.fullReference)"
+                                    redactedCommand: "container image push \(img.exportPlatform.map { "--platform \($0) " } ?? "")\(img.fullReference)"
                                 ) {
                                     try await appState.runtimeService.pushImage(
                                         reference: img.fullReference,
-                                        platform: nil,
+                                        platform: img.exportPlatform,
                                         scheme: "https",
                                         onProgressLine: { _ in }
                                     )
@@ -575,7 +575,7 @@ public struct ImagesView: View {
                     title: "Save Image Archive \(url.lastPathComponent)",
                     redactedCommand: "container image save -o \(url.path) \(image.fullReference)"
                 ) {
-                    try await appState.runtimeService.saveImage(reference: image.fullReference, outputPath: url.path, platform: nil)
+                    try await appState.runtimeService.saveImage(reference: image.fullReference, outputPath: url.path, platform: image.exportPlatform)
                     return "Saved archive to \(url.path)."
                 }
             }

@@ -130,6 +130,15 @@ public struct ImageModel: Identifiable, Codable, Sendable, Equatable {
         return Array(Set(valid.map(\.platformString))).sorted().joined(separator: ", ")
     }
 
+    /// `--platform` for push and save. A pulled multi-platform image only has the host's variant
+    /// locally, and pushing or saving the whole index then fails with "content with digest … not
+    /// found" (verified on container 1.6.1), so export exactly the one local platform. With several
+    /// local platforms (e.g. a multi-arch build) export them all (nil).
+    public var exportPlatform: String? {
+        let platforms = Set(variants.filter { !($0.os == "unknown" && $0.architecture == "unknown") }.map(\.platformString))
+        return platforms.count == 1 ? platforms.first : nil
+    }
+
     public static func parseReference(_ ref: String) -> (registry: String, repository: String, tag: String) {
         var working = ref.trimmingCharacters(in: .whitespacesAndNewlines)
         var tag = "latest"

@@ -356,6 +356,14 @@ public struct ContainerModel: Identifiable, Codable, Sendable, Equatable {
         self.rawInspectJSON = rawInspectJSON
     }
 
+    /// Containers the runtime creates for its own use (the BuildKit builder, machine VMs), marked
+    /// with `com.apple.container.resource.role` or a builder/machine plugin label.
+    public var isRuntimeManaged: Bool {
+        let labels = configuration.labels
+        if labels["com.apple.container.resource.role"] != nil { return true }
+        return ["builder", "machine"].contains(labels["com.apple.container.plugin"] ?? "")
+    }
+
     public var primaryIPv4: String? {
         guard let first = networks.first?.ipv4Address else { return nil }
         return first.components(separatedBy: "/").first

@@ -174,7 +174,9 @@ public final class ContainerCLIClient: ContainerRuntimeService, @unchecked Senda
             args.append("--all")
         }
         let res = try await runCLI(args, timeoutSeconds: 15)
-        return try ContainerOutputParser.parseContainers(jsonString: res.stdout)
+        // The BuildKit builder VM is listed like any container since 1.6 (builder plugin); it is
+        // managed in the Builds section, so keep it out of the user's container list.
+        return try ContainerOutputParser.parseContainers(jsonString: res.stdout).filter { !$0.isRuntimeManaged }
     }
 
     public func inspectContainer(id: String) async throws -> ContainerModel {

@@ -35,6 +35,11 @@ final class RealOutputParserTests: XCTestCase {
         XCTAssertEqual(variant.sizeBytes, 69_254_279)
     }
 
+    func testExportPlatformIsTheSingleLocalVariant() throws {
+        let image = try XCTUnwrap(try ContainerOutputParser.parseImages(jsonString: Fixtures161.imageList).first)
+        XCTAssertEqual(image.exportPlatform, "linux/arm64/v8")
+    }
+
     func testNetworkList() throws {
         let networks = try ContainerOutputParser.parseNetworks(jsonString: Fixtures161.networkList)
         let network = try XCTUnwrap(networks.first)
@@ -126,6 +131,16 @@ final class RealOutputParserTests: XCTestCase {
         XCTAssertTrue(c.configuration.sshForwarding)
         XCTAssertEqual(c.primaryIPv4, "192.168.64.28")
         XCTAssertEqual(c.networks.first?.macAddress, "f6:ee:47:dc:b4:d6")
+    }
+
+    func testRuntimeManagedContainersAreRecognised() throws {
+        // `container list --all` on 1.6.1 includes the stopped BuildKit builder.
+        let builder = #"[{"configuration":{"id":"buildkit","image":{"reference":"ghcr.io/apple/container-builder-shim/builder:0.13.2"},"labels":{"com.apple.container.plugin":"builder","com.apple.container.resource.role":"builder"},"resources":{"cpus":2,"memoryInBytes":2147483648}},"id":"buildkit","status":{"state":"stopped"}}]"#
+        XCTAssertEqual(try ContainerOutputParser.parseContainers(jsonString: builder).first?.isRuntimeManaged, true)
+        let machine = try XCTUnwrap(try ContainerOutputParser.parseContainers(jsonString: Fixtures161.machineBackedContainerInspect).first)
+        XCTAssertTrue(machine.isRuntimeManaged)
+        let user = #"[{"configuration":{"id":"web","image":{"reference":"nginx:latest"},"labels":{"com.lada.compose.project":"shop"}},"id":"web","status":{"state":"running"}}]"#
+        XCTAssertEqual(try ContainerOutputParser.parseContainers(jsonString: user).first?.isRuntimeManaged, false)
     }
 
     func testEmptyListsFromIdleRuntime() throws {

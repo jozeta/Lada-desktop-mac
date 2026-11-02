@@ -6,6 +6,11 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Fix: pushing or saving a pulled image failed ("content with digest … not found") because only
+  the host's platform is present locally; push and save now pass that platform. Verified with a
+  local registry: tag, push, save and load round-trip
+- Fix: since 1.6 the BuildKit builder VM appears in `container list`, so it showed up (and could be
+  deleted) as a user container; runtime-managed containers are now hidden from the list
 - Create Container: image names autocomplete as you type (local images first, then the Image
   Library catalog; after `repo:` it completes that repository's arm64 tags). ↑/↓, Return/Tab and
   Esc work from the keyboard; nothing is fetched over the network while typing. The Presets menu
