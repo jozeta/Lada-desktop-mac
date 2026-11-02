@@ -303,7 +303,7 @@ public struct ContainerDetailView: View {
                                     }
                                     .padding(.horizontal, 7)
                                     .padding(.vertical, 3)
-                                    .background(RoundedRectangle(cornerRadius: 5).fill(NordicTheme.surfaceBackground))
+                                    .nordicChip(cornerRadius: 5)
                                     .help(probe?.tooltipDescription ?? "Published port \(p.hostPort)")
                                 }
                             }

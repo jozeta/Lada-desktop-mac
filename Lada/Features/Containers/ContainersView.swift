@@ -373,8 +373,7 @@ public struct ContainersView: View {
                         }
                     }
                     // No striped filler rows below the last container: a calmer, flat list.
-                    .alternatingRowBackgrounds(.disabled)
-                    .scrollContentBackground(.hidden)
+                    .nordicTransparentTable()
                     .background(Color.clear)
                     .accessibilityIdentifier(AccessibilityID.containerTable)
                 }

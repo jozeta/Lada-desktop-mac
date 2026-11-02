@@ -41,8 +41,8 @@ public enum NordicTheme {
     public static var codeSurface: Color {
         Color(nsColor: NSColor(name: nil) { appearance in
             appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                ? NSColor(srgbRed: 0.063, green: 0.071, blue: 0.082, alpha: 1.0) // #101215
-                : NSColor(srgbRed: 0.945, green: 0.941, blue: 0.929, alpha: 1.0) // #F1F0ED
+                ? NSColor(srgbRed: 0.059, green: 0.071, blue: 0.090, alpha: 1.0) // #0F1217 cool slate
+                : NSColor(srgbRed: 0.961, green: 0.969, blue: 0.980, alpha: 1.0) // #F5F7FA cool snow
         })
     }
 
@@ -131,6 +131,40 @@ public enum NordicTheme {
     public static let subtitleFont = Font.system(size: 13, weight: .medium, design: .default)
 }
 
+// MARK: - Syntax Colours
+
+/// Code highlighting tuned for contrast on `codeSurface` in each appearance (Nord-inspired), used
+/// instead of the bright system colours, which are hard to read on a light editor.
+public enum NordicSyntax {
+    public struct Palette {
+        public let text: NSColor
+        public let keyword: NSColor
+        public let alias: NSColor
+        public let flag: NSColor
+        public let string: NSColor
+        public let variable: NSColor
+        public let comment: NSColor
+    }
+
+    private static func rgb(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat) -> NSColor {
+        NSColor(srgbRed: r / 255, green: g / 255, blue: b / 255, alpha: 1)
+    }
+
+    /// Concrete colours for an appearance. Highlighting resolves them from the text view's own
+    /// appearance (and re-runs when it changes), so colours never come out in the other mode's
+    /// variant.
+    public static func palette(for appearance: NSAppearance) -> Palette {
+        if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+            return Palette(text: rgb(0xD8, 0xDE, 0xE9), keyword: rgb(0x88, 0xC0, 0xD0), alias: rgb(0xB4, 0x8E, 0xAD),
+                           flag: rgb(0x8F, 0xBC, 0xBB), string: rgb(0xA3, 0xBE, 0x8C), variable: rgb(0xD0, 0x87, 0x70),
+                           comment: rgb(0x7B, 0x85, 0x94))
+        }
+        return Palette(text: rgb(0x1E, 0x24, 0x2C), keyword: rgb(0x24, 0x52, 0x7A), alias: rgb(0x6E, 0x45, 0x8F),
+                       flag: rgb(0x1A, 0x66, 0x6E), string: rgb(0x3A, 0x6E, 0x3F), variable: rgb(0x9A, 0x51, 0x1A),
+                       comment: rgb(0x6B, 0x74, 0x80))
+    }
+}
+
 // MARK: - Layout & Motion Tokens
 
 public extension NordicTheme {
@@ -179,6 +213,19 @@ public extension View {
     /// for views that lay out their own insets.
     func nordicSurface(cornerRadius: CGFloat = NordicTheme.Radius.card) -> some View {
         modifier(NordicGlassSurface(cornerRadius: cornerRadius))
+    }
+
+    /// Small chips and pills inside panels (ports, tags, completions): a light translucent tint
+    /// rather than an opaque fill, so they sit on the glass instead of punching holes in it.
+    func nordicChip(cornerRadius: CGFloat = NordicTheme.Radius.control) -> some View {
+        background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+
+    /// Tables and lists on glass: no opaque system background and no striped filler rows.
+    func nordicTransparentTable() -> some View {
+        self
+            .alternatingRowBackgrounds(.disabled)
+            .scrollContentBackground(.hidden)
     }
 
     /// Page and sheet background: the calm Nordic backdrop the glass panels frost.
@@ -293,7 +340,7 @@ public struct NordicBackdrop: View {
             LinearGradient(
                 colors: dark
                     ? [Color(red: 0.067, green: 0.082, blue: 0.106), Color(red: 0.094, green: 0.106, blue: 0.129)]
-                    : [Color(red: 0.925, green: 0.945, blue: 0.961), Color(red: 0.965, green: 0.957, blue: 0.937)],
+                    : [Color(red: 0.918, green: 0.941, blue: 0.961), Color(red: 0.953, green: 0.961, blue: 0.973)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )

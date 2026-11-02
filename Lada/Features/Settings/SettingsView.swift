@@ -102,6 +102,7 @@ public struct ActivityView: View {
                     .padding(.vertical, 4)
                 }
                 .listStyle(.inset)
+                .scrollContentBackground(.hidden)
             }
         }
         .nordicPageBackground()

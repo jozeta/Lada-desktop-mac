@@ -6,6 +6,15 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Every panel uses the same frosted glass (Image Library cards and filter bar, menu-bar rows, drop
+  overlays, chart hover readouts); small chips use one translucent chip style instead of opaque
+  fills
+- All tables share the Containers table design: transparent, no stripes, icon + semibold name,
+  12 pt secondary columns, plain column titles. The Files tab is now such a table (Name, Size,
+  Modified, Permissions, Owner) with double-click to open
+- The code surface and backdrop are cool Nordic tones instead of warm beige, and the Dockerfile
+  Editor highlights with a Nordic palette chosen for contrast in each appearance (re-applied when
+  you switch light/dark)
 - Stacks starts empty with two ways in: build your own (name it, then Add Service) or pick one of
   the template cards. The stack name is editable in the header. After a stack starts successfully
   (every service running) the window clears and shows a confirmation with Show in Containers; the

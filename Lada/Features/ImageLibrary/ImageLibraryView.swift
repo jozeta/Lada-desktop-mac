@@ -163,14 +163,7 @@ public struct ImageLibraryView: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(NordicTheme.contentSurface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .stroke(NordicTheme.borderSubtle, lineWidth: 1)
-            )
+            .nordicSurface(cornerRadius: NordicTheme.Radius.control)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
@@ -388,14 +381,7 @@ public struct ImageLibraryView: View {
                 }
             }
             .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(NordicTheme.contentSurface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(NordicTheme.borderSubtle, lineWidth: 1)
-            )
+            .nordicSurface()
     }
 
     // MARK: - Actions

@@ -198,9 +198,9 @@ public struct VolumesView: View {
 
     private var volumeTable: some View {
         Table(appState.volumes, selection: $appState.selectedVolumeID) {
-            TableColumn("Volume Name") { vol in
+            TableColumn("Name") { vol in
                 HStack(spacing: 8) {
-                    LadaIcon(.volumes, size: 15)
+                    LadaIcon(.volumes, size: 14)
                         .foregroundStyle(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
                     Text(vol.name)
                         .font(.system(size: 12, weight: .semibold))
@@ -211,9 +211,9 @@ public struct VolumesView: View {
             }
             .width(min: 150, ideal: 200)
 
-            TableColumn("Driver / FS") { vol in
+            TableColumn("Format") { vol in
                 Text("\(vol.driver) (\(vol.format))")
-                    .font(NordicTheme.monoFontSmall)
+                    .font(.system(size: 12).monospacedDigit())
                     .foregroundStyle(NordicTheme.secondaryText)
             }
             .width(min: 95, ideal: 115)
@@ -221,20 +221,20 @@ public struct VolumesView: View {
             TableColumn("Capacity") { vol in
                 if let size = vol.sizeInBytes {
                     Text(NordicFormat.bytes(fromByteCount: Int64(size), countStyle: .file))
-                        .font(NordicTheme.monoFontSmall)
+                        .font(.system(size: 12).monospacedDigit())
                 } else {
                     Text("512 MB (Sparse)")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(NordicTheme.secondaryText)
                 }
             }
             .width(min: 90, ideal: 115)
 
-            TableColumn("Attached Containers") { vol in
+            TableColumn("Used by") { vol in
                 let attached = containersMounting(vol)
                 if attached.isEmpty {
                     Text("Unused")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(NordicTheme.secondaryText)
                 } else {
                     NordicStatusBadge(label: "\(attached.count) mounted", tone: .positive)
@@ -254,6 +254,7 @@ public struct VolumesView: View {
             }
             .width(min: 55, ideal: 65)
         }
+        .nordicTransparentTable()
         .accessibilityIdentifier(AccessibilityID.volumeTable)
     }
 

@@ -533,14 +533,7 @@ public struct DockerfileEditorView: View {
                             }
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
-                            .background(
-                                RoundedRectangle(cornerRadius: 4)
-                                    .fill(NordicTheme.contentSurface)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 4)
-                                    .stroke(NordicTheme.borderSubtle, lineWidth: 1)
-                            )
+                            .nordicChip(cornerRadius: 4)
                         }
                         .buttonStyle(.plain)
                         .help(item.detail)
@@ -633,7 +626,7 @@ public struct DockerfileEditorView: View {
                                 }
                             }
                             .padding(8)
-                            .background(RoundedRectangle(cornerRadius: 6).fill(NordicTheme.surfaceBackground))
+                            .nordicChip()
                         }
                     }
                     .padding(10)
@@ -1159,6 +1152,10 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.delegate = context.coordinator
+        textView.onAppearanceChange = { [weak textView, coordinator = context.coordinator] in
+            guard let textView else { return }
+            coordinator.applySyntaxHighlighting(to: textView)
+        }
 
         scrollView.documentView = textView
 
@@ -1284,12 +1281,13 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
             guard fullRange.length > 0 else { return }
 
             let baseFont = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
+            let palette = NordicSyntax.palette(for: textView.effectiveAppearance)
             let boldFont = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .bold)
 
             storage.beginEditing()
             storage.setAttributes([
                 .font: baseFont,
-                .foregroundColor: NSColor.labelColor
+                .foregroundColor: palette.text
             ], range: fullRange)
 
             // 1. Highlight Dockerfile instructions at start of line
@@ -1298,7 +1296,7 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
                 for match in regex.matches(in: fullText, range: fullRange) {
                     storage.addAttributes([
                         .font: boldFont,
-                        .foregroundColor: NSColor.systemBlue
+                        .foregroundColor: palette.keyword
                     ], range: match.range(at: 1))
                 }
             }
@@ -1309,7 +1307,7 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
                 for match in regex.matches(in: fullText, range: fullRange) {
                     storage.addAttributes([
                         .font: boldFont,
-                        .foregroundColor: NSColor.systemPurple
+                        .foregroundColor: palette.alias
                     ], range: match.range(at: 1))
                 }
             }
@@ -1318,7 +1316,7 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
             let flagPattern = #"--[A-Za-z0-9_-]+(?:=[^\s]+)?"#
             if let regex = try? NSRegularExpression(pattern: flagPattern) {
                 for match in regex.matches(in: fullText, range: fullRange) {
-                    storage.addAttribute(.foregroundColor, value: NSColor.systemTeal, range: match.range)
+                    storage.addAttribute(.foregroundColor, value: palette.flag, range: match.range)
                 }
             }
 
@@ -1326,7 +1324,7 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
             let stringPattern = #""[^"\n]*"|'[^'\n]*'"#
             if let regex = try? NSRegularExpression(pattern: stringPattern) {
                 for match in regex.matches(in: fullText, range: fullRange) {
-                    storage.addAttribute(.foregroundColor, value: NSColor.systemGreen, range: match.range)
+                    storage.addAttribute(.foregroundColor, value: palette.string, range: match.range)
                 }
             }
 
@@ -1334,7 +1332,7 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
             let varPattern = #"\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|\b\d{2,5}/(?:tcp|udp)\b"#
             if let regex = try? NSRegularExpression(pattern: varPattern) {
                 for match in regex.matches(in: fullText, range: fullRange) {
-                    storage.addAttribute(.foregroundColor, value: NSColor.systemOrange, range: match.range)
+                    storage.addAttribute(.foregroundColor, value: palette.variable, range: match.range)
                 }
             }
 
@@ -1342,7 +1340,7 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
             let commentPattern = #"(?m)^\s*#.*$"#
             if let regex = try? NSRegularExpression(pattern: commentPattern) {
                 for match in regex.matches(in: fullText, range: fullRange) {
-                    storage.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: match.range)
+                    storage.addAttribute(.foregroundColor, value: palette.comment, range: match.range)
                 }
             }
 
@@ -1354,6 +1352,13 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
 /// Custom `NSTextView` subclass that triggers code completion via `Opt+Esc` and routes dropped Dockerfile URLs to Låda's deployment workflow.
 final class DockerfileNSTextView: NSTextView {
     var onFileDrop: ((URL) -> Void)?
+    /// Re-highlights with the new appearance's palette (light/dark switch).
+    var onAppearanceChange: (() -> Void)?
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        onAppearanceChange?()
+    }
 
     override func keyDown(with event: NSEvent) {
         // Trigger completion when pressing Option+Escape or F5

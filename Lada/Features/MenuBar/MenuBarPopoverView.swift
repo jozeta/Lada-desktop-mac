@@ -246,13 +246,6 @@ public struct MenuBarPopoverView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 7)
-                .fill(NordicTheme.surfaceBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 7)
-                .strokeBorder(NordicTheme.borderSubtle, lineWidth: 1)
-        )
+        .nordicSurface(cornerRadius: 8)
     }
 }

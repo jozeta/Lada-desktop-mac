@@ -80,9 +80,9 @@ public struct RegistriesView: View {
 
     private var registryTable: some View {
         Table(appState.registries) {
-            TableColumn("Registry Hostname") { reg in
+            TableColumn("Registry") { reg in
                 HStack(spacing: 8) {
-                    LadaIcon(.registries, size: 15)
+                    LadaIcon(.registries, size: 14)
                         .foregroundStyle(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
                     Text(reg.hostname)
                         .font(.system(size: 12, weight: .semibold))
@@ -92,7 +92,7 @@ public struct RegistriesView: View {
 
             TableColumn("Username") { reg in
                 Text(reg.username.isEmpty ? "token" : reg.username)
-                    .font(NordicTheme.monoFontSmall)
+                    .font(.system(size: 12).monospacedDigit())
             }
             .width(min: 120, ideal: 160)
 
@@ -103,7 +103,7 @@ public struct RegistriesView: View {
 
             TableColumn("Modified") { reg in
                 Text(reg.modificationDate.formatted(date: .abbreviated, time: .shortened))
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(NordicTheme.secondaryText)
             }
             .width(min: 120, ideal: 150)
@@ -125,6 +125,7 @@ public struct RegistriesView: View {
             }
             .width(min: 80, ideal: 100)
         }
+        .nordicTransparentTable()
         .accessibilityIdentifier(AccessibilityID.registryTable)
     }
 

@@ -126,10 +126,7 @@ public struct MainWindowView: View {
                     .frame(maxWidth: 420)
             }
             .padding(28)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(NordicTheme.elevatedSurface)
-            )
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .strokeBorder(
@@ -344,10 +341,7 @@ public struct MainWindowView: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(NordicTheme.elevatedSurface)
-            )
+            .nordicChip()
         }
 
         ToolbarItemGroup(placement: .primaryAction) {

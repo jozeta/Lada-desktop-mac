@@ -98,7 +98,7 @@ public struct ContainerFileBrowserView: View {
                             .foregroundStyle(NordicTheme.primaryText)
                     }
                     .padding(20)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(NordicTheme.elevatedSurface))
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .allowsHitTesting(false)
             }
@@ -242,65 +242,70 @@ public struct ContainerFileBrowserView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(selection: $state.selectedEntryID) {
-                    ForEach(state.entries) { entry in
-                        HStack(spacing: 8) {
+                // Same table design as the Containers list (icon + semibold name, 12 pt secondary
+                // columns, transparent, no stripes). Single click previews, double click opens.
+                Table(state.entries, selection: $state.selectedEntryID) {
+                    TableColumn("Name") { entry in
+                        HStack(spacing: 7) {
                             Image(systemName: entry.isDirectory ? "folder.fill" : (entry.isSymlink ? "arrow.turn.down.right" : "doc.text"))
-                                .foregroundStyle(
-                                    entry.isDirectory
-                                        ? NordicTheme.accent(for: appState.preferences.accentThemeChoice)
-                                        : NordicTheme.secondaryText
-                                )
+                                .font(.system(size: 12))
+                                .foregroundStyle(entry.isDirectory ? NordicTheme.accent(for: appState.preferences.accentThemeChoice) : NordicTheme.secondaryText)
                                 .frame(width: 16)
-
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(entry.name)
-                                    .font(.system(size: 12, weight: entry.isDirectory ? .semibold : .regular))
-                                    .foregroundStyle(NordicTheme.primaryText)
-                                    .lineLimit(1)
-                                Text(verbatim: "\(entry.permissions) • \(entry.owner) • \(entry.modifiedText)")
-                                    .font(.system(size: 10, design: .monospaced))
-                                    .foregroundStyle(NordicTheme.secondaryText)
-                                    .lineLimit(1)
-                            }
-
-                            Spacer()
-
-                            Text(entry.formattedSize)
-                                .font(NordicTheme.monoFontSmall)
-                                .foregroundStyle(NordicTheme.secondaryText)
-                        }
-                        .padding(.vertical, 2)
-                        .contentShape(Rectangle())
-                        .tag(entry.id)
-                        .onTapGesture(count: 2) {
-                            handleDoubleClick(on: entry)
-                        }
-                        .onTapGesture(count: 1) {
-                            state.selectedEntryID = entry.id
-                            handleSingleClick(on: entry)
-                        }
-                        .contextMenu {
-                            if entry.isDirectory {
-                                Button("Open Folder") {
-                                    Task { await loadDirectory(path: entry.fullPath) }
-                                }
-                            } else {
-                                Button("Preview / Edit File") {
-                                    Task { await loadFileContent(for: entry) }
-                                }
-                                Button("Download to Mac…") {
-                                    Task { await downloadFileToMac(entry: entry) }
-                                }
-                            }
-                            Divider()
-                            Button("Delete", role: .destructive) {
-                                Task { await deleteEntry(entry) }
-                            }
+                            Text(entry.name)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(NordicTheme.primaryText)
+                                .lineLimit(1)
+                                .help(entry.symlinkTarget.map { "→ \($0)" } ?? entry.fullPath)
                         }
                     }
+                    .width(min: 140, ideal: 200)
+                    TableColumn("Size") { entry in
+                        Text(entry.formattedSize)
+                            .font(.system(size: 12).monospacedDigit())
+                            .foregroundStyle(NordicTheme.secondaryText)
+                    }
+                    .width(min: 60, ideal: 75)
+                    TableColumn("Modified") { entry in
+                        Text(entry.modifiedText)
+                            .font(.system(size: 12).monospacedDigit())
+                            .foregroundStyle(NordicTheme.secondaryText)
+                    }
+                    .width(min: 85, ideal: 100)
+                    TableColumn("Permissions") { entry in
+                        Text(entry.permissions)
+                            .font(NordicTheme.monoFontSmall)
+                            .foregroundStyle(NordicTheme.secondaryText)
+                    }
+                    .width(min: 85, ideal: 95)
+                    TableColumn("Owner") { entry in
+                        Text(entry.owner)
+                            .font(.system(size: 12))
+                            .foregroundStyle(NordicTheme.secondaryText)
+                    }
+                    .width(min: 50, ideal: 70)
                 }
-                .listStyle(.inset)
+                .nordicTransparentTable()
+                .contextMenu(forSelectionType: String.self) { ids in
+                    if let id = ids.first, let entry = state.entries.first(where: { $0.id == id }) {
+                        if entry.isDirectory {
+                            Button("Open Folder") { Task { await loadDirectory(path: entry.fullPath) } }
+                        } else {
+                            Button("Preview / Edit File") { Task { await loadFileContent(for: entry) } }
+                            Button("Download to Mac…") { Task { await downloadFileToMac(entry: entry) } }
+                        }
+                        Divider()
+                        Button("Delete", role: .destructive) { Task { await deleteEntry(entry) } }
+                    }
+                } primaryAction: { ids in
+                    if let id = ids.first, let entry = state.entries.first(where: { $0.id == id }) {
+                        handleDoubleClick(on: entry)
+                    }
+                }
+                .onChange(of: state.selectedEntryID) { _, id in
+                    if let id, let entry = state.entries.first(where: { $0.id == id }) {
+                        handleSingleClick(on: entry)
+                    }
+                }
             }
         }
     }

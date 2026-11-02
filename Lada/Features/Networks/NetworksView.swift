@@ -167,7 +167,7 @@ public struct NetworksView: View {
         Table(appState.networks, selection: $appState.selectedNetworkID) {
             TableColumn("Name") { net in
                 HStack(spacing: 8) {
-                    LadaIcon(.networks, size: 15)
+                    LadaIcon(.networks, size: 14)
                         .foregroundStyle(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
                     Text(net.name)
                         .font(.system(size: 12, weight: .semibold))
@@ -181,19 +181,19 @@ public struct NetworksView: View {
 
             TableColumn("Mode") { net in
                 Text(net.mode.uppercased())
-                    .font(NordicTheme.monoFontSmall)
+                    .font(.system(size: 12).monospacedDigit())
             }
             .width(min: 70, ideal: 85)
 
             TableColumn("IPv4 Subnet") { net in
                 Text(net.ipv4Subnet.isEmpty ? "—" : net.ipv4Subnet)
-                    .font(NordicTheme.monoFontSmall)
+                    .font(.system(size: 12).monospacedDigit())
             }
             .width(min: 120, ideal: 145)
 
             TableColumn("IPv4 Gateway") { net in
                 Text(net.ipv4Gateway.isEmpty ? "—" : net.ipv4Gateway)
-                    .font(NordicTheme.monoFontSmall)
+                    .font(.system(size: 12).monospacedDigit())
                     .foregroundStyle(NordicTheme.secondaryText)
             }
             .width(min: 110, ideal: 135)
@@ -201,7 +201,7 @@ public struct NetworksView: View {
             TableColumn("Containers") { net in
                 let count = containersAttached(to: net).count
                 Text(verbatim: "\(count) attached")
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(count > 0 ? NordicTheme.primaryText : NordicTheme.secondaryText)
             }
             .width(min: 80, ideal: 100)
@@ -219,6 +219,7 @@ public struct NetworksView: View {
             }
             .width(min: 55, ideal: 65)
         }
+        .nordicTransparentTable()
         .accessibilityIdentifier(AccessibilityID.networkTable)
     }
 

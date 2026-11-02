@@ -1107,7 +1107,7 @@ public struct NordicPerformanceChartCard: View {
         .foregroundStyle(NordicTheme.primaryText)
         .padding(.horizontal, 6)
         .padding(.vertical, 4)
-        .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(NordicTheme.elevatedSurface))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
         .fixedSize()
         // Keep the readout inside the chart: flip to the left of the crosshair near the right edge.

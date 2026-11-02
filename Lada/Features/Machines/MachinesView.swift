@@ -171,7 +171,7 @@ public struct MachinesView: View {
         Table(appState.machines, selection: $appState.selectedMachineID) {
             TableColumn("Machine") { m in
                 HStack(spacing: 8) {
-                    LadaIcon(.machines, size: 15)
+                    LadaIcon(.machines, size: 14)
                         .foregroundStyle(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
                     Text(m.name)
                         .font(.system(size: 12, weight: .semibold))
@@ -189,19 +189,19 @@ public struct MachinesView: View {
 
             TableColumn("CPUs") { m in
                 Text(verbatim: m.cpus > 0 ? "\(m.cpus) cores" : "—")
-                    .font(NordicTheme.monoFontSmall)
+                    .font(.system(size: 12).monospacedDigit())
             }
             .width(min: 65, ideal: 80)
 
             TableColumn("Memory") { m in
                 Text(m.memoryBytes > 0 ? NordicFormat.bytes(fromByteCount: Int64(m.memoryBytes), countStyle: .memory) : "—")
-                    .font(NordicTheme.monoFontSmall)
+                    .font(.system(size: 12).monospacedDigit())
             }
             .width(min: 80, ideal: 100)
 
             TableColumn("Home Mount") { m in
                 Text(m.homeMount.rawValue)
-                    .font(NordicTheme.monoFontSmall)
+                    .font(.system(size: 12).monospacedDigit())
                     .foregroundStyle(NordicTheme.secondaryText)
             }
             .width(min: 75, ideal: 90)
@@ -274,6 +274,7 @@ public struct MachinesView: View {
             }
             .width(min: 90, ideal: 105)
         }
+        .nordicTransparentTable()
         .accessibilityIdentifier(AccessibilityID.machineTable)
     }
 

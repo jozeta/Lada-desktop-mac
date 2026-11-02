@@ -188,9 +188,9 @@ public struct ImagesView: View {
 
     private var imageTable: some View {
         Table(filteredImages, selection: $appState.selectedImageID) {
-            TableColumn("Repository") { img in
+            TableColumn("Image") { img in
                 HStack(spacing: 8) {
-                    LadaIcon(.images, size: 15)
+                    LadaIcon(.images, size: 14)
                         .foregroundStyle(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
                     Text(img.repository)
                         .font(.system(size: 12, weight: .semibold))
@@ -201,10 +201,10 @@ public struct ImagesView: View {
 
             TableColumn("Tag") { img in
                 Text(img.tag)
-                    .font(NordicTheme.monoFontSmall)
+                    .font(.system(size: 12).monospacedDigit())
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Capsule().fill(NordicTheme.elevatedSurface))
+                    .background(Color.primary.opacity(0.06), in: Capsule())
             }
             .width(min: 70, ideal: 95)
 
@@ -217,13 +217,13 @@ public struct ImagesView: View {
 
             TableColumn("Size") { img in
                 Text(NordicFormat.bytes(fromByteCount: img.totalSizeBytes, countStyle: .file))
-                    .font(NordicTheme.monoFontSmall)
+                    .font(.system(size: 12).monospacedDigit())
             }
             .width(min: 80, ideal: 95)
 
             TableColumn("Platforms") { img in
                 Text(img.architecturesSummary)
-                    .font(NordicTheme.monoFontSmall)
+                    .font(.system(size: 12).monospacedDigit())
                     .foregroundStyle(NordicTheme.secondaryText)
             }
             .width(min: 95, ideal: 120)
@@ -234,7 +234,7 @@ public struct ImagesView: View {
                     NordicStatusBadge(label: "\(count) container\(count == 1 ? "" : "s")", tone: .positive)
                 } else {
                     Text("Unused")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(NordicTheme.secondaryText)
                 }
             }
@@ -310,6 +310,7 @@ public struct ImagesView: View {
             }
             .width(min: 65, ideal: 75)
         }
+        .nordicTransparentTable()
         .accessibilityIdentifier(AccessibilityID.imageTable)
     }
 

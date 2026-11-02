@@ -533,10 +533,7 @@ public struct StacksView: View {
                             }
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(NordicTheme.elevatedSurface)
-                            )
+                            .nordicChip()
                             .help(probe?.tooltipDescription ?? "Published port \(pm.hostPort)")
                         }
                     }
