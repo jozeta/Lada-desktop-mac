@@ -6,6 +6,8 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Read the `machine.*` system properties (default CPUs, memory, home mount, virtualization),
+  show them in Settings → System & Runtime, and use them as the starting values for Create Machine
 - Health check: warn when the API server runs a different release than the CLI (for example
   after upgrading to 1.6.1 without restarting services), with a "Restart Services" action in the
   Setup wizard and on the dashboard

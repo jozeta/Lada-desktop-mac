@@ -279,7 +279,8 @@ public final class MockContainerRuntimeService: ContainerRuntimeService, @unchec
             kernel: .init(binaryPath: "opt/kata/share/kata-containers/vmlinux-6.18.35-197"),
             network: .init(),
             registry: .init(domain: "docker.io"),
-            vminit: .init(image: "ghcr.io/apple/containerization/vminit:0.34.0")
+            vminit: .init(image: "ghcr.io/apple/containerization/vminit:0.53.0"),
+            machine: .init(cpus: 4, memory: "8gb", homeMount: .rw, virtualization: false)
         )
         self.simulatedDNSDomains = ["test"]
     }

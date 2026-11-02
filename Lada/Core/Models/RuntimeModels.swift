@@ -337,6 +337,41 @@ public struct SystemProperties: Codable, Sendable, Equatable {
         public init(domain: String = "docker.io") { self.domain = domain }
     }
 
+    /// Defaults for new container machines (`machine.*` properties, reported since 1.6).
+    /// Every field is optional: nil means the runtime did not report it.
+    public struct MachineDefaults: Codable, Sendable, Equatable {
+        public var cpus: Int?
+        public var memory: String?
+        public var homeMount: HomeMountMode?
+        public var virtualization: Bool?
+
+        public init(cpus: Int? = nil, memory: String? = nil, homeMount: HomeMountMode? = nil, virtualization: Bool? = nil) {
+            self.cpus = cpus
+            self.memory = memory
+            self.homeMount = homeMount
+            self.virtualization = virtualization
+        }
+
+        /// `memory` (e.g. "32gb", "2048mb") in whole GiB, rounded down, minimum 1; nil if unknown.
+        public var memoryGB: Int? {
+            guard let memory, let bytes = SystemProperties.bytes(fromMemorySpec: memory) else { return nil }
+            return max(1, Int(bytes / 1_073_741_824))
+        }
+    }
+
+    /// Parses `container` memory specs such as "1gb", "2048mb", "512m", "4g", "1024k" or a plain
+    /// byte count.
+    public static func bytes(fromMemorySpec spec: String) -> UInt64? {
+        let s = spec.trimmingCharacters(in: .whitespaces).lowercased()
+        let units: [(String, UInt64)] = [("tb", 1 << 40), ("gb", 1 << 30), ("mb", 1 << 20), ("kb", 1 << 10),
+                                         ("t", 1 << 40), ("g", 1 << 30), ("m", 1 << 20), ("k", 1 << 10), ("b", 1)]
+        for (suffix, factor) in units where s.hasSuffix(suffix) {
+            guard let n = UInt64(s.dropLast(suffix.count)) else { return nil }
+            return n * factor
+        }
+        return UInt64(s)
+    }
+
     public struct VMInitSettings: Codable, Sendable, Equatable {
         public var image: String
         public init(image: String = "ghcr.io/apple/containerization/vminit:0.34.0") { self.image = image }
@@ -349,6 +384,7 @@ public struct SystemProperties: Codable, Sendable, Equatable {
     public var network: NetworkSettings
     public var registry: RegistrySettings
     public var vminit: VMInitSettings
+    public var machine: MachineDefaults
 
     public init(
         build: BuildSettings = .init(),
@@ -357,7 +393,8 @@ public struct SystemProperties: Codable, Sendable, Equatable {
         kernel: KernelSettings = .init(),
         network: NetworkSettings = .init(),
         registry: RegistrySettings = .init(),
-        vminit: VMInitSettings = .init()
+        vminit: VMInitSettings = .init(),
+        machine: MachineDefaults = .init()
     ) {
         self.build = build
         self.container = container
@@ -366,6 +403,7 @@ public struct SystemProperties: Codable, Sendable, Equatable {
         self.network = network
         self.registry = registry
         self.vminit = vminit
+        self.machine = machine
     }
 }
 

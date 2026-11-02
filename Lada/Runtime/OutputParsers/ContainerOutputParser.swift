@@ -737,6 +737,7 @@ public enum ContainerOutputParser {
         let networkDict = dict["network"] as? [String: Any] ?? [:]
         let registryDict = dict["registry"] as? [String: Any] ?? [:]
         let vminitDict = dict["vminit"] as? [String: Any] ?? [:]
+        let machineDict = dict["machine"] as? [String: Any] ?? [:]
 
         return SystemProperties(
             build: .init(
@@ -760,7 +761,13 @@ public enum ContainerOutputParser {
                 subnetv6: networkDict["subnetv6"] as? String
             ),
             registry: .init(domain: (registryDict["domain"] as? String) ?? "docker.io"),
-            vminit: .init(image: (vminitDict["image"] as? String) ?? "ghcr.io/apple/containerization/vminit:0.34.0")
+            vminit: .init(image: (vminitDict["image"] as? String) ?? "ghcr.io/apple/containerization/vminit:0.34.0"),
+            machine: .init(
+                cpus: machineDict["cpus"] as? Int,
+                memory: machineDict["memory"] as? String,
+                homeMount: (machineDict["homeMount"] as? String).flatMap(HomeMountMode.init(rawValue:)),
+                virtualization: machineDict["virtualization"] as? Bool
+            )
         )
     }
 

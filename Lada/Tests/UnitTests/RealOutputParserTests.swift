@@ -95,6 +95,22 @@ final class RealOutputParserTests: XCTestCase {
         XCTAssertEqual(props.registry.domain, "docker.io")
         XCTAssertEqual(props.vminit.image, "ghcr.io/apple/containerization/vminit:0.53.0")
         XCTAssertNotNil(props.kernel.binaryPath)
+        XCTAssertEqual(props.machine.cpus, 9)
+        XCTAssertEqual(props.machine.memory, "32gb")
+        XCTAssertEqual(props.machine.memoryGB, 32)
+        XCTAssertEqual(props.machine.homeMount, .rw)
+        XCTAssertEqual(props.machine.virtualization, false)
+    }
+
+    func testMemorySpecParsingAndMissingMachineDefaults() throws {
+        XCTAssertEqual(SystemProperties.bytes(fromMemorySpec: "1gb"), 1_073_741_824)
+        XCTAssertEqual(SystemProperties.bytes(fromMemorySpec: "2048mb"), 2_147_483_648)
+        XCTAssertEqual(SystemProperties.bytes(fromMemorySpec: "512M"), 536_870_912)
+        XCTAssertNil(SystemProperties.bytes(fromMemorySpec: "lots"))
+        // Older runtimes have no `machine` section: nothing is invented.
+        let props = try ContainerOutputParser.parseSystemProperties(jsonString: #"{"container":{"cpus":4,"memory":"1gb"}}"#)
+        XCTAssertEqual(props.machine, SystemProperties.MachineDefaults())
+        XCTAssertNil(props.machine.memoryGB)
     }
 
     func testInspectOfRunningContainer() throws {

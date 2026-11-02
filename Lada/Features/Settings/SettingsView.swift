@@ -337,6 +337,22 @@ public struct SettingsView: View {
                     .font(NordicTheme.monoFontSmall)
                 LabeledContent("vminit.image", value: appState.systemProperties.vminit.image)
                     .font(NordicTheme.monoFontSmall)
+                if let cpus = appState.systemProperties.machine.cpus {
+                    LabeledContent("machine.cpus", value: "\(cpus)")
+                        .font(NordicTheme.monoFontSmall)
+                }
+                if let memory = appState.systemProperties.machine.memory {
+                    LabeledContent("machine.memory", value: memory)
+                        .font(NordicTheme.monoFontSmall)
+                }
+                if let homeMount = appState.systemProperties.machine.homeMount {
+                    LabeledContent("machine.homeMount", value: homeMount.rawValue)
+                        .font(NordicTheme.monoFontSmall)
+                }
+                if let virtualization = appState.systemProperties.machine.virtualization {
+                    LabeledContent("machine.virtualization", value: virtualization ? "true" : "false")
+                        .font(NordicTheme.monoFontSmall)
+                }
                 if let dnsDomain = appState.systemProperties.dns.domain {
                     LabeledContent("dns.domain", value: dnsDomain)
                         .font(NordicTheme.monoFontSmall)

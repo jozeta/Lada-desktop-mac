@@ -125,10 +125,12 @@ public struct MachinesView: View {
             Button {
                 createName = ""
                 createImage = "alpine:latest"
-                createCPUs = 4
-                createMemoryGB = 8
-                createHomeMount = .rw
-                createVirtualization = false
+                // Start from the runtime's own machine defaults (`machine.*` properties) when reported.
+                let defaults = appState.systemProperties.machine
+                createCPUs = defaults.cpus ?? 4
+                createMemoryGB = defaults.memoryGB ?? 8
+                createHomeMount = defaults.homeMount ?? .rw
+                createVirtualization = defaults.virtualization ?? false
                 createSetDefault = false
                 createBootImmediately = true
                 validationMessage = nil
