@@ -124,6 +124,28 @@ public enum ValidationUtils {
         return mac.trimmingCharacters(in: .whitespaces).range(of: pattern, options: .regularExpression) != nil
     }
 
+    /// Most aliases one network attachment may declare (upstream `AliasPolicy`, container 1.6).
+    public static let maximumDNSAliasesPerNetwork = 32
+
+    /// A DNS alias for `--network <name>,alias=<alias>`: a DNS name (labels of 1–63 letters,
+    /// digits or hyphens, not starting or ending with a hyphen), optionally with a trailing dot,
+    /// or a subtree alias with a leading dot such as `.api.example.test`.
+    public static func isValidDNSAlias(_ alias: String) -> Bool {
+        var name = Substring(alias)
+        if name.hasPrefix(".") { name = name.dropFirst() }
+        if name.hasSuffix(".") { name = name.dropLast() }
+        guard !name.isEmpty, name.utf8.count <= 253 else { return false }
+        let label = #"^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"#
+        return name.split(separator: ".", omittingEmptySubsequences: false).allSatisfy {
+            String($0).range(of: label, options: .regularExpression) != nil
+        }
+    }
+
+    /// Number of labels in an alias, ignoring a leading (subtree) or trailing dot.
+    public static func dnsLabelCount(_ alias: String) -> Int {
+        alias.split(separator: ".").count
+    }
+
     public static func isValidEnvironmentKey(_ key: String) -> Bool {
         let pattern = #"^[a-zA-Z_][a-zA-Z0-9_]*$"#
         return key.trimmingCharacters(in: .whitespaces).range(of: pattern, options: .regularExpression) != nil
@@ -151,6 +173,18 @@ public enum ValidationUtils {
         }
         if req.memoryMB < 64 {
             issues.append("Memory allocation must be at least 64 MiB.")
+        }
+        let aliases = req.dnsAliases.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        if aliases.count > maximumDNSAliasesPerNetwork {
+            issues.append("At most \(maximumDNSAliasesPerNetwork) DNS aliases are allowed per network.")
+        }
+        for alias in aliases where !isValidDNSAlias(alias) {
+            issues.append("DNS alias '\(alias)' is not a valid DNS name (letters, digits and hyphens per label; a leading '.' makes a subtree alias).")
+        }
+        // `db.test` and `.db.test` are different rules (exact vs subtree); only a trailing dot is cosmetic.
+        let lowered = aliases.map { $0.lowercased().hasSuffix(".") ? String($0.lowercased().dropLast()) : $0.lowercased() }
+        if Set(lowered).count != lowered.count {
+            issues.append("Each DNS alias may be listed only once.")
         }
         if !req.macAddress.trimmingCharacters(in: .whitespaces).isEmpty && !isValidMACAddress(req.macAddress) {
             issues.append("MAC address must be in XX:XX:XX:XX:XX:XX format.")

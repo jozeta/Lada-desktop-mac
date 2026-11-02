@@ -8,6 +8,7 @@ public struct CreateContainerWizardView: View {
     @State private var request: ContainerCreateRequest
     @State private var commandArgsText: String = ""
     @State private var dnsServersText: String = ""
+    @State private var dnsAliasesText: String = ""
     @State private var capAddText: String = ""
     @State private var capDropText: String = ""
     @State private var restartPolicyChoice: String = "none"
@@ -39,6 +40,7 @@ public struct CreateContainerWizardView: View {
         _request = State(initialValue: defaultReq)
         _commandArgsText = State(initialValue: Self.formatShellArguments(defaultReq.commandArguments))
         _dnsServersText = State(initialValue: defaultReq.dnsNameservers.joined(separator: ", "))
+        _dnsAliasesText = State(initialValue: defaultReq.dnsAliases.joined(separator: ", "))
         _capAddText = State(initialValue: defaultReq.capAdd.joined(separator: ", "))
         _capDropText = State(initialValue: defaultReq.capDrop.joined(separator: ", "))
     }
@@ -626,6 +628,16 @@ public struct CreateContainerWizardView: View {
         }
     }
 
+    /// Explains upstream's alias rules (container 1.6): names need two labels unless a default DNS
+    /// domain is configured, in which case the runtime appends it to single-label names.
+    private var dnsAliasHint: String {
+        let base = "Other containers can reach this one by these names on the selected network. A leading '.' claims every name below it."
+        if let domain = appState.systemProperties.dns.domain, !domain.isEmpty {
+            return base + " Single-label names get the default domain '.\(domain)' appended."
+        }
+        return base + " Use at least two labels (e.g. db.test): no default DNS domain is configured."
+    }
+
     @ViewBuilder
     private var networkingSection: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -648,6 +660,20 @@ public struct CreateContainerWizardView: View {
                 TextField("Optional (e.g. 02:42:ac:11:00:02)", text: $request.macAddress)
                     .textFieldStyle(.roundedBorder)
                     .font(NordicTheme.monoFontSmall)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 12) {
+                    Text("DNS Aliases:")
+                        .font(.system(size: 12, weight: .medium))
+                    TextField("Optional, comma-separated (e.g. db.test, .api.test)", text: $dnsAliasesText)
+                        .textFieldStyle(.roundedBorder)
+                        .font(NordicTheme.monoFontSmall)
+                        .accessibilityIdentifier(AccessibilityID.wizardDNSAliasesField)
+                }
+                Text(dnsAliasHint)
+                    .font(.system(size: 11))
+                    .foregroundStyle(NordicTheme.secondaryText)
             }
 
             Divider().overlay(NordicTheme.borderSubtle)
@@ -1018,6 +1044,10 @@ public struct CreateContainerWizardView: View {
         } else {
             copy.commandArguments = Self.parseShellArguments(commandArgsText)
         }
+        copy.dnsAliases = dnsAliasesText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
         copy.dnsNameservers = dnsServersText
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }

@@ -290,8 +290,15 @@ public enum ContainerOutputParser {
 
         // Configured networks
         var configuredNets: [String] = []
+        var networkAliases: [String: [String]] = [:]
         if let cfgNets = configDict["networks"] as? [[String: Any]] {
             configuredNets = cfgNets.compactMap { $0["network"] as? String }
+            for net in cfgNets {
+                if let name = net["network"] as? String,
+                   let aliases = (net["options"] as? [String: Any])?["aliases"] as? [String], !aliases.isEmpty {
+                    networkAliases[name] = aliases
+                }
+            }
         }
         if configuredNets.isEmpty {
             configuredNets = networkAttachments.map(\.network)
@@ -352,7 +359,8 @@ public enum ContainerOutputParser {
             mounts: mounts,
             publishedPorts: ports,
             publishedSockets: sockets,
-            configuredNetworks: configuredNets
+            configuredNetworks: configuredNets,
+            networkAliases: networkAliases
         )
 
         return ContainerModel(

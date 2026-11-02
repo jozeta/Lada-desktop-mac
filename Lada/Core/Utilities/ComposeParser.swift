@@ -15,6 +15,8 @@ public struct ComposeServiceSpec: Identifiable, Codable, Sendable, Equatable {
     public var workingDirectory: String
     public var dependsOn: [String]
     public var networks: [String]
+    /// `networks: <name>: aliases:` entries (all networks combined; Låda deploys a stack on one network).
+    public var networkAliases: [String]
 
     public init(
         serviceName: String,
@@ -27,7 +29,8 @@ public struct ComposeServiceSpec: Identifiable, Codable, Sendable, Equatable {
         commandOverride: String = "",
         workingDirectory: String = "",
         dependsOn: [String] = [],
-        networks: [String] = []
+        networks: [String] = [],
+        networkAliases: [String] = []
     ) {
         self.serviceName = serviceName
         self.containerName = containerName
@@ -40,6 +43,7 @@ public struct ComposeServiceSpec: Identifiable, Codable, Sendable, Equatable {
         self.workingDirectory = workingDirectory
         self.dependsOn = dependsOn
         self.networks = networks
+        self.networkAliases = networkAliases
     }
 }
 
@@ -283,6 +287,7 @@ public enum ComposeParser {
         var topSection: TopSection = .none
         var currentService: ComposeServiceSpec? = nil
         var subSection: ServiceSubsection = .none
+        var inNetworkAliases = false
 
         func flushCurrentService() {
             guard var svc = currentService else { return }
@@ -375,6 +380,7 @@ public enum ComposeParser {
                 // Service properties (typically indent == 4)
                 if indent == 4 && !trimmed.hasPrefix("-") {
                     subSection = .none
+                    inNetworkAliases = false
                     if let colonIndex = trimmed.firstIndex(of: ":") {
                         let key = String(trimmed[..<colonIndex]).trimmingCharacters(in: .whitespaces)
                         let val = unquote(trimmed[trimmed.index(after: colonIndex)...])
@@ -456,11 +462,37 @@ public enum ComposeParser {
                         }
                     }
                 case .networks:
-                    if trimmed.hasPrefix("-") {
+                    if inNetworkAliases && indent >= 10 && trimmed.hasPrefix("-") {
+                        // networks: <name>: aliases: - <alias>
+                        let alias = unquote(trimmed.dropFirst()).lowercased()
+                        if !alias.isEmpty { currentService?.networkAliases.append(alias) }
+                    } else if trimmed.hasPrefix("-") {
                         let net = sanitizeIdentifier(unquote(trimmed.dropFirst()))
                         if !net.isEmpty {
                             currentService?.networks.append(net)
                         }
+                    } else if indent == 6, trimmed.hasSuffix(":") || trimmed.contains(": ") {
+                        // Mapping form: `backend:` or `backend: {}`
+                        inNetworkAliases = false
+                        let name = String(trimmed[..<(trimmed.firstIndex(of: ":") ?? trimmed.endIndex)])
+                        let net = sanitizeIdentifier(unquote(name))
+                        if !net.isEmpty, currentService?.networks.contains(net) == false {
+                            currentService?.networks.append(net)
+                        }
+                    } else if indent >= 8, trimmed.hasPrefix("aliases:") {
+                        let rest = unquote(trimmed.dropFirst("aliases:".count))
+                        if rest.hasPrefix("[") && rest.hasSuffix("]") {
+                            // Flow form: aliases: [db, database]
+                            inNetworkAliases = false
+                            for item in rest.dropFirst().dropLast().split(separator: ",") {
+                                let alias = unquote(item).lowercased()
+                                if !alias.isEmpty { currentService?.networkAliases.append(alias) }
+                            }
+                        } else {
+                            inNetworkAliases = true
+                        }
+                    } else if indent >= 8 {
+                        inNetworkAliases = false
                     }
                 case .none:
                     break
@@ -480,12 +512,72 @@ public enum ComposeParser {
         )
     }
 
+    /// DNS aliases for a service so its peers can reach it by service name (container 1.6+).
+    ///
+    /// Candidates are the service name plus any `aliases:` from the Compose file. Upstream accepts a
+    /// single-label alias such as `db` only when a default DNS domain is configured (it then
+    /// appends the domain); aliases must also be unique across containers. Candidates that would
+    /// make the create fail are skipped with a note instead.
+    ///
+    /// - Parameters:
+    ///   - defaultDNSDomain: the runtime's `dns.domain` property, if any.
+    ///   - claimedNames: canonical names (lowercase, fully qualified, no trailing dot) already used
+    ///     as aliases by other containers on the network.
+    public static func serviceDNSAliases(
+        for service: ComposeServiceSpec,
+        defaultDNSDomain: String?,
+        claimedNames: Set<String>
+    ) -> (aliases: [String], notes: [String]) {
+        let domain = defaultDNSDomain?.trimmingCharacters(in: CharacterSet(charactersIn: ". ")).lowercased()
+        var aliases: [String] = []
+        var notes: [String] = []
+        var seen = Set<String>()
+        for candidate in [service.serviceName] + service.networkAliases {
+            let alias = candidate.lowercased()
+            guard ValidationUtils.isValidDNSAlias(alias) else {
+                notes.append("Skipped invalid DNS alias '\(alias)'.")
+                continue
+            }
+            let isSubtree = alias.hasPrefix(".")
+            let singleLabel = ValidationUtils.dnsLabelCount(alias) < 2
+            if singleLabel && (domain ?? "").isEmpty {
+                notes.append("'\(alias)' is not resolvable by name: set a default DNS domain (`container system dns create test`, then `container system property set dns.domain test`) or use a name like '\(alias).test'.")
+                continue
+            }
+            var canonical = alias.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            if singleLabel, let domain, !domain.isEmpty { canonical += ".\(domain)" }
+            guard !isSubtree || !singleLabel else { continue }
+            guard seen.insert((isSubtree ? "." : "") + canonical).inserted else { continue }
+            if !isSubtree && claimedNames.contains(canonical) {
+                notes.append("Skipped DNS alias '\(alias)': already used by another container.")
+                continue
+            }
+            aliases.append(alias)
+        }
+        return (Array(aliases.prefix(ValidationUtils.maximumDNSAliasesPerNetwork)), notes)
+    }
+
+    /// Canonical alias names (see `serviceDNSAliases`) used by `containers`, for conflict checks.
+    public static func claimedDNSNames(in containers: [ContainerModel], network: String, defaultDNSDomain: String?, excluding excludedID: String) -> Set<String> {
+        let domain = defaultDNSDomain?.trimmingCharacters(in: CharacterSet(charactersIn: ". ")).lowercased() ?? ""
+        var names = Set<String>()
+        for c in containers where c.id != excludedID {
+            for alias in c.configuration.networkAliases[network] ?? [] {
+                var canonical = alias.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+                if ValidationUtils.dnsLabelCount(canonical) < 2 && !domain.isEmpty { canonical += ".\(domain)" }
+                names.insert(canonical)
+            }
+        }
+        return names
+    }
+
     public static func buildContainerRequest(
         for service: ComposeServiceSpec,
         projectName: String,
         networkName: String,
         defaultCPUs: Int,
-        defaultMemoryMB: Int
+        defaultMemoryMB: Int,
+        dnsAliases: [String] = []
     ) -> ContainerCreateRequest {
         var cmdArgs: [String] = []
         var entryOverride = ""
@@ -512,6 +604,7 @@ public enum ComposeParser {
             workingDirectory: service.workingDirectory,
             publishedPorts: service.publishedPorts,
             networkName: networkName,
+            dnsAliases: dnsAliases,
             mounts: service.volumes,
             environmentVariables: service.environment,
             cpus: defaultCPUs,

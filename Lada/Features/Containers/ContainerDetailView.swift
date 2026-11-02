@@ -518,7 +518,7 @@ public struct ContainerDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 NordicSectionHeader("Active Network Attachments")
                 if container.networks.isEmpty {
-                    Text("No active network attachments (container is stopped). Configured networks: \(container.configuration.configuredNetworks.joined(separator: ", "))")
+                    Text("No active network attachments (container is stopped). Configured networks: \(container.configuration.configuredNetworks.map { net in container.configuration.networkAliases[net].map { "\(net) (aliases: \($0.joined(separator: ", ")))" } ?? net }.joined(separator: ", "))")
                         .font(.system(size: 12))
                         .foregroundStyle(NordicTheme.secondaryText)
                 } else {
@@ -530,6 +530,12 @@ public struct ContainerDetailView: View {
                                 Text("Hostname: \(net.hostname)")
                                     .font(NordicTheme.monoFontSmall)
                                     .foregroundStyle(NordicTheme.secondaryText)
+                                if let aliases = container.configuration.networkAliases[net.network], !aliases.isEmpty {
+                                    Text("DNS aliases: \(aliases.joined(separator: ", "))")
+                                        .font(NordicTheme.monoFontSmall)
+                                        .foregroundStyle(NordicTheme.secondaryText)
+                                        .textSelection(.enabled)
+                                }
                             }
                             Spacer()
                             VStack(alignment: .trailing, spacing: 3) {

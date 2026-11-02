@@ -245,6 +245,8 @@ public struct ContainerConfigurationModel: Codable, Sendable, Equatable {
     public var publishedPorts: [PortMapping]
     public var publishedSockets: [SocketMapping]
     public var configuredNetworks: [String]
+    /// DNS aliases per configured network (`--network <name>,alias=<alias>`, container 1.6+).
+    public var networkAliases: [String: [String]]
 
     public init(
         executable: String = "/bin/sh",
@@ -278,7 +280,8 @@ public struct ContainerConfigurationModel: Codable, Sendable, Equatable {
         mounts: [MountAttachment] = [],
         publishedPorts: [PortMapping] = [],
         publishedSockets: [SocketMapping] = [],
-        configuredNetworks: [String] = ["default"]
+        configuredNetworks: [String] = ["default"],
+        networkAliases: [String: [String]] = [:]
     ) {
         self.executable = executable
         self.arguments = arguments
@@ -312,6 +315,7 @@ public struct ContainerConfigurationModel: Codable, Sendable, Equatable {
         self.publishedPorts = publishedPorts
         self.publishedSockets = publishedSockets
         self.configuredNetworks = configuredNetworks
+        self.networkAliases = networkAliases
     }
 }
 
@@ -684,6 +688,7 @@ public struct ContainerCreateRequest: Codable, Sendable, Equatable {
             publishedPorts: cfg.publishedPorts,
             publishedSockets: cfg.publishedSockets,
             networkName: cfg.configuredNetworks.first ?? "default",
+            dnsAliases: cfg.networkAliases[cfg.configuredNetworks.first ?? "default"] ?? [],
             dnsNameservers: cfg.dnsNameservers,
             dnsDomain: cfg.dnsDomain ?? "",
             dnsSearchDomains: cfg.dnsSearchDomains,

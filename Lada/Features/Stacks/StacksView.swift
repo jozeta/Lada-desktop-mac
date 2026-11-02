@@ -520,13 +520,28 @@ public struct StacksView: View {
                 }
             }
 
+            // Give each service its name (plus Compose `aliases:`) as DNS aliases so peers can
+            // reach it as e.g. `db`, the way Compose does.
+            let dnsDomain = appState.systemProperties.dns.domain
+            let resolved = ComposeParser.serviceDNSAliases(
+                for: svc,
+                defaultDNSDomain: dnsDomain,
+                claimedNames: ComposeParser.claimedDNSNames(in: appState.containers, network: "default", defaultDNSDomain: dnsDomain, excluding: svc.containerName)
+            )
+            for note in resolved.notes {
+                stackConsoleLines.append("    ! \(note)")
+            }
             let req = ComposeParser.buildContainerRequest(
                 for: svc,
                 projectName: parsedStack.projectName,
                 networkName: "default",
                 defaultCPUs: appState.preferences.defaultContainerCPUs,
-                defaultMemoryMB: appState.preferences.defaultContainerMemoryMB
+                defaultMemoryMB: appState.preferences.defaultContainerMemoryMB,
+                dnsAliases: resolved.aliases
             )
+            if !resolved.aliases.isEmpty {
+                stackConsoleLines.append("    DNS aliases: \(resolved.aliases.joined(separator: ", "))")
+            }
 
             stackConsoleLines.append("==> Starting service '\(svc.serviceName)' (\(svc.imageReference))…")
             do {

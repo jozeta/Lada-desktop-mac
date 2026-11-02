@@ -6,6 +6,12 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- DNS aliases (container 1.6): set them in the Create Container wizard (validated against
+  upstream's rules), see them in the container's Networking tab, and keep them when cloning
+- Compose stacks give each service its name, plus any `networks: <net>: aliases:`, as DNS aliases
+  so peers can reach it as e.g. `db`. Single-label names need a default DNS domain; without one,
+  or when another container already uses a name, the alias is skipped with a note in the stack
+  console. Previously stacks had no name resolution between services at all
 - Read the `machine.*` system properties (default CPUs, memory, home mount, virtualization),
   show them in Settings → System & Runtime, and use them as the starting values for Create Machine
 - Health check: warn when the API server runs a different release than the CLI (for example
