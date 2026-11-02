@@ -1,379 +1,442 @@
 import AppKit
 import SwiftUI
 
+/// Builds: turn a project folder with a Dockerfile/Containerfile into an image you can run.
+/// A guided flow (folder → name → build) with everything else under Advanced options.
 public struct BuildsView: View {
     @ObservedObject var appState: AppState
-    @State private var buildRequest: ImageBuildRequest
-    @State private var primaryTag = "local/lada-app:latest"
-    @State private var additionalTagsText = ""
-    @State private var builderCPUs = 2
-    @State private var builderMemoryMB = 2048
-    @State private var isBuilding = false
-    @State private var activeBuildLogs = ""
-    @State private var logSearchText = ""
-    @State private var logIsPaused = false
-    @State private var logAutoScroll = true
+    @ObservedObject private var work: BuildWorkspace
+    @State private var showAdvanced = false
+    @State private var showCommand = false
 
     public init(appState: AppState) {
         self.appState = appState
-        _buildRequest = State(initialValue: ImageBuildRequest(
-            contextDirectory: FileManager.default.homeDirectoryForCurrentUser.path,
-            containerfilePath: "Containerfile",
-            tags: ["local/lada-app:latest"],
-            cpus: appState.preferences.defaultBuildCPUs,
-            memoryMB: appState.preferences.defaultBuildMemoryMB
-        ))
+        self.work = appState.builds
     }
 
-    public var body: some View {
-        VStack(spacing: 0) {
-            builderControlBar
-            HSplitView {
-                buildConfigurationPanel
-                    .frame(minWidth: 420, idealWidth: 470, maxWidth: .infinity, maxHeight: .infinity)
+    private var accent: Color { NordicTheme.accent(for: appState.preferences.accentThemeChoice) }
 
-                buildOutputAndHistoryPanel
-                    .frame(minWidth: 420, idealWidth: 500, maxWidth: .infinity, maxHeight: .infinity)
+    public var body: some View {
+        HSplitView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: NordicTheme.Spacing.l) {
+                    intro
+                    folderStep
+                    nameStep
+                    buildStep
+                    advancedOptions
+                }
+                .padding(NordicTheme.Spacing.xl)
             }
+            .frame(minWidth: 440, idealWidth: 500, maxWidth: .infinity, maxHeight: .infinity)
+
+            VStack(spacing: 0) {
+                statusPanel
+                NordicLogViewer(
+                    rawLogText: work.log.isEmpty ? "Build output appears here while an image builds." : work.log,
+                    searchText: $work.logSearch,
+                    isPaused: $work.logPaused,
+                    autoScroll: $work.logAutoScroll
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                historyPanel
+            }
+            .frame(minWidth: 420, idealWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
+            .background(NordicTheme.contentSurface)
         }
         .background(NordicTheme.windowBackground)
     }
 
-    private var builderControlBar: some View {
-        HStack(spacing: 12) {
-            LadaIcon(.builds, size: 18)
-                .foregroundStyle(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 8) {
-                    Text("BuildKit Builder VM")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(NordicTheme.primaryText)
-                    NordicStatusBadge(
-                        label: appState.builderStatus.state.capitalized,
-                        tone: appState.builderStatus.isRunning ? .positive : .neutral
-                    )
-                }
-                Text(verbatim: "Image: \(appState.builderStatus.imageReference ?? "ghcr.io/apple/container-builder-shim/builder") • \(appState.builderStatus.cpus) CPUs • \(appState.builderStatus.memoryBytes / (1024 * 1024)) MB RAM")
-                    .font(.system(size: 11))
-                    .foregroundStyle(NordicTheme.secondaryText)
-            }
+    // MARK: - Steps
 
-            Spacer()
-
-            HStack(spacing: 8) {
-                Stepper(value: $builderCPUs, in: 1...16) {
-                    Text(verbatim: "CPUs: \(builderCPUs)")
-                }
-                .font(.system(size: 11))
-                Picker("RAM", selection: $builderMemoryMB) {
-                    Text("1 GB").tag(1024)
-                    Text("2 GB").tag(2048)
-                    Text("4 GB").tag(4096)
-                    Text("8 GB").tag(8192)
-                }
-                .labelsHidden()
-                .frame(width: 85)
-                .controlSize(.small)
-
-                if appState.builderStatus.isRunning {
-                    Button("Stop Builder") {
-                        Task {
-                            await appState.performOperation(
-                                category: "Builds",
-                                title: "Stop BuildKit Builder",
-                                redactedCommand: "container builder stop"
-                            ) {
-                                try await appState.runtimeService.stopBuilder()
-                                return "Stopped BuildKit builder container."
-                            }
-                        }
-                    }
-                    .controlSize(.small)
-                } else {
-                    Button("Start Builder") {
-                        Task {
-                            await appState.performOperation(
-                                category: "Builds",
-                                title: "Start BuildKit Builder",
-                                redactedCommand: "container builder start --cpus \(builderCPUs) --memory \(builderMemoryMB)M"
-                            ) {
-                                try await appState.runtimeService.startBuilder(cpus: builderCPUs, memoryMB: builderMemoryMB)
-                                return "Started BuildKit builder container."
-                            }
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
-                    .controlSize(.small)
-                }
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(NordicTheme.elevatedSurface)
-        .overlay(alignment: .bottom) {
-            Divider().overlay(NordicTheme.borderSubtle)
+    private var intro: some View {
+        VStack(alignment: .leading, spacing: NordicTheme.Spacing.xs) {
+            Text("Build an image")
+                .font(NordicTheme.titleFont)
+                .foregroundStyle(NordicTheme.primaryText)
+            Text("A build reads the Dockerfile (or Containerfile) in a project folder and turns the folder into an image. You can then run that image as a container, push it to a registry, or use it in a stack.")
+                .font(.system(size: 12.5))
+                .foregroundStyle(NordicTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private var buildConfigurationPanel: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                NordicSectionHeader(
-                    "Build Image from Containerfile / Dockerfile",
-                    subtitle: "Invoke `container build` with BuildKit multi-platform and secret support"
+    private func stepCard<Content: View>(_ number: Int, _ title: String, done: Bool, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: NordicTheme.Spacing.m) {
+            HStack(spacing: NordicTheme.Spacing.s) {
+                ZStack {
+                    Circle().fill(done ? NordicTheme.statusGreen : accent.opacity(0.15)).frame(width: 22, height: 22)
+                    if done {
+                        Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
+                    } else {
+                        Text("\(number)").font(.system(size: 11, weight: .semibold)).foregroundStyle(accent)
+                    }
+                }
+                Text(title)
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundStyle(NordicTheme.primaryText)
+            }
+            content()
+        }
+        .nordicPanel()
+    }
+
+    private var folderStep: some View {
+        stepCard(1, "Choose your project folder", done: !work.folder.isEmpty && work.buildFile != nil) {
+            HStack(spacing: NordicTheme.Spacing.s) {
+                Image(systemName: "folder")
+                    .foregroundStyle(NordicTheme.secondaryText)
+                Text(work.folder.isEmpty ? "No folder chosen" : (work.folder as NSString).abbreviatingWithTildeInPath)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(work.folder.isEmpty ? NordicTheme.secondaryText : NordicTheme.primaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                Button(work.folder.isEmpty ? "Choose Folder…" : "Change…") {
+                    if let path = pick(directories: true) { work.choose(folder: path) }
+                }
+                .accessibilityIdentifier("lada.builds.chooseFolder")
+            }
+            if !work.folder.isEmpty {
+                if let file = work.buildFile {
+                    Label {
+                        Text("Uses ") + Text((file as NSString).lastPathComponent).font(.system(size: 12, design: .monospaced)) + Text(" in this folder")
+                    } icon: {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(NordicTheme.statusGreen)
+                    }
+                    .font(.system(size: 12))
+                    .foregroundStyle(NordicTheme.secondaryText)
+                } else {
+                    HStack {
+                        Label("No Dockerfile or Containerfile in this folder.", systemImage: "exclamationmark.triangle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(NordicTheme.statusAmber)
+                        Spacer()
+                        Button("Choose File…") {
+                            if let path = pick(directories: false) { work.buildFile = path }
+                        }
+                        .controlSize(.small)
+                    }
+                }
+            }
+        }
+    }
+
+    private var nameStep: some View {
+        stepCard(2, "Name the image", done: !work.imageName.isEmpty && BuildPlanner.imageNameProblem(work.imageName) == nil) {
+            TextField("local/my-app:latest", text: $work.imageName)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12.5, design: .monospaced))
+                .accessibilityIdentifier("lada.builds.imageName")
+            if !work.imageName.isEmpty, let problem = BuildPlanner.imageNameProblem(work.imageName) {
+                Text(problem)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(NordicTheme.statusAmber)
+            } else {
+                Text("This is the name you'll pick when you create a container. The part after ':' is the version (tag).")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(NordicTheme.secondaryText)
+            }
+        }
+    }
+
+    private var buildStep: some View {
+        stepCard(3, "Build", done: { if case .succeeded = work.phase { return true }; return false }()) {
+            HStack(spacing: NordicTheme.Spacing.m) {
+                Button {
+                    work.build(appState: appState)
+                } label: {
+                    Label(work.isBuilding ? "Building…" : "Build Image", systemImage: "hammer")
+                        .frame(minWidth: 120)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+                .controlSize(.large)
+                .disabled(work.blocker != nil || work.isBuilding)
+                .accessibilityIdentifier("lada.builds.build")
+
+                if let blocker = work.blocker {
+                    Text(blocker)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(NordicTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Text(builderSummary)
+                .font(.system(size: 11.5))
+                .foregroundStyle(NordicTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            DisclosureGroup("Show the command", isExpanded: $showCommand) {
+                Text(SecretRedactor.formatCommandPreview(executable: "container", arguments: work.effectiveRequest.buildCLIArguments()))
+                    .font(NordicTheme.monoFontSmall)
+                    .textSelection(.enabled)
+                    .padding(NordicTheme.Spacing.s)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(NordicTheme.codeSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: NordicTheme.Radius.control, style: .continuous))
+            }
+            .font(.system(size: 11.5))
+        }
+    }
+
+    /// The BuildKit helper VM, explained instead of managed up front.
+    private var builderSummary: String {
+        let b = appState.builderStatus
+        if b.isRunning {
+            return "Builds run in a small helper VM (BuildKit), running now with \(b.cpus) vCPU and \(b.memoryBytes / (1024 * 1024 * 1024)) GB."
+        }
+        return "Builds run in a small helper VM (BuildKit). It starts automatically when you build."
+    }
+
+    // MARK: - Advanced
+
+    private var advancedOptions: some View {
+        DisclosureGroup(isExpanded: $showAdvanced) {
+            VStack(alignment: .leading, spacing: NordicTheme.Spacing.m) {
+                optionRow("Extra names", help: "More names (tags) for the same image, comma-separated. CLI: -t") {
+                    TextField("e.g. local/my-app:1.0, ghcr.io/me/my-app:1.0", text: $work.additionalTags)
+                        .textFieldStyle(.roundedBorder)
+                }
+                optionRow("Build only up to stage", help: "For multi-stage Dockerfiles: stop at this stage. CLI: --target") {
+                    TextField("e.g. builder (optional)", text: $work.request.targetStage)
+                        .textFieldStyle(.roundedBorder)
+                }
+                optionRow("Platform", help: "Build for another CPU architecture, e.g. linux/amd64. Empty means this Mac (linux/arm64). CLI: --platform") {
+                    TextField("linux/arm64 (default)", text: $work.request.platform)
+                        .textFieldStyle(.roundedBorder)
+                }
+                Toggle("Build everything from scratch (ignore cached steps)", isOn: $work.request.noCache)
+                    .help("CLI: --no-cache")
+                Toggle("Download the newest base image first", isOn: $work.request.pullLatest)
+                    .help("CLI: --pull")
+                Toggle("Let the build use my SSH keys (for private git repos)", isOn: $work.request.forwardSSH)
+                    .help("Forwards your SSH agent into the build. CLI: --ssh default")
+
+                NordicKeyValueEditor(
+                    title: "Build arguments (values for ARG lines)",
+                    keyPlaceholder: "ARG_NAME",
+                    valuePlaceholder: "value",
+                    allowSecretMasking: true,
+                    entries: $work.request.buildArgs
                 )
+                .help("CLI: --build-arg")
 
-                Form {
-                    Section("Build Context & File") {
-                        HStack {
-                            TextField("Context Directory", text: $buildRequest.contextDirectory)
-                                .font(NordicTheme.monoFontSmall)
-                            Button("Browse…") {
-                                chooseDirectory { path in buildRequest.contextDirectory = path }
-                            }
-                        }
-                        HStack {
-                            TextField("Containerfile / Dockerfile Path", text: $buildRequest.containerfilePath)
-                                .font(NordicTheme.monoFontSmall)
-                            Button("Select File…") {
-                                chooseFile { path in buildRequest.containerfilePath = path }
-                            }
-                        }
-                    }
+                secretsEditor
 
-                    Section("Tags & Target Stage") {
-                        TextField("Primary Tag (e.g. local/myapp:latest)", text: $primaryTag)
-                            .font(NordicTheme.monoFontSmall)
-                            .onChange(of: primaryTag) { _, _ in syncTags() }
-                        TextField("Additional Tags (comma-separated)", text: $additionalTagsText)
-                            .font(NordicTheme.monoFontSmall)
-                            .onChange(of: additionalTagsText) { _, _ in syncTags() }
-                        TextField("Target Stage (--target, optional)", text: $buildRequest.targetStage)
-                            .font(NordicTheme.monoFontSmall)
-                    }
-
-                    Section("Platform, Resources & Cache") {
-                        TextField("Platform (--platform, e.g. linux/arm64)", text: $buildRequest.platform)
-                            .font(NordicTheme.monoFontSmall)
-                        Stepper(value: $buildRequest.cpus, in: 1...32) {
-                            Text(verbatim: "Build CPUs: \(buildRequest.cpus)")
-                        }
-                        Picker("Build Memory", selection: $buildRequest.memoryMB) {
+                optionRow("Helper VM size", help: "CPU and memory for the BuildKit helper VM. CLI: --cpus / --memory") {
+                    HStack {
+                        Stepper("\(work.request.cpus) vCPU", value: $work.request.cpus, in: 1...16)
+                        Picker("", selection: $work.request.memoryMB) {
                             Text("1 GB").tag(1024)
                             Text("2 GB").tag(2048)
                             Text("4 GB").tag(4096)
                             Text("8 GB").tag(8192)
                         }
-                        Toggle("Disable Build Cache (--no-cache)", isOn: $buildRequest.noCache)
-                        Toggle("Always Pull Base Images (--pull)", isOn: $buildRequest.pullLatest)
-                        Toggle("Forward Host SSH Agent (--ssh default)", isOn: $buildRequest.forwardSSH)
-                    }
-
-                    Section("Build Arguments (--build-arg)") {
-                        NordicKeyValueEditor(
-                            title: "Build-Time Arguments",
-                            keyPlaceholder: "ARG_NAME",
-                            valuePlaceholder: "Value",
-                            allowSecretMasking: true,
-                            entries: $buildRequest.buildArgs
-                        )
-                    }
-
-                    Section("Build Secrets (--secret)") {
-                        Text("Secrets are mounted securely inside BuildKit without persisting in image layers.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(NordicTheme.secondaryText)
-                        ForEach($buildRequest.secrets) { $secret in
-                            HStack(spacing: 6) {
-                                TextField("Secret ID", text: $secret.secretID)
-                                    .textFieldStyle(.roundedBorder)
-                                    .font(NordicTheme.monoFontSmall)
-                                    .frame(width: 110)
-                                Picker("", selection: $secret.sourceType) {
-                                    Text("File").tag(BuildSecretSpec.SourceType.file)
-                                    Text("Env").tag(BuildSecretSpec.SourceType.environmentVariable)
-                                }
-                                .frame(width: 75)
-                                TextField(secret.sourceType == .file ? "File path" : "ENV_VAR", text: $secret.sourceValue)
-                                    .textFieldStyle(.roundedBorder)
-                                    .font(NordicTheme.monoFontSmall)
-                                if secret.sourceType == .file {
-                                    Button("File…") {
-                                        chooseFile { path in secret.sourceValue = path }
+                        .labelsHidden()
+                        .fixedSize()
+                        if appState.builderStatus.isRunning {
+                            Button("Stop Helper VM") {
+                                Task {
+                                    await appState.performOperation(category: "Builds", title: "Stop BuildKit Builder", redactedCommand: "container builder stop") {
+                                        try await appState.runtimeService.stopBuilder()
+                                        return "Stopped the BuildKit helper VM."
                                     }
-                                    .controlSize(.small)
                                 }
-                                Button(role: .destructive) {
-                                    buildRequest.secrets.removeAll { $0.id == secret.id }
-                                } label: {
-                                    Image(systemName: "minus.circle")
-                                        .foregroundStyle(NordicTheme.statusRed)
-                                }
-                                .buttonStyle(.borderless)
                             }
+                            .controlSize(.small)
+                            .help("Frees its memory; it starts again on the next build.")
                         }
-                        Button {
-                            buildRequest.secrets.append(BuildSecretSpec())
-                        } label: {
-                            Label("Add Secret Mount", systemImage: "plus")
-                                .font(.system(size: 11))
-                        }
-                        .controlSize(.small)
                     }
                 }
-                .formStyle(.grouped)
+            }
+            .font(.system(size: 12))
+            .padding(.top, NordicTheme.Spacing.s)
+        } label: {
+            Text("Advanced options")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(NordicTheme.primaryText)
+        }
+        .nordicPanel()
+    }
 
-                Text(SecretRedactor.formatCommandPreview(executable: "container", arguments: buildRequest.buildCLIArguments()))
-                    .font(NordicTheme.monoFontSmall)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(NordicTheme.codeSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+    private func optionRow<Content: View>(_ title: String, help: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(NordicTheme.primaryText)
+            content()
+        }
+        .help(help)
+    }
 
-                HStack {
-                    Spacer()
-                    Button {
-                        syncTags()
-                        runBuild()
+    private var secretsEditor: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Secrets (available during the build, never stored in the image)")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(NordicTheme.primaryText)
+                .help("CLI: --secret id=…,src=… or env=…")
+            ForEach($work.request.secrets) { $secret in
+                HStack(spacing: 6) {
+                    TextField("id", text: $secret.secretID)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 100)
+                    Picker("", selection: $secret.sourceType) {
+                        Text("File").tag(BuildSecretSpec.SourceType.file)
+                        Text("Variable").tag(BuildSecretSpec.SourceType.environmentVariable)
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    TextField(secret.sourceType == .file ? "file path" : "ENV_VAR", text: $secret.sourceValue)
+                        .textFieldStyle(.roundedBorder)
+                    if secret.sourceType == .file {
+                        Button("…") { if let path = pick(directories: false) { secret.sourceValue = path } }
+                            .controlSize(.small)
+                    }
+                    Button(role: .destructive) {
+                        work.request.secrets.removeAll { $0.id == secret.id }
                     } label: {
-                        Label(isBuilding ? "Building Image…" : "Start Build", systemImage: "hammer.fill")
+                        Image(systemName: "minus.circle").foregroundStyle(NordicTheme.statusRed)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
-                    .disabled(isBuilding || buildRequest.contextDirectory.isEmpty)
+                    .buttonStyle(.borderless)
                 }
             }
-            .padding(16)
+            Button {
+                work.request.secrets.append(BuildSecretSpec())
+            } label: {
+                Label("Add Secret", systemImage: "plus")
+            }
+            .controlSize(.small)
         }
     }
 
-    private var buildOutputAndHistoryPanel: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            NordicLogViewer(
-                rawLogText: activeBuildLogs.isEmpty ? "Ready to build. Streaming BuildKit output will appear here." : activeBuildLogs,
-                searchText: $logSearchText,
-                isPaused: $logIsPaused,
-                autoScroll: $logAutoScroll
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    // MARK: - Status, output, history
 
-            Divider().overlay(NordicTheme.borderSubtle)
-
-            VStack(alignment: .leading, spacing: 8) {
-                NordicSectionHeader("Build History (\(appState.buildHistory.count))")
-                if appState.buildHistory.isEmpty {
-                    Text("No builds executed yet.")
-                        .font(.system(size: 11))
+    @ViewBuilder
+    private var statusPanel: some View {
+        HStack(alignment: .top, spacing: NordicTheme.Spacing.m) {
+            switch work.phase {
+            case .idle:
+                Image(systemName: "hammer").foregroundStyle(NordicTheme.secondaryText)
+                Text(work.blocker.map { "Not ready yet: \($0)" } ?? "Ready to build \(work.imageName) from \((work.folder as NSString).lastPathComponent).")
+                    .foregroundStyle(NordicTheme.secondaryText)
+            case .building:
+                ProgressView().controlSize(.small)
+                VStack(alignment: .leading, spacing: 2) {
+                    if let p = BuildPlanner.progress(in: work.log) {
+                        Text("Building — step \(p.step) of \(p.total)").fontWeight(.semibold)
+                        Text(p.description)
+                            .font(NordicTheme.monoFontSmall)
+                            .foregroundStyle(NordicTheme.secondaryText)
+                            .lineLimit(1)
+                    } else {
+                        Text("Building — preparing…").fontWeight(.semibold)
+                    }
+                }
+            case .succeeded(let image, let seconds):
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(NordicTheme.statusGreen)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Built \(image) in \(seconds) s").fontWeight(.semibold)
+                    Text("Run it as a container, or find it under Images.")
                         .foregroundStyle(NordicTheme.secondaryText)
-                        .padding(.vertical, 6)
-                } else {
-                    List(appState.buildHistory) { record in
-                        Button {
-                            activeBuildLogs = record.logOutput
-                        } label: {
-                            HStack {
-                                NordicStatusBadge(
-                                    label: record.status.rawValue,
-                                    tone: record.status == .succeeded ? .positive : (record.status == .running ? .warning : .critical)
-                                )
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(record.tags.joined(separator: ", "))
-                                        .font(.system(size: 12, weight: .semibold))
-                                    Text(record.contextDirectory)
-                                        .font(NordicTheme.monoFontSmall)
-                                        .foregroundStyle(NordicTheme.secondaryText)
-                                }
-                                Spacer()
-                                Text(record.startedAt.formatted(date: .omitted, time: .standard))
-                                    .font(NordicTheme.monoFontSmall)
-                                    .foregroundStyle(NordicTheme.secondaryText)
-                            }
+                }
+                Spacer()
+                Button("Run This Image…") {
+                    appState.presentCreateContainer(with: ContainerCreateRequest(imageReference: image))
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+                .accessibilityIdentifier("lada.builds.runImage")
+            case .failed(let reason):
+                Image(systemName: "xmark.octagon.fill").foregroundStyle(NordicTheme.statusRed)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("The build failed").fontWeight(.semibold)
+                    Text(reason)
+                        .font(NordicTheme.monoFontSmall)
+                        .foregroundStyle(NordicTheme.secondaryText)
+                        .lineLimit(3)
+                        .textSelection(.enabled)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.system(size: 12.5))
+        .padding(NordicTheme.Spacing.l)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(NordicTheme.elevatedSurface)
+        .overlay(alignment: .bottom) { Divider().overlay(NordicTheme.borderSubtle) }
+        .animation(NordicTheme.Motion.standard, value: work.phase)
+    }
+
+    private var historyPanel: some View {
+        VStack(alignment: .leading, spacing: NordicTheme.Spacing.s) {
+            HStack {
+                Text("Recent builds")
+                    .font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Text("Click one to build it again")
+                    .font(.system(size: 11))
+                    .foregroundStyle(NordicTheme.secondaryText)
+            }
+            if appState.buildHistory.isEmpty {
+                Text("No builds yet.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(NordicTheme.secondaryText)
+            } else {
+                ScrollView {
+                    VStack(spacing: 2) {
+                        ForEach(appState.buildHistory.prefix(30)) { record in
+                            Button { work.reuse(record) } label: { historyRow(record) }
+                                .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
-                    }
-                    .listStyle(.plain)
-                    .frame(height: 140)
-                }
-            }
-            .padding(14)
-            .background(NordicTheme.elevatedSurface)
-        }
-        .background(NordicTheme.contentSurface)
-    }
-
-    private func runBuild() {
-        isBuilding = true
-        activeBuildLogs = ""
-        let req = buildRequest
-        var record = BuildRecord(
-            tags: req.tags,
-            contextDirectory: req.contextDirectory,
-            containerfilePath: req.containerfilePath,
-            status: .running
-        )
-        appState.appendBuildRecord(record)
-
-        Task {
-            do {
-                let result = try await appState.runtimeService.buildImage(request: req) { line in
-                    Task { @MainActor in
-                        activeBuildLogs += line + "\n"
                     }
                 }
-                record.finishedAt = Date()
-                record.exitCode = result.exitStatus
-                record.status = result.isSuccess ? .succeeded : .failed
-                record.logOutput = activeBuildLogs.isEmpty ? result.combinedOutput : activeBuildLogs
-                appState.appendBuildRecord(record)
-                appState.recordActivity(
-                    category: "Builds",
-                    title: "Build \(req.tags.first ?? "Image")",
-                    detail: "Completed with exit code \(result.exitStatus).",
-                    redactedCommand: SecretRedactor.formatCommandPreview(executable: "container", arguments: req.buildCLIArguments()),
-                    outcome: result.isSuccess ? .success : .failure
-                )
-                await appState.refreshAll(isUserInitiated: false)
-            } catch {
-                record.finishedAt = Date()
-                record.status = .failed
-                record.logOutput = activeBuildLogs + "\n" + error.localizedDescription
-                appState.appendBuildRecord(record)
+                .frame(maxHeight: 150)
             }
-            isBuilding = false
         }
+        .padding(NordicTheme.Spacing.l)
+        .background(NordicTheme.elevatedSurface)
+        .overlay(alignment: .top) { Divider().overlay(NordicTheme.borderSubtle) }
     }
 
-    private func syncTags() {
-        var tags: [String] = []
-        let primary = primaryTag.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !primary.isEmpty { tags.append(primary) }
-        let extras = additionalTagsText
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        tags.append(contentsOf: extras)
-        buildRequest.tags = tags.isEmpty ? ["local/lada-build:latest"] : tags
+    private func historyRow(_ record: BuildRecord) -> some View {
+        HStack(spacing: NordicTheme.Spacing.s) {
+            Image(systemName: record.status == .succeeded ? "checkmark.circle.fill" : record.status == .running ? "clock" : "xmark.circle.fill")
+                .foregroundStyle(record.status == .succeeded ? NordicTheme.statusGreen : record.status == .running ? NordicTheme.statusAmber : NordicTheme.statusRed)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(record.tags.first ?? "image")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(NordicTheme.primaryText)
+                Text(Self.sourceDescription(record.contextDirectory))
+                    .font(.system(size: 11))
+                    .foregroundStyle(NordicTheme.secondaryText)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(record.startedAt.formatted(date: .omitted, time: .shortened))
+                if let end = record.finishedAt {
+                    Text("\(Int(end.timeIntervalSince(record.startedAt).rounded())) s")
+                }
+            }
+            .font(.system(size: 11).monospacedDigit())
+            .foregroundStyle(NordicTheme.secondaryText)
+        }
+        .padding(.horizontal, NordicTheme.Spacing.s)
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
     }
 
-    private func chooseDirectory(onPick: (String) -> Void) {
+    /// Builds started from the Dockerfile Editor run in a temporary folder; name the source instead.
+    static func sourceDescription(_ folder: String) -> String {
+        let name = (folder as NSString).lastPathComponent
+        return name.hasPrefix("com.lada.dockerfile-build") ? "from Dockerfile Editor" : "from \(name)"
+    }
+
+    private func pick(directories: Bool) -> String? {
         let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
+        panel.canChooseDirectories = directories
+        panel.canChooseFiles = !directories
         panel.allowsMultipleSelection = false
-        if panel.runModal() == .OK, let url = panel.url {
-            onPick(url.path)
-        }
-    }
-
-    private func chooseFile(onPick: (String) -> Void) {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.allowsMultipleSelection = false
-        if panel.runModal() == .OK, let url = panel.url {
-            onPick(url.path)
-        }
+        if !work.folder.isEmpty { panel.directoryURL = URL(fileURLWithPath: work.folder) }
+        return panel.runModal() == .OK ? panel.url?.path : nil
     }
 }

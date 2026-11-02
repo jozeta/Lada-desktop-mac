@@ -6,6 +6,15 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Builds redesigned as a guided flow: what a build is, (1) choose the project folder (the
+  Dockerfile/Containerfile is detected), (2) name the image (validated, suggested from the folder),
+  (3) Build, with "step 2 of 3" progress, the BuildKit error line when it fails, and Run This Image
+  when it succeeds. Everything else is under Advanced options in plain language (CLI flags in
+  tooltips); the BuildKit helper VM is explained rather than managed up front (it starts by
+  itself). Recent builds show image, source folder and duration and can be reused. The form and a
+  running build survive leaving the screen
+- Fix: the default build file was the relative path `Containerfile`, which the CLI resolves against
+  Låda's own working directory, so builds used the wrong file; it is now resolved in the folder
 - Each container keeps its own workspace while the app runs: its tab, a terminal shell that keeps
   running in the background (screen and scrollback intact), the Files folder, selection and
   unsaved editor text, and the Logs search/pause/boot-log settings. It all survives switching

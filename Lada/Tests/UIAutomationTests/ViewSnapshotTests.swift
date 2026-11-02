@@ -89,6 +89,18 @@ final class ViewSnapshotTests: XCTestCase {
         state.systemTelemetryHistory = series
     }
 
+    func testBuildsSnapshots() async throws {
+        _ = try outputDirectory()
+        let state = await makeAppState()
+        state.selectedSection = .builds
+        try snapshot(MainWindowView(appState: state), name: "builds-idle", size: CGSize(width: 1400, height: 900))
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("lada-snap-My Web App")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try "FROM alpine:latest\n".write(to: dir.appendingPathComponent("Dockerfile"), atomically: true, encoding: .utf8)
+        state.builds.choose(folder: dir.path)
+        try snapshot(MainWindowView(appState: state), name: "builds-ready", size: CGSize(width: 1400, height: 900))
+    }
+
     func testMainWindowSnapshots() async throws {
         _ = try outputDirectory()
         let state = await makeAppState()
