@@ -10,7 +10,7 @@ public struct NetworksView: View {
     @State private var createIPv4Subnet = ""
     @State private var createIPv6Subnet = ""
     @State private var createInternal = false
-    @State private var validationMessage: String? = nil
+    @State private var createLabels: [KeyValueEntry] = []
 
     public init(appState: AppState) {
         self.appState = appState
@@ -144,7 +144,7 @@ public struct NetworksView: View {
                 createIPv4Subnet = ""
                 createIPv6Subnet = ""
                 createInternal = false
-                validationMessage = nil
+                createLabels = []
                 showCreateSheet = true
             } label: {
                 Label("Create Network", systemImage: "plus")
@@ -297,71 +297,105 @@ public struct NetworksView: View {
             name: createName.trimmingCharacters(in: .whitespacesAndNewlines),
             ipv4Subnet: createIPv4Subnet.trimmingCharacters(in: .whitespacesAndNewlines),
             ipv6Subnet: createIPv6Subnet.trimmingCharacters(in: .whitespacesAndNewlines),
-            isInternal: createInternal
+            isInternal: createInternal,
+            labels: createLabels
         )
-        return VStack(alignment: .leading, spacing: 16) {
-            Text("Create Isolated Network")
-                .font(NordicTheme.titleFont)
-
-            Form {
-                TextField("Network Name (e.g. backend-net)", text: $createName)
-                    .font(NordicTheme.monoFontRegular)
-                TextField("IPv4 Subnet CIDR (optional, e.g. 192.168.70.0/24)", text: $createIPv4Subnet)
-                    .font(NordicTheme.monoFontRegular)
-                TextField("IPv6 Subnet Prefix (optional, e.g. fd00:70::/64)", text: $createIPv6Subnet)
-                    .font(NordicTheme.monoFontRegular)
-                Toggle("Internal Network Only (--internal, disables external routing)", isOn: $createInternal)
-            }
-            .formStyle(.grouped)
-
-            if let msg = validationMessage {
-                Text(msg)
-                    .font(.system(size: 11))
-                    .foregroundStyle(NordicTheme.statusRed)
-            }
-
-            Text(SecretRedactor.formatCommandPreview(executable: "container", arguments: req.buildCLIArguments()))
-                .font(NordicTheme.monoFontSmall)
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(NordicTheme.codeSurface)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-
-            HStack {
-                Button("Cancel") { showCreateSheet = false }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Create Network") {
-                    if let nameErr = ValidationUtils.validateResourceName(req.name, fieldName: "Network name") {
-                        validationMessage = nameErr
-                        return
+        let usedSubnets = appState.networks.map(\.ipv4Subnet).filter { !$0.isEmpty }
+        return NordicSheet(
+            icon: .networks,
+            title: "Create Network",
+            subtitle: "A private network for containers. Containers on the same network reach each other by name and address.",
+            primaryTitle: "Create Network",
+            problem: networkProblem(req, usedSubnets: usedSubnets),
+            onCancel: { showCreateSheet = false },
+            onPrimary: { createNetwork(req) }
+        ) {
+            NordicFormSection(title: "Network") {
+                NordicFormField(title: "Name", hint: "Lowercase letters, digits, '.', '-' or '_'. Used with --network when running containers.",
+                                info: "The network's name. Containers join it with `container run --network <name>`.") {
+                    TextField("backend-net", text: $createName)
+                        .textFieldStyle(.roundedBorder)
+                        .font(NordicTheme.monoFontRegular)
+                        .accessibilityIdentifier("lada.networks.create.name")
+                }
+                NordicFormField(title: "IPv4 subnet", hint: "Optional. Leave empty and the runtime picks one.",
+                                info: "The address range containers on this network get addresses from, in CIDR form (192.168.70.0/24 gives 254 addresses). It must not overlap another network's subnet.") {
+                    HStack {
+                        TextField("automatic", text: $createIPv4Subnet)
+                            .textFieldStyle(.roundedBorder)
+                            .font(NordicTheme.monoFontRegular)
+                        Button("Suggest a Free Subnet") {
+                            createIPv4Subnet = SubnetSuggester.nextFree(avoiding: usedSubnets) ?? ""
+                        }
+                        .controlSize(.small)
+                        .help("Pick the first 192.168.x.0/24 that no existing network uses")
                     }
-                    if let cidrErr = ValidationUtils.validateIPv4CIDR(req.ipv4Subnet) {
-                        validationMessage = cidrErr
-                        return
-                    }
-                    if let v6Err = ValidationUtils.validateIPv6CIDR(req.ipv6Subnet) {
-                        validationMessage = v6Err
-                        return
-                    }
-                    showCreateSheet = false
-                    Task {
-                        await appState.performOperation(
-                            category: "Networks",
-                            title: "Create Network \(req.name)",
-                            redactedCommand: SecretRedactor.formatCommandPreview(executable: "container", arguments: req.buildCLIArguments())
-                        ) {
-                            try await appState.runtimeService.createNetwork(request: req)
-                            return "Created network '\(req.name)'."
+                    if !usedSubnets.isEmpty {
+                        HStack(spacing: 6) {
+                            Text("In use:").font(.system(size: 11)).foregroundStyle(NordicTheme.secondaryText)
+                            ForEach(usedSubnets, id: \.self) { subnet in
+                                Text(subnet)
+                                    .font(.system(size: 10.5, design: .monospaced))
+                                    .foregroundStyle(NordicTheme.secondaryText)
+                                    .padding(.horizontal, 6).padding(.vertical, 2)
+                                    .nordicChip(cornerRadius: 4)
+                            }
                         }
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
-                .disabled(req.name.isEmpty)
+                Toggle(isOn: $createInternal) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Internal only").font(.system(size: 12.5, weight: .semibold))
+                        Text("Containers can talk to each other but not to the internet or your Mac's network (--internal).")
+                            .font(.system(size: 11)).foregroundStyle(NordicTheme.secondaryText)
+                    }
+                }
+                .toggleStyle(.switch)
             }
+
+            DisclosureGroup("Advanced") {
+                VStack(alignment: .leading, spacing: NordicTheme.Spacing.l) {
+                    NordicFormField(title: "IPv6 subnet", hint: "Optional, e.g. fd00:70::/64.",
+                                    info: "Gives containers IPv6 addresses from this prefix as well.") {
+                        TextField("none", text: $createIPv6Subnet)
+                            .textFieldStyle(.roundedBorder)
+                            .font(NordicTheme.monoFontRegular)
+                    }
+                    NordicKeyValueEditor(title: "Labels", keyPlaceholder: "key", valuePlaceholder: "value", entries: $createLabels)
+                }
+                .padding(.top, NordicTheme.Spacing.s)
+            }
+            .font(.system(size: 12.5, weight: .semibold))
+
+            NordicCommandPreview(arguments: req.buildCLIArguments())
         }
-        .padding(20)
-        .frame(width: 500)
+    }
+
+    /// What blocks creating, in plain words.
+    private func networkProblem(_ req: NetworkCreateRequest, usedSubnets: [String]) -> String? {
+        if req.name.isEmpty { return "Give the network a name." }
+        if let err = ValidationUtils.validateResourceName(req.name, fieldName: "The name") { return err }
+        if CreateSheetChecks.nameTaken(req.name, in: appState.networks.map(\.name)) { return "A network called \(req.name) already exists." }
+        if let err = ValidationUtils.validateIPv4CIDR(req.ipv4Subnet) { return err }
+        if let clash = usedSubnets.first(where: { IPv4.overlaps($0, req.ipv4Subnet) }) {
+            return "\(req.ipv4Subnet) overlaps \(clash), which another network uses."
+        }
+        if let err = ValidationUtils.validateIPv6CIDR(req.ipv6Subnet) { return err }
+        return nil
+    }
+
+    private func createNetwork(_ req: NetworkCreateRequest) {
+        showCreateSheet = false
+        Task {
+            await appState.performOperation(
+                category: "Networks",
+                title: "Create Network \(req.name)",
+                redactedCommand: SecretRedactor.formatCommandPreview(executable: "container", arguments: req.buildCLIArguments())
+            ) {
+                try await appState.runtimeService.createNetwork(request: req)
+                return "Created network '\(req.name)'."
+            }
+            if appState.networks.contains(where: { $0.id == req.name }) { appState.selectedNetworkID = req.name }
+        }
     }
 }

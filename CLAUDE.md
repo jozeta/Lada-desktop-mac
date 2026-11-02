@@ -59,6 +59,14 @@ Xcode project) for a release. `Scripts/generate-app-icon.swift` regenerates `App
 - Show measured or reported values only: no invented defaults, estimates or seed data.
 - Only window roots (main window, sheets, the menu-bar popover) call `nordicPageBackground()`; the
   backdrop is translucent, so a section that adds its own copy turns the window opaque again.
+- Bump the version before every commit: `Scripts/bump-version.sh minor` (features) or `patch`
+  (fixes), after writing the CHANGELOG entries under Unreleased. `AppVersionTests` checks that
+  Info.plist, the Xcode project and `AppVersion.swift` agree. Don't tag or publish releases.
+- Machines expose `stats`, `exec` and `copy` only through their `containerId` (from `machine
+  inspect`), not the machine name; reuse the container Files/Terminal views via
+  `FileBrowserTarget` / `TerminalTarget`.
+- New create sheets use `NordicSheet` with `NordicFormField`s, a plain-words `problem` and
+  `NordicCommandPreview`.
 - `Lada.xcodeproj` syncs the whole `Lada/` folder into the app target: add every new file under
   `Lada/Tests/` to the target's `membershipExceptions` in `project.pbxproj`, or the Xcode build fails.
 

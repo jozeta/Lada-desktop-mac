@@ -46,13 +46,48 @@ public enum AccentThemeChoice: String, Codable, CaseIterable, Sendable {
     case nordicFjord = "nordicFjord"
     case arcticTeal = "arcticTeal"
     case slateSteel = "slateSteel"
+    case frostCyan = "frostCyan"
+    case auroraGreen = "auroraGreen"
+    case auroraViolet = "auroraViolet"
+    case lingonberry = "lingonberry"
+    case cloudberry = "cloudberry"
+    case birchGold = "birchGold"
+    case midnightIndigo = "midnightIndigo"
 
     public var displayName: String {
         switch self {
         case .nordicFjord: return "Nordic Fjord Blue"
         case .arcticTeal: return "Arctic Teal"
         case .slateSteel: return "Slate Steel"
+        case .frostCyan: return "Frost Cyan"
+        case .auroraGreen: return "Aurora Green"
+        case .auroraViolet: return "Aurora Violet"
+        case .lingonberry: return "Lingonberry Red"
+        case .cloudberry: return "Cloudberry Orange"
+        case .birchGold: return "Birch Gold"
+        case .midnightIndigo: return "Midnight Indigo"
         }
+    }
+
+    /// One distinct word for the swatch label.
+    public var shortName: String {
+        switch self {
+        case .nordicFjord: return "Fjord"
+        case .arcticTeal: return "Teal"
+        case .slateSteel: return "Slate"
+        case .frostCyan: return "Frost"
+        case .auroraGreen: return "Green"
+        case .auroraViolet: return "Violet"
+        case .lingonberry: return "Lingonberry"
+        case .cloudberry: return "Cloudberry"
+        case .birchGold: return "Birch"
+        case .midnightIndigo: return "Indigo"
+        }
+    }
+
+    /// The choice saved in Settings (read directly, so any view can use it).
+    public static var current: AccentThemeChoice {
+        UserDefaults.standard.string(forKey: "lada.accentThemeChoice").flatMap(AccentThemeChoice.init(rawValue:)) ?? .nordicFjord
     }
 }
 
@@ -66,6 +101,7 @@ public enum NavigationSection: String, Codable, CaseIterable, Identifiable, Send
     case networks = "Networks"
     case volumes = "Volumes"
     case machines = "Machines"
+    case nodeGraph = "Node Graph"
     case registries = "Registries"
     case activity = "Activity"
     case settings = "Settings"

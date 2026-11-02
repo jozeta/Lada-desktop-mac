@@ -13,7 +13,6 @@ public struct MachinesView: View {
     @State private var createVirtualization = false
     @State private var createSetDefault = false
     @State private var createBootImmediately = true
-    @State private var validationMessage: String? = nil
 
     public init(appState: AppState) {
         self.appState = appState
@@ -117,7 +116,6 @@ public struct MachinesView: View {
                 createVirtualization = defaults.virtualization ?? false
                 createSetDefault = false
                 createBootImmediately = true
-                validationMessage = nil
                 showCreateSheet = true
             } label: {
                 Label("Create Machine", systemImage: "plus")
@@ -273,80 +271,115 @@ public struct MachinesView: View {
             bootImmediately: createBootImmediately,
             enableVirtualization: createVirtualization
         )
-        return VStack(alignment: .leading, spacing: 16) {
-            Text("Create Container Machine")
-                .font(NordicTheme.titleFont)
-
-            Form {
-                TextField("Machine Name (e.g. dev-vm)", text: $createName)
-                    .font(NordicTheme.monoFontRegular)
-                    .nordicInfo("Lowercase letters, digits and hyphens. Used with `container machine run -n <name>`.")
-                TextField("Base Image (e.g. alpine:latest, ubuntu:24.04)", text: $createImage)
-                    .font(NordicTheme.monoFontRegular)
-                    .nordicInfo("The Linux image the machine's disk starts from, e.g. alpine:3.22 or ubuntu:24.04.")
-                Stepper(value: $createCPUs, in: 1...32) {
-                    Text(verbatim: "CPUs: \(createCPUs) cores")
+        let nested = appState.capabilities.nestedVirtualization
+        let nestedSupported: Bool = { if case .unsupported = nested { return false }; return true }()
+        return NordicSheet(
+            icon: .machines,
+            title: "Create Machine",
+            subtitle: "A persistent Linux virtual machine with your Mac user and home folder: a place for dev tools and long-lived shells.",
+            primaryTitle: "Create Machine",
+            problem: machineProblem(req),
+            onCancel: { showCreateSheet = false },
+            onPrimary: { createMachine(req) }
+        ) {
+            NordicFormSection(title: "Machine") {
+                NordicFormField(title: "Name", hint: "Lowercase letters, digits and hyphens.",
+                                info: "Open a shell in it later with `container machine run -n <name>`.") {
+                    TextField("dev", text: $createName)
+                        .textFieldStyle(.roundedBorder)
+                        .font(NordicTheme.monoFontRegular)
+                        .accessibilityIdentifier("lada.machines.create.name")
                 }
-                .nordicInfo("Virtual CPUs the machine may use; shared with your Mac, not reserved.")
-                Stepper(value: $createMemoryGB, in: 1...64) {
-                    Text(verbatim: "Memory: \(createMemoryGB) GB")
+                NordicFormField(title: "Linux image", hint: "Type to search images on this Mac and in the Image Library.",
+                                info: "The distribution the machine starts from. Its package manager and tools are what you get in the shell.") {
+                    ImageReferenceField(text: $createImage, placeholder: "alpine:3.22",
+                                        localReferences: appState.images.map(\.fullReference),
+                                        accent: NordicTheme.accent(for: appState.preferences.accentThemeChoice))
+                    NordicChoiceChips(options: ["alpine:3.22", "debian:trixie-slim", "ubuntu:24.04", "fedora:42"], selected: createImage) { createImage = $0 }
                 }
-                .nordicInfo("The most memory the machine can use; taken from your Mac only as needed.")
-                Picker("Home Directory Mount", selection: $createHomeMount) {
-                    ForEach(HomeMountMode.allCases, id: \.rawValue) { mode in
-                        Text(mode.displayTitle).tag(mode)
-                    }
-                }
-                .nordicInfo("Share your Mac home folder into the machine read-write, read-only, or not at all.")
-                Toggle("Boot Machine Immediately", isOn: $createBootImmediately)
-                    .nordicInfo("Start the machine as soon as it is created.")
-                Toggle("Enable Nested Virtualization (--virtualization)", isOn: $createVirtualization)
-                    .nordicInfo("Lets the machine run its own VMs (KVM). Needs an M3 chip or newer.")
-                Toggle("Set as Default Machine (--set-default)", isOn: $createSetDefault)
-                    .nordicInfo("The default machine is used by machine commands that don't name one.")
-            }
-            .nordicFormPanel()
-
-            if let msg = validationMessage {
-                Text(msg)
-                    .font(.system(size: 11))
-                    .foregroundStyle(NordicTheme.statusRed)
             }
 
-            Text(SecretRedactor.formatCommandPreview(executable: "container", arguments: req.buildCLIArguments()))
-                .font(NordicTheme.monoFontSmall)
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .nordicChip()
-
-            HStack {
-                Button("Cancel") { showCreateSheet = false }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Create Machine") {
-                    if let err = ValidationUtils.validateResourceName(req.name, fieldName: "Machine name") {
-                        validationMessage = err
-                        return
+            NordicFormSection(title: "Resources") {
+                HStack(alignment: .top, spacing: NordicTheme.Spacing.xl) {
+                    NordicFormField(title: "CPUs", hint: runtimeDefaultHint(appState.systemProperties.machine.cpus.map { "\($0)" }),
+                                    info: "Virtual CPUs the machine may use. They are shared with your Mac, not reserved.") {
+                        Stepper(value: $createCPUs, in: 1...32) { Text(verbatim: "\(createCPUs) vCPU").monospacedDigit() }
                     }
-                    showCreateSheet = false
-                    Task {
-                        await appState.performOperation(
-                            category: "Machines",
-                            title: "Create Machine \(req.name)",
-                            redactedCommand: SecretRedactor.formatCommandPreview(executable: "container", arguments: req.buildCLIArguments())
-                        ) {
-                            try await appState.runtimeService.createMachine(request: req)
-                            return "Created machine '\(req.name)'."
-                        }
+                    NordicFormField(title: "Memory", hint: runtimeDefaultHint(appState.systemProperties.machine.memoryGB.map { "\($0) GB" }),
+                                    info: "The most memory the machine can use; taken from your Mac only as needed.") {
+                        Stepper(value: $createMemoryGB, in: 1...64) { Text(verbatim: "\(createMemoryGB) GB").monospacedDigit() }
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
-                .disabled(req.name.isEmpty || req.imageReference.isEmpty)
+            }
+
+            NordicFormSection(title: "Sharing & Options") {
+                NordicFormField(title: "Home folder", hint: Self.homeMountExplanation(createHomeMount),
+                                info: "Your Mac home folder appears inside the machine at the same path.") {
+                    Picker("Home folder", selection: $createHomeMount) {
+                        Text("Read-write").tag(HomeMountMode.rw)
+                        Text("Read-only").tag(HomeMountMode.ro)
+                        Text("Not shared").tag(HomeMountMode.none)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                }
+                optionToggle("Start now", detail: "Boot the machine as soon as it's created.", isOn: $createBootImmediately)
+                optionToggle("Make it the default machine", detail: "Used by `container machine` commands that don't name one.", isOn: $createSetDefault)
+                optionToggle("Nested virtualization",
+                             detail: nestedSupported ? "Lets the machine run its own VMs (KVM)." : nested.statusDescription,
+                             isOn: $createVirtualization)
+                    .disabled(!nestedSupported)
+            }
+
+            NordicCommandPreview(arguments: req.buildCLIArguments())
+        }
+    }
+
+    private func optionToggle(_ title: String, detail: String, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 12.5, weight: .semibold))
+                Text(detail).font(.system(size: 11)).foregroundStyle(NordicTheme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(20)
-        .frame(width: 560)
-        .nordicPageBackground()
+        .toggleStyle(.switch)
+    }
+
+    private func runtimeDefaultHint(_ value: String?) -> String? {
+        value.map { "Runtime default: \($0)" }
+    }
+
+    static func homeMountExplanation(_ mode: HomeMountMode) -> String {
+        switch mode {
+        case .rw: return "The machine can read and change files in your Mac home folder."
+        case .ro: return "The machine can read your home folder but not change it."
+        case .none: return "Your home folder isn't visible in the machine."
+        }
+    }
+
+    private func machineProblem(_ req: MachineCreateRequest) -> String? {
+        if req.name.isEmpty { return "Give the machine a name." }
+        if let err = ValidationUtils.validateResourceName(req.name, fieldName: "The name") { return err }
+        if !ValidationUtils.isValidMachineName(req.name) { return "Use lowercase letters, digits and hyphens in the name." }
+        if CreateSheetChecks.nameTaken(req.name, in: appState.machines.map(\.id)) { return "A machine called \(req.name) already exists." }
+        if req.imageReference.isEmpty { return "Choose the Linux image the machine starts from." }
+        return nil
+    }
+
+    private func createMachine(_ req: MachineCreateRequest) {
+        showCreateSheet = false
+        Task {
+            await appState.performOperation(
+                category: "Machines",
+                title: "Create Machine \(req.name)",
+                redactedCommand: SecretRedactor.formatCommandPreview(executable: "container", arguments: req.buildCLIArguments())
+            ) {
+                try await appState.runtimeService.createMachine(request: req)
+                return "Created machine '\(req.name)'."
+            }
+            if appState.machines.contains(where: { $0.id == req.name }) { appState.selectedMachineID = req.name }
+        }
     }
 }

@@ -2,9 +2,47 @@
 
 All notable changes to Lada-desktop-mac are listed here, newest first.
 
-Releases follow the project's git tags. Entries were reconstructed from the commit history.
+From 1.6.0 every commit bumps the version (`Scripts/bump-version.sh`); entries up to 1.5.0 were reconstructed from the commit history.
 
 ## [Unreleased]
+
+## [1.6.0] - 2026-11-02
+
+- Node Graph (Infrastructure): every resource as a node (stacks, containers, machines, images,
+  networks, IP addresses, subnets, volumes, Mac folders, ports, registries) with its own icon,
+  linked by relationship (runs, attached to, has address, in subnet, mounts, publishes, member
+  of, pulled from) and similarity (same image repository). Drag nodes, pan and zoom, hide types,
+  and re-arrange with Force-Directed, Hierarchy, Radial, Circular or By Type layouts; hover for
+  a node's configuration, double-click to open it
+- Machines: a Containers-style inspector (Overview with live charts, Terminal with the machine's
+  real login shell, Files, Logs, Settings with save-and-restart, Inspect), Open in Terminal.app,
+  and state kept per machine. Machine data now comes from `machine inspect` (container ID,
+  image, home mount, user), which `machine list` doesn't report; home mount was always shown
+  as read-write before
+- Universal search in the toolbar: finds containers, stacks, images, machines, volumes,
+  networks, registries, Image Library presets and pages, with type, location and state, in a
+  frosted panel (↑↓, Return, Esc). The old per-list filtering is gone
+- Toolbar: New Container, Pull Image and Build Image removed (⌘N, ⇧⌘N and the menus remain).
+  Refresh waits for a poll in progress and also reloads open logs, folders and stack logs
+- Create Network, Create Volume, Create Machine and Log In to Registry redesigned on one sheet
+  layout: icon header, sections, hints and ⓘ tips, live validation in the footer (duplicate
+  names, overlapping subnets, sizes), command preview with Copy, and the new item selected
+  afterwards. Network suggests a free subnet; Volume shows sizes against the Mac's free space;
+  Machine offers common images and disables nested virtualization where unsupported;
+  Registry explains where to get a token for well-known registries and warns about HTTP
+- ⓘ info tips with hover cards on section headers, Settings controls, machine settings and
+  sheets
+- Dockerfile completion list is a frosted-glass panel with roomier rows and type labels
+- Accent palette: seven new themes (Frost Cyan, Aurora Green, Aurora Violet, Lingonberry,
+  Cloudberry, Birch Gold, Midnight Indigo), chosen from colour swatches. The accent now applies
+  everywhere; several components always used Fjord Blue before
+- Interface Density works: Compact uses smaller controls, tighter panels, shorter rows and a
+  denser sidebar. Settings changes now update the whole window at once
+- Settings → About: version, the runtime and this Mac, Copy Version Info, links and licences
+- Versioning: `Scripts/bump-version.sh` updates Info.plist, the Xcode project, `AppVersion` and
+  this changelog together; a test checks they agree
+- Security: the Terminal.app launcher quotes every argument, so container or machine names and
+  a custom CLI path can't inject shell commands
 
 - Translucent window: the desktop and windows behind Låda show through, blurred, under a lighter
   Nordic tint; panels use a thinner glass so the frost is visible (Reduce Transparency makes both

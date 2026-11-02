@@ -74,26 +74,29 @@ public enum NordicTheme {
 
     // MARK: - Accent & Operational Semantic Colors
 
-    public static func accent(for choice: AccentThemeChoice = .nordicFjord) -> Color {
+    /// The accent colour. Without an argument it is the theme chosen in Settings.
+    public static func accent(for choice: AccentThemeChoice? = nil) -> Color {
+        let (dark, light) = accentRGB(choice ?? .current)
+        return Color(nsColor: NSColor(name: nil) { appearance in
+            let c = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+            return NSColor(srgbRed: c.0, green: c.1, blue: c.2, alpha: 1)
+        })
+    }
+
+    /// (dark mode, light mode) sRGB per theme: lighter in dark mode, deeper in light mode, so
+    /// each keeps contrast against its backdrop.
+    static func accentRGB(_ choice: AccentThemeChoice) -> ((CGFloat, CGFloat, CGFloat), (CGFloat, CGFloat, CGFloat)) {
         switch choice {
-        case .nordicFjord:
-            return Color(nsColor: NSColor(name: nil) { appearance in
-                appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                    ? NSColor(srgbRed: 0.353, green: 0.576, blue: 0.769, alpha: 1.0) // #5A93C4
-                    : NSColor(srgbRed: 0.169, green: 0.357, blue: 0.518, alpha: 1.0) // #2B5B84
-            })
-        case .arcticTeal:
-            return Color(nsColor: NSColor(name: nil) { appearance in
-                appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                    ? NSColor(srgbRed: 0.271, green: 0.604, blue: 0.639, alpha: 1.0) // #459AA3
-                    : NSColor(srgbRed: 0.129, green: 0.420, blue: 0.451, alpha: 1.0) // #216B73
-            })
-        case .slateSteel:
-            return Color(nsColor: NSColor(name: nil) { appearance in
-                appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                    ? NSColor(srgbRed: 0.490, green: 0.569, blue: 0.659, alpha: 1.0)
-                    : NSColor(srgbRed: 0.255, green: 0.318, blue: 0.392, alpha: 1.0)
-            })
+        case .nordicFjord:   return ((0.353, 0.576, 0.769), (0.169, 0.357, 0.518))   // #5A93C4 / #2B5B84
+        case .arcticTeal:    return ((0.271, 0.604, 0.639), (0.129, 0.420, 0.451))   // #459AA3 / #216B73
+        case .slateSteel:    return ((0.490, 0.569, 0.659), (0.255, 0.318, 0.392))
+        case .frostCyan:     return ((0.533, 0.753, 0.816), (0.165, 0.447, 0.533))   // #88C0D0 / #2A7288
+        case .auroraGreen:   return ((0.639, 0.745, 0.549), (0.271, 0.463, 0.243))   // #A3BE8C / #45763E
+        case .auroraViolet:  return ((0.706, 0.557, 0.678), (0.443, 0.302, 0.533))   // #B48EAD / #714D88
+        case .lingonberry:   return ((0.851, 0.431, 0.459), (0.659, 0.208, 0.255))   // #D96E75 / #A83541
+        case .cloudberry:    return ((0.878, 0.569, 0.361), (0.698, 0.361, 0.118))   // #E0915C / #B25C1E
+        case .birchGold:     return ((0.882, 0.737, 0.427), (0.565, 0.427, 0.090))   // #E1BC6D / #906D17
+        case .midnightIndigo: return ((0.553, 0.584, 0.890), (0.255, 0.278, 0.612))  // #8D95E3 / #41479C
         }
     }
 
@@ -205,7 +208,7 @@ public extension View {
     /// a soft shadow (solid when Reduce Transparency is on).
     func nordicPanel(padding: CGFloat = NordicTheme.Spacing.l) -> some View {
         self
-            .padding(padding)
+            .modifier(DensityPadding(base: padding))
             .frame(maxWidth: .infinity, alignment: .leading)
             .nordicSurface()
     }
@@ -400,3 +403,45 @@ public struct NordicSidebarMaterial: NSViewRepresentable {
     public func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
 
+
+
+// MARK: - Density
+
+private struct NordicDensityKey: EnvironmentKey {
+    static let defaultValue: UIDensityMode = .comfortable
+}
+
+public extension EnvironmentValues {
+    /// Settings → Appearance → Interface Density, set once at the window root.
+    var nordicDensity: UIDensityMode {
+        get { self[NordicDensityKey.self] }
+        set { self[NordicDensityKey.self] = newValue }
+    }
+}
+
+public extension UIDensityMode {
+    /// Multiplier for panel insets.
+    var paddingScale: CGFloat { self == .compact ? 0.65 : 1 }
+    var minRowHeight: CGFloat { self == .compact ? 20 : 28 }
+    var controlSize: ControlSize { self == .compact ? .small : .regular }
+}
+
+/// Panel padding that follows the density setting.
+private struct DensityPadding: ViewModifier {
+    let base: CGFloat
+    @Environment(\.nordicDensity) private var density
+    func body(content: Content) -> some View {
+        content.padding(base * density.paddingScale)
+    }
+}
+
+public extension View {
+    /// Applies Interface Density to everything below: control size, list row height, and
+    /// (through `nordicPanel`) panel insets.
+    func nordicDensity(_ density: UIDensityMode) -> some View {
+        self
+            .environment(\.nordicDensity, density)
+            .environment(\.defaultMinListRowHeight, density.minRowHeight)
+            .controlSize(density.controlSize)
+    }
+}

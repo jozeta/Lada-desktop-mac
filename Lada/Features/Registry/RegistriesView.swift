@@ -129,69 +129,108 @@ public struct RegistriesView: View {
     }
 
     private var loginSheet: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Authenticate with Container Registry")
-                .font(NordicTheme.titleFont)
-
-            Form {
-                TextField("Registry Server (e.g. docker.io, ghcr.io, quay.io)", text: $serverInput)
-                    .font(NordicTheme.monoFontRegular)
-                TextField("Username", text: $usernameInput)
-                    .font(NordicTheme.monoFontRegular)
-                SecureField("Password or Personal Access Token", text: $passwordInput)
-                Picker("Transport Scheme", selection: $schemeInput) {
-                    Text("HTTPS").tag("https")
-                    Text("HTTP (Local / Insecure)").tag("http")
-                }
-            }
-            .formStyle(.grouped)
-
-            let previewArgs = [
-                "registry", "login",
-                "--username", usernameInput.isEmpty ? "<username>" : usernameInput,
-                "--password-stdin",
-                "--scheme", schemeInput,
-                serverInput.isEmpty ? "<server>" : serverInput,
-            ]
-            Text(SecretRedactor.formatCommandPreview(executable: "container", arguments: previewArgs))
-                .font(NordicTheme.monoFontSmall)
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(NordicTheme.codeSurface)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-
-            HStack {
-                Button("Cancel") { showLoginSheet = false }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Log In") {
-                    let server = serverInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let user = usernameInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let pass = passwordInput
-                    let scheme = schemeInput
-                    showLoginSheet = false
-                    Task {
-                        await appState.performOperation(
-                            category: "Registries",
-                            title: "Login Registry \(server)",
-                            redactedCommand: "container registry login --username \(user) --password-stdin --scheme \(scheme) \(server)"
-                        ) {
-                            try await appState.runtimeService.loginRegistry(
-                                server: server,
-                                username: user,
-                                password: pass,
-                                scheme: scheme
-                            )
-                            return "Authenticated with '\(server)' as '\(user)'."
-                        }
+        let server = serverInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let user = usernameInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previewArgs = ["registry", "login", "--username", user.isEmpty ? "<username>" : user,
+                           "--password-stdin", "--scheme", schemeInput, server.isEmpty ? "<server>" : server]
+        let existing = appState.registries.first { $0.hostname == server }
+        return NordicSheet(
+            icon: .registries,
+            title: "Log In to a Registry",
+            subtitle: "Sign in to pull private images and push your own. The password goes to the runtime over stdin and is stored in your Keychain.",
+            primaryTitle: existing?.isAuthenticated == true ? "Log In Again" : "Log In",
+            problem: loginProblem(server: server, user: user),
+            onCancel: { passwordInput = ""; showLoginSheet = false },
+            onPrimary: { logIn(server: server, user: user) }
+        ) {
+            NordicFormSection(title: "Registry") {
+                NordicFormField(title: "Server", hint: Self.tokenHint(for: server),
+                                info: "The registry's host name (and port, if it isn't the default), without https://.") {
+                    TextField("ghcr.io", text: $serverInput)
+                        .textFieldStyle(.roundedBorder)
+                        .font(NordicTheme.monoFontRegular)
+                        .accessibilityIdentifier("lada.registries.login.server")
+                    NordicChoiceChips(options: ["docker.io", "ghcr.io", "quay.io", "registry.gitlab.com", "public.ecr.aws"], selected: server) { serverInput = $0 }
+                    if let existing, existing.isAuthenticated {
+                        Text("Already signed in as \(existing.username). Logging in again replaces those credentials.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(NordicTheme.secondaryText)
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
-                .disabled(serverInput.isEmpty || usernameInput.isEmpty || passwordInput.isEmpty)
+            }
+            NordicFormSection(title: "Credentials") {
+                NordicFormField(title: "Username") {
+                    TextField("your-user", text: $usernameInput)
+                        .textFieldStyle(.roundedBorder)
+                        .font(NordicTheme.monoFontRegular)
+                        .accessibilityIdentifier("lada.registries.login.username")
+                }
+                NordicFormField(title: "Password or access token",
+                                hint: "Prefer an access token with only the permissions you need; you can revoke it without changing your password.",
+                                info: "Never shown in command previews or logs, and never passed as a command-line argument.") {
+                    SecureField("token", text: $passwordInput)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityIdentifier("lada.registries.login.password")
+                }
+            }
+            NordicFormSection(title: "Connection") {
+                NordicFormField(title: "Scheme",
+                                hint: schemeInput == "http" ? "HTTP sends your credentials unencrypted. Use it only for a registry on this Mac or a trusted local network." : "Encrypted. Use this for every registry on the internet.",
+                                info: "How Låda's runtime connects to the registry.") {
+                    Picker("Scheme", selection: $schemeInput) {
+                        Text("HTTPS").tag("https")
+                        Text("HTTP (local, insecure)").tag("http")
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                }
+            }
+            NordicCommandPreview(arguments: previewArgs)
+        }
+    }
+
+    /// Where to get a token, for the well-known registries.
+    static func tokenHint(for server: String) -> String {
+        switch server {
+        case "docker.io": return "Docker Hub: create a personal access token under Account settings → Personal access tokens."
+        case "ghcr.io": return "GitHub: use a personal access token (classic) with read:packages, plus write:packages to push."
+        case "quay.io": return "Quay: use a robot account, or an encrypted password from Account settings."
+        case "registry.gitlab.com": return "GitLab: use a personal or deploy token with read_registry (and write_registry to push)."
+        case "public.ecr.aws": return "Amazon ECR Public: the username is AWS and the password a token from `aws ecr-public get-login-password`."
+        default: return "For example docker.io, ghcr.io, or localhost:5000 for a registry on this Mac."
+        }
+    }
+
+    /// A registry host: name or IP, optional port, no scheme or path.
+    static func isValidRegistryHost(_ host: String) -> Bool {
+        host.range(of: #"^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]{1,5})?$"#, options: .regularExpression) != nil
+    }
+
+    private func loginProblem(server: String, user: String) -> String? {
+        if server.isEmpty { return "Enter the registry's server." }
+        if server.contains("://") { return "Leave out http:// or https://; choose the scheme below." }
+        if !Self.isValidRegistryHost(server) { return "That doesn't look like a registry host, e.g. ghcr.io or localhost:5000." }
+        if user.isEmpty { return "Enter your username." }
+        if passwordInput.isEmpty { return "Enter your password or access token." }
+        return nil
+    }
+
+    private func logIn(server: String, user: String) {
+        let pass = passwordInput
+        let scheme = schemeInput
+        // Don't keep the secret in view state longer than needed.
+        passwordInput = ""
+        showLoginSheet = false
+        Task {
+            await appState.performOperation(
+                category: "Registries",
+                title: "Login Registry \(server)",
+                redactedCommand: "container registry login --username \(user) --password-stdin --scheme \(scheme) \(server)"
+            ) {
+                try await appState.runtimeService.loginRegistry(server: server, username: user, password: pass, scheme: scheme)
+                return "Authenticated with '\(server)' as '\(user)'."
             }
         }
-        .padding(20)
-        .frame(width: 500)
     }
 }

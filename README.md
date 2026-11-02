@@ -65,7 +65,28 @@ Designed with a **Nordic frosted-glass** look (translucent window, glass panels,
 - **Build & Run**: Edit the container name, ports, environment, storage, CPUs and memory with live name and port conflict checks, then build with live BuildKit output and run, or open the settings in the Create Container wizard.
 - **Drag and Drop**: Drop a `Dockerfile`, `Containerfile`, `docker-compose.yml` or project folder anywhere on the window.
 
-### 8. Menu Bar Popover
+### 8. Machines
+![Machines](docs/screenshots/machines.png)
+
+- **Machine Inspector**: like a container's, with **Overview** (details from `machine inspect`, live CPU, memory, network and disk charts, Run a Command), **Terminal** (the machine's real login shell as your user, via `container machine run -i -t`), **Files** (browse, edit, upload and download through the machine's container), **Logs** (machine or boot log), **Settings** (CPUs, memory, home-folder sharing, nested virtualization; save, or save and restart) and **Inspect** (raw JSON).
+- **Open in Terminal.app** for a full native terminal, and state kept per machine when you switch.
+
+### 9. Node Graph
+![Node Graph](docs/screenshots/node-graph.png)
+
+- **Every Resource on One Canvas**: stacks, containers, machines, images, networks, IP addresses, subnets, volumes, Mac folders, ports and registries, each with its own icon and colour.
+- **Relationships**: *runs* (image), *attached to* (network), *has address* and *in subnet*, *mounts* (volume or Mac folder), *publishes* (port), *member of* (stack), *pulled from* (registry), and *same repository* for containers built from different tags of one image.
+- **Layouts**: Force-Directed (Fruchterman–Reingold), Hierarchy (Sugiyama-style layers with crossing reduction), Radial (rings by distance from the selected node), Circular and By Type; overlapping nodes are always pushed apart.
+- **Interactive**: drag nodes (they keep their place), pan and zoom, hide resource types, hover for a node's configuration, and double-click to open it.
+
+### 10. Universal Search, Info Tips and Settings
+- **Search Everything** from the toolbar: containers, stacks, images, machines, volumes, networks, registries, Image Library presets and pages, each with its type, where it lives and its state. ↑↓ to move, Return to open.
+- **ⓘ Info Tips**: hover cards explain sections, settings and form fields across the app.
+- **Create Sheets**: networks, volumes, machines and registry logins share one layout with live validation (duplicate names, overlapping subnets, sizes vs. free space), a command preview and plain-language hints.
+- **Appearance**: ten accent themes shown as swatches, light/dark/system, and an Interface Density setting (Compact: smaller controls, tighter panels and rows).
+- **About**: version, runtime and Mac details with Copy Version Info.
+
+### 11. Menu Bar Popover
 - A `MenuBarExtra` with runtime status, running containers with live CPU and memory, and one-click Open in Browser, Terminal, Start and Stop, plus New Container and Stacks.
 
 ---
@@ -85,7 +106,7 @@ Designed with a **Nordic frosted-glass** look (translucent window, glass panels,
 | **Image Builds** | `container build`, `container builder status \| stop` | **Supported** — In the Dockerfile Editor: code completion, linter, live BuildKit output, build and run |
 | **Virtual Networks (`vmnet`)** | `container network list \| create \| inspect \| delete \| prune` | **Supported** — Isolated NAT networks, IPv4/IPv6 CIDR validation, attached container topology |
 | **Named Volumes & VirtioFS** | `container volume list \| create \| inspect \| delete \| prune` | **Supported** — Ext4 sparse volume sizing (`-s`), journal mode (`ordered`, `writeback`, `journal`), Finder reveal |
-| **Container Machines** | `container machine list \| create \| inspect \| stop \| delete \| set \| set-default \| logs \| run` (start = `machine run … true`); `machine.*` defaults from `system property list` | **Supported** — Full lifecycle, CPU/RAM/Home-Mount (`rw`/`ro`/`none`) reconfiguration, console logs |
+| **Container Machines** | `container machine list \| create \| inspect \| stop \| delete \| set \| set-default \| logs \| run` (start = `machine run … true`); `machine.*` defaults from `system property list`; `stats`, `exec` and `copy` on the machine's `containerId` | **Supported** — Inspector with live charts, login-shell terminal, file browser, logs, settings (save and restart), Terminal.app |
 | **OCI Registries** | `container registry login --password-stdin \| logout \| list` | **Supported** — macOS Keychain (`Security.framework`) credential storage + stdin piping (never passed in CLI argv) |
 | **Nested Virtualization** | `--virtualization` (`CONFIG_KVM=y` on Apple silicon M3+) | **Supported (Hardware-Gated)** — Automatically enabled on M3/M4/M5 chips; explained when unavailable |
 | **Path Masking** | `--masked-path`, `--read-only-path` | **Experimental** — Clearly badged as experimental in `container` 1.6.1 |
@@ -106,6 +127,8 @@ Lada/
 │   ├── AppState.swift                     # @MainActor state coordinator, single poll loop & drag-and-drop
 │   ├── ContainerWorkspaces.swift          # Per-container inspector state (tab, terminal, files, logs)
 │   ├── StackWorkspace.swift               # The Stacks screen's compose file and deploy state
+│   ├── UniversalSearchPanel.swift         # Toolbar search results panel
+│   ├── AppVersion.swift                   # Version shown in About (kept in sync by Scripts/bump-version.sh)
 │   └── MainWindowView.swift               # NavigationSplitView shell, global drop overlay, status bar
 ├── Core/
 │   ├── Models/                            # Typed models & deterministic CLI argument builders
@@ -114,6 +137,10 @@ Lada/
 │   │   ├── ComposeParser.swift            # Multi-container docker-compose.yml parser & topological planner
 │   │   ├── ComposeDocument.swift          # Edits one service block at a time (two-way Stacks sync)
 │   │   ├── DockerfileCompletionEngine.swift # Context-aware Dockerfile completions
+│   │   ├── ResourceGraph.swift            # Node Graph model, relationships and layout algorithms
+│   │   ├── UniversalSearch.swift          # Search across every resource
+│   │   ├── CreateSheetHelpers.swift       # Subnet overlap/suggestion, size parsing, name checks
+│   │   ├── ExternalTerminalScript.swift   # Quoted Terminal.app launcher scripts
 │   │   ├── DiskSpace.swift                # Host and per-container disk measurements for the donuts
 │   │   ├── ImageReferenceSuggester.swift  # Image name autocomplete
 │   │   ├── SecretGenerator.swift          # Random database passwords for presets and templates
@@ -156,16 +183,21 @@ Lada/
 │   ├── Editor/DockerfileEditorView.swift  # Dockerfile Editor: completion, linter, build & run
 │   ├── Networks/NetworksView.swift        # vmnet virtual network manager
 │   ├── Volumes/VolumesView.swift          # Ext4 sparse volume & VirtioFS manager
-│   ├── Machines/MachinesView.swift        # Linux container machine lifecycle & resource controls
+│   ├── Machines/MachinesView.swift        # Machine list and Create Machine
+│   ├── Machines/MachineDetailView.swift   # Machine inspector (overview, terminal, files, logs, settings)
+│   ├── NodeGraph/NodeGraphView.swift      # Relationship graph canvas
 │   ├── Registry/RegistriesView.swift      # OCI registry authentication manager
 │   ├── MenuBar/MenuBarPopoverView.swift   # macOS menu bar quick-control popover
-│   └── Settings/SettingsView.swift        # Activity log + 8-tab Settings
+│   └── Settings/SettingsView.swift        # Activity log + Settings (incl. About)
 ├── Shared/
 │   ├── DesignSystem/NordicTheme.swift     # Tokens, frosted glass, backdrop, syntax palette
 │   ├── Icons/LadaIcons.swift              # Custom 1.5pt geometric SwiftUI Shape vector icons
 │   ├── Components/ReusableComponents.swift # Charts, headers, badges, editors
 │   ├── Components/MasonryLayout.swift     # Gap-free packed panel layout
 │   ├── Components/NordicDonutChart.swift  # Hollow pie chart for disk space
+│   ├── Components/NordicSheet.swift       # Shared create-sheet layout, fields, command preview
+│   ├── Components/NordicInfoTip.swift     # ⓘ hover cards
+│   ├── Components/FloatingGlassPanel.swift # Frosted floating panels (completion, search)
 │   ├── Components/ImageReferenceField.swift # Image field with autocomplete
 │   └── Accessibility/AccessibilityIdentifiers.swift
 ├── Resources/
@@ -199,6 +231,9 @@ swift test
 # README screenshots (Mock Sandbox data), written as readme-<name>-<light|dark>.png:
 LADA_SNAPSHOT_DIR=/tmp/lada-shots swift test --filter testReadmeScreenshots
 ```
+
+### Versioning
+Every commit bumps the version: `Scripts/bump-version.sh minor` for features, `patch` for fixes. It updates `Lada/Resources/Info.plist`, the Xcode project and `Lada/App/AppVersion.swift`, and turns the CHANGELOG's Unreleased section into the new version's section.
 
 ### Package Native `Lada.app` Bundle & `.dmg`
 ```bash

@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import SwiftUI
 import AppKit
 @preconcurrency import UserNotifications
@@ -100,12 +101,15 @@ public final class AppState: ObservableObject {
     }
     /// Per-machine inspector state (tab, terminal session, files, logs).
     public let machineWorkspaces = MachineWorkspaceStore()
+    /// Node Graph layout, filters and zoom (kept while you visit other pages).
+    public let nodeGraph = NodeGraphState()
     @Published public var selectedMachineID: String? = nil
 
     @Published public var registries: [RegistryModel] = []
     @Published public var activityEvents: [ActivityEvent] = []
 
     private var pollingTask: Task<Void, Never>?
+    private var preferencesObserver: AnyCancellable?
     private var appActivityObserversInstalled: Bool = false
     private var adaptivePollTickCount: Int = 0
 
@@ -131,6 +135,11 @@ public final class AppState: ObservableObject {
         self.capabilities = initialService.getCapabilities(installation: initialInstall, host: detectedHost)
         self.systemStatus = RuntimeSystemStatus(state: .missingCLI)
         self.selectedSection = resolvedPreferences.defaultLandingSection
+
+        // Settings changes (accent, density, appearance) re-render every view, not only Settings.
+        preferencesObserver = resolvedPreferences.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
 
         loadPersistedBuildHistory()
         self.prerequisites = healthService.evaluatePrerequisites(

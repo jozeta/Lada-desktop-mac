@@ -75,6 +75,8 @@ public struct MainWindowView: View {
             .id(appState.createContainerInitialRequest?.name ?? "default-create-sheet")
         }
         .preferredColorScheme(appState.preferences.appearanceMode.colorScheme)
+        .nordicDensity(appState.preferences.uiDensityMode)
+        .tint(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
         .onDrop(of: [.fileURL, .utf8PlainText], isTargeted: $isDockerfileDropTargeted) { providers in
             handleWindowDrop(providers: providers)
         }
@@ -199,6 +201,7 @@ public struct MainWindowView: View {
                     sidebarRow(for: .networks, icon: .networks, badge: appState.networks.isEmpty ? nil : "\(appState.networks.count)")
                     sidebarRow(for: .volumes, icon: .volumes, badge: appState.volumes.isEmpty ? nil : "\(appState.volumes.count)")
                     sidebarRow(for: .machines, icon: .machines, badge: appState.machines.isEmpty ? nil : "\(appState.machines.count)")
+                    sidebarRow(for: .nodeGraph, icon: .nodeGraph, badge: nil)
                     sidebarRow(for: .registries, icon: .registries, badge: appState.registries.isEmpty ? nil : "\(appState.registries.count)")
 
                     sidebarGroup("System")
@@ -311,6 +314,8 @@ public struct MainWindowView: View {
             VolumesView(appState: appState)
         case .machines:
             MachinesView(appState: appState)
+        case .nodeGraph:
+            NodeGraphView(appState: appState)
         case .registries:
             RegistriesView(appState: appState)
         case .activity:
@@ -481,6 +486,7 @@ private struct SidebarNavRow: View {
     let accent: Color
     let action: () -> Void
     @State private var hovered = false
+    @Environment(\.nordicDensity) private var density
 
     var body: some View {
         Button(action: action) {
@@ -500,7 +506,7 @@ private struct SidebarNavRow: View {
                 }
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 6.5)
+            .padding(.vertical, density == .compact ? 3.5 : 6.5)
             .background(
                 RoundedRectangle(cornerRadius: NordicTheme.Radius.control, style: .continuous)
                     .fill(isSelected ? accent.opacity(0.14) : (hovered ? NordicTheme.borderSubtle.opacity(0.55) : .clear))

@@ -151,7 +151,8 @@ public struct SettingsView: View {
         ("appearance", "Appearance", "paintbrush"),
         ("notifications", "Notifications", "bell"),
         ("diagnostics", "Diagnostics", "stethoscope"),
-        ("advanced", "Advanced", "wrench.and.screwdriver")
+        ("advanced", "Advanced", "wrench.and.screwdriver"),
+        ("about", "About", "info.circle")
     ]
 
     public init(appState: AppState, initialTab: String = "runtime") {
@@ -203,6 +204,8 @@ public struct SettingsView: View {
                         diagnosticsSection
                     case "advanced":
                         advancedSection
+                    case "about":
+                        AboutSection(appState: appState)
                     default:
                         runtimeSection
                     }
@@ -430,18 +433,17 @@ public struct SettingsView: View {
                     }
                 }
                 .nordicInfo("Follow macOS, or always use light or dark.")
-                Picker("Accent Palette", selection: $prefs.accentThemeChoiceRaw) {
-                    ForEach(AccentThemeChoice.allCases, id: \.rawValue) { choice in
-                        Text(choice.displayName).tag(choice.rawValue)
-                    }
+                LabeledContent {
+                    AccentSwatchGrid(selection: $prefs.accentThemeChoiceRaw)
+                } label: {
+                    Text("Accent Palette").nordicInfo("The colour used for selection, buttons, charts and highlights.")
                 }
-                .nordicInfo("The colour used for selection, buttons and charts.")
                 Picker("Interface Density", selection: $prefs.uiDensityModeRaw) {
                     ForEach(UIDensityMode.allCases, id: \.rawValue) { density in
                         Text(density.displayName).tag(density.rawValue)
                     }
                 }
-                .nordicInfo("How much space rows and panels use.")
+                .nordicInfo("Compact uses smaller controls, tighter panels and shorter rows, to fit more on screen.")
             }
             .nordicFormPanel()
         }
@@ -552,6 +554,153 @@ public struct SettingsView: View {
                     .nordicInfo("Without the CLI, Låda shows a simulated runtime so you can explore the app. Nothing is created on your Mac.")
             }
             .nordicFormPanel()
+        }
+    }
+}
+
+
+/// Accent themes as colour swatches (each shown in the current light/dark appearance).
+struct AccentSwatchGrid: View {
+    @Binding var selection: String
+
+    var body: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(64), spacing: 8), count: 5), alignment: .leading, spacing: 10) {
+            ForEach(AccentThemeChoice.allCases, id: \.rawValue) { choice in
+                let selected = selection == choice.rawValue
+                Button {
+                    selection = choice.rawValue
+                } label: {
+                    VStack(spacing: 4) {
+                        ZStack {
+                            Circle().fill(NordicTheme.accent(for: choice)).frame(width: 26, height: 26)
+                            if selected {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(.white)
+                            }
+                        }
+                        .overlay(Circle().strokeBorder(selected ? NordicTheme.primaryText.opacity(0.7) : .clear, lineWidth: 2).frame(width: 32, height: 32))
+                        .frame(width: 34, height: 34)
+                        Text(choice.shortName)
+                            .font(.system(size: 10.5, weight: selected ? .semibold : .regular))
+                            .foregroundStyle(selected ? NordicTheme.primaryText : NordicTheme.secondaryText)
+                            .lineLimit(1)
+                    }
+                    .frame(width: 64)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(choice.displayName)
+                .accessibilityLabel(choice.displayName)
+                .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+            }
+        }
+    }
+}
+
+
+/// Settings → About: the app's version, the runtime it talks to, this Mac, and where the code
+/// and licences live.
+struct AboutSection: View {
+    @ObservedObject var appState: AppState
+    @State private var copied = false
+
+    private var accent: Color { NordicTheme.accent(for: appState.preferences.accentThemeChoice) }
+
+    private var versionReport: String {
+        let host = appState.hostEnvironment
+        return """
+        Låda \(AppVersion.display)
+        container CLI \(appState.installation.cliVersion?.description ?? "not installed")
+        Runtime: \(appState.systemStatus.state.displayTitle)
+        macOS \(host.macOSVersionString) · \(host.cpuBrandString) (\(host.cpuArchitecture))
+        """
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 18) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous).fill(accent.opacity(0.16))
+                    LadaIcon(.appIdentity, size: 44, strokeWidth: 2).foregroundStyle(accent)
+                }
+                .frame(width: 84, height: 84)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Låda")
+                        .font(.system(size: 26, weight: .bold))
+                        .foregroundStyle(NordicTheme.primaryText)
+                    Text("Apple Container Studio")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(NordicTheme.secondaryText)
+                    Text("Version \(AppVersion.display)")
+                        .font(.system(size: 12.5).monospacedDigit())
+                        .foregroundStyle(NordicTheme.primaryText)
+                        .textSelection(.enabled)
+                        .accessibilityIdentifier("lada.about.version")
+                }
+                Spacer()
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .nordicSurface()
+
+            Text("A native Mac app for Apple's `container` runtime: containers, images, stacks, machines, networks and volumes, with live telemetry. Låda (Swedish for \u{201C}box\u{201D}) runs Apple's own CLI and never changes its binaries or data.")
+                .font(.system(size: 12.5))
+                .foregroundStyle(NordicTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            NordicSectionHeader("This Setup", info: "Useful in a bug report. Copy puts all of it on the clipboard.")
+            Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 8) {
+                row("Låda", AppVersion.display)
+                row("container CLI", appState.installation.cliVersion.map { "v\($0.description)" } ?? "Not installed")
+                row("CLI path", appState.installation.executablePath ?? "—")
+                row("Runtime", appState.systemStatus.state.displayTitle)
+                row("macOS", appState.hostEnvironment.macOSVersionString)
+                row("Chip", "\(appState.hostEnvironment.cpuBrandString) (\(appState.hostEnvironment.cpuArchitecture))")
+            }
+            .font(.system(size: 12))
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .nordicSurface()
+
+            HStack(spacing: 10) {
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(versionReport, forType: .string)
+                    copied = true
+                } label: {
+                    Label(copied ? "Copied" : "Copy Version Info", systemImage: copied ? "checkmark" : "doc.on.doc")
+                }
+                Button {
+                    if let url = URL(string: "https://github.com/jozeta/Lada-desktop-mac") { NSWorkspace.shared.open(url) }
+                } label: {
+                    Label("Source Code", systemImage: "chevron.left.forwardslash.chevron.right")
+                }
+                .help("github.com/jozeta/Lada-desktop-mac")
+                Button {
+                    if let url = URL(string: "https://github.com/apple/container") { NSWorkspace.shared.open(url) }
+                } label: {
+                    Label("Apple container", systemImage: "shippingbox")
+                }
+                .help("github.com/apple/container")
+            }
+            .controlSize(.small)
+
+            NordicSectionHeader("Licences")
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Låda is released under the MIT License. Copyright © 2026 Låda Contributors.")
+                Text("Apple's `container` runtime is a separate project under the Apache License 2.0; Låda runs it but doesn't include it.")
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(NordicTheme.secondaryText)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func row(_ label: String, _ value: String) -> some View {
+        GridRow {
+            Text(label).foregroundStyle(NordicTheme.secondaryText)
+            Text(value).font(NordicTheme.monoFontRegular).textSelection(.enabled)
         }
     }
 }

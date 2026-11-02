@@ -56,7 +56,7 @@ final class ViewSnapshotTests: XCTestCase {
     func testSettingsSnapshots() async throws {
         _ = try outputDirectory()
         let state = await makeAppState()
-        for tab in ["general", "runtime", "resources", "appearance", "notifications", "diagnostics", "advanced"] {
+        for tab in ["general", "runtime", "resources", "appearance", "notifications", "diagnostics", "advanced", "about"] {
             try snapshot(SettingsView(appState: state, initialTab: tab), name: "settings-\(tab)")
         }
     }
@@ -141,5 +141,12 @@ final class ViewSnapshotTests: XCTestCase {
 
         state.selectedSection = .dockerfileEditor
         try snapshot(MainWindowView(appState: state), name: "readme-dockerfile-editor", size: size)
+
+        state.selectedSection = .machines
+        state.selectedMachineID = state.machines.first?.id
+        try snapshot(MainWindowView(appState: state), name: "readme-machines", size: size)
+
+        state.selectedSection = .nodeGraph
+        try snapshot(MainWindowView(appState: state), name: "readme-node-graph", size: size, settle: 1.5)
     }
 }

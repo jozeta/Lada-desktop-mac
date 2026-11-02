@@ -18,6 +18,11 @@ public enum LadaIconKind: String, CaseIterable, Sendable {
     case setupDiagnostics
     case activity
     case settings
+    case nodeGraph
+    case subnet
+    case ipAddress
+    case port
+    case hostFolder
 }
 
 public struct LadaIcon: View {
@@ -276,6 +281,60 @@ public struct LadaIcon: View {
                     path.move(to: CGPoint(x: knobX, y: y - 2.2))
                     path.addLine(to: CGPoint(x: knobX, y: y + 2.2))
                 }
+
+            case .nodeGraph:
+                // Three linked nodes: a hub with two satellites
+                let hub = CGPoint(x: rect.minX + rect.width * 0.30, y: rect.midY)
+                let a = CGPoint(x: rect.maxX - rect.width * 0.16, y: rect.minY + rect.height * 0.18)
+                let b = CGPoint(x: rect.maxX - rect.width * 0.16, y: rect.maxY - rect.height * 0.18)
+                let r = rect.width * 0.15, rs = rect.width * 0.12
+                path.addEllipse(in: CGRect(x: hub.x - r, y: hub.y - r, width: r * 2, height: r * 2))
+                path.addEllipse(in: CGRect(x: a.x - rs, y: a.y - rs, width: rs * 2, height: rs * 2))
+                path.addEllipse(in: CGRect(x: b.x - rs, y: b.y - rs, width: rs * 2, height: rs * 2))
+                path.move(to: CGPoint(x: hub.x + r * 0.8, y: hub.y - r * 0.6)); path.addLine(to: CGPoint(x: a.x - rs * 0.8, y: a.y + rs * 0.6))
+                path.move(to: CGPoint(x: hub.x + r * 0.8, y: hub.y + r * 0.6)); path.addLine(to: CGPoint(x: b.x - rs * 0.8, y: b.y - rs * 0.6))
+                path.move(to: CGPoint(x: a.x, y: a.y + rs)); path.addLine(to: CGPoint(x: b.x, y: b.y - rs))
+
+            case .subnet:
+                // An address block: a frame split into a 2×2 range
+                let r = min(rect.width, rect.height) * 0.12
+                path.addRoundedRect(in: rect, cornerSize: CGSize(width: r, height: r))
+                path.move(to: CGPoint(x: rect.midX, y: rect.minY)); path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+                path.move(to: CGPoint(x: rect.minX, y: rect.midY)); path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+
+            case .ipAddress:
+                // A location pin with a dot: one address
+                let top = CGPoint(x: rect.midX, y: rect.minY)
+                let radius = rect.width * 0.34
+                let center = CGPoint(x: rect.midX, y: top.y + radius)
+                path.addArc(center: center, radius: radius, startAngle: .degrees(150), endAngle: .degrees(30), clockwise: false)
+                path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+                path.closeSubpath()
+                let dot = radius * 0.32
+                path.addEllipse(in: CGRect(x: center.x - dot, y: center.y - dot, width: dot * 2, height: dot * 2))
+
+            case .port:
+                // A socket: plug outline with two pins
+                let body = CGRect(x: rect.minX + rect.width * 0.12, y: rect.minY + rect.height * 0.30, width: rect.width * 0.76, height: rect.height * 0.58)
+                path.addRoundedRect(in: body, cornerSize: CGSize(width: 2, height: 2))
+                for f in [0.36, 0.64] {
+                    let x = rect.minX + rect.width * f
+                    path.move(to: CGPoint(x: x, y: rect.minY + rect.height * 0.08)); path.addLine(to: CGPoint(x: x, y: body.minY))
+                }
+                path.move(to: CGPoint(x: rect.midX - rect.width * 0.12, y: body.midY + 1)); path.addLine(to: CGPoint(x: rect.midX + rect.width * 0.12, y: body.midY + 1))
+
+            case .hostFolder:
+                // A folder with a tab
+                let tabW = rect.width * 0.40
+                let top = rect.minY + rect.height * 0.18
+                path.move(to: CGPoint(x: rect.minX, y: rect.maxY - 1))
+                path.addLine(to: CGPoint(x: rect.minX, y: top))
+                path.addLine(to: CGPoint(x: rect.minX + tabW, y: top))
+                path.addLine(to: CGPoint(x: rect.minX + tabW + rect.width * 0.10, y: top + rect.height * 0.14))
+                path.addLine(to: CGPoint(x: rect.maxX, y: top + rect.height * 0.14))
+                path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - 1))
+                path.closeSubpath()
+                path.move(to: CGPoint(x: rect.minX, y: top + rect.height * 0.30)); path.addLine(to: CGPoint(x: rect.maxX, y: top + rect.height * 0.30))
             }
 
             context.stroke(path, with: .foreground, style: style)

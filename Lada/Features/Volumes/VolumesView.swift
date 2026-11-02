@@ -7,9 +7,10 @@ public struct VolumesView: View {
     @State private var confirmPruneUnused = false
 
     @State private var createName = ""
-    @State private var createSize = "512M"
+    @State private var createSize = ""
     @State private var createJournalMode: Ext4JournalMode = .ordered
-    @State private var validationMessage: String? = nil
+    @State private var createJournalSize = ""
+    @State private var createLabels: [KeyValueEntry] = []
 
     public init(appState: AppState) {
         self.appState = appState
@@ -138,9 +139,10 @@ public struct VolumesView: View {
 
             Button {
                 createName = ""
-                createSize = "512M"
+                createSize = ""
                 createJournalMode = .ordered
-                validationMessage = nil
+                createJournalSize = ""
+                createLabels = []
                 showCreateSheet = true
             } label: {
                 Label("Create Volume", systemImage: "plus")
@@ -328,65 +330,113 @@ public struct VolumesView: View {
         let req = VolumeCreateRequest(
             name: createName.trimmingCharacters(in: .whitespacesAndNewlines),
             sizeSpec: createSize.trimmingCharacters(in: .whitespacesAndNewlines),
-            journalMode: createJournalMode
+            journalMode: createJournalMode,
+            journalSize: createJournalSize.trimmingCharacters(in: .whitespacesAndNewlines),
+            labels: createLabels
         )
-        return VStack(alignment: .leading, spacing: 16) {
-            Text("Create Named Volume")
-                .font(NordicTheme.titleFont)
-
-            Form {
-                TextField("Volume Name (e.g. pgdata)", text: $createName)
-                    .font(NordicTheme.monoFontRegular)
-                TextField("Sparse Size (-s, e.g. 512M, 5G, 20G)", text: $createSize)
-                    .font(NordicTheme.monoFontRegular)
-                Picker("Ext4 Journal Mode (--opt journal=...)", selection: $createJournalMode) {
-                    ForEach(Ext4JournalMode.allCases, id: \.rawValue) { mode in
-                        Text(mode.displayDescription).tag(mode)
-                    }
+        let sizeBytes = ByteSizeSpec.bytes(req.sizeSpec)
+        let free = appState.hostDiskSpace?.availableBytes
+        return NordicSheet(
+            icon: .volumes,
+            title: "Create Volume",
+            subtitle: "Storage that outlives containers. Mount it into a container to keep databases, uploads and caches.",
+            primaryTitle: "Create Volume",
+            problem: volumeProblem(req),
+            onCancel: { showCreateSheet = false },
+            onPrimary: { createVolume(req) }
+        ) {
+            NordicFormSection(title: "Volume") {
+                NordicFormField(title: "Name", hint: "Lowercase letters, digits, '.', '-' or '_'. Mount it with -v <name>:/path.",
+                                info: "The volume's name. Containers mount it with `container run -v <name>:/path/in/container`.") {
+                    TextField("pgdata", text: $createName)
+                        .textFieldStyle(.roundedBorder)
+                        .font(NordicTheme.monoFontRegular)
+                        .accessibilityIdentifier("lada.volumes.create.name")
                 }
-            }
-            .formStyle(.grouped)
-
-            if let msg = validationMessage {
-                Text(msg)
-                    .font(.system(size: 11))
-                    .foregroundStyle(NordicTheme.statusRed)
-            }
-
-            Text(SecretRedactor.formatCommandPreview(executable: "container", arguments: req.buildCLIArguments()))
-                .font(NordicTheme.monoFontSmall)
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(NordicTheme.codeSurface)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-
-            HStack {
-                Button("Cancel") { showCreateSheet = false }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Create Volume") {
-                    if let err = ValidationUtils.validateVolumeName(req.name) {
-                        validationMessage = err
-                        return
+                NordicFormField(title: "Size",
+                                info: "The volume is a sparse ext4 disk image: this is the most it can hold, but it only takes space on your Mac as data is written. Leave empty for the runtime's default.") {
+                    HStack {
+                        TextField("runtime default", text: $createSize)
+                            .textFieldStyle(.roundedBorder)
+                            .font(NordicTheme.monoFontRegular)
+                            .frame(width: 150)
+                        NordicChoiceChips(options: ["1G", "5G", "20G", "50G", "100G"], selected: createSize.uppercased()) { createSize = $0 }
                     }
-                    showCreateSheet = false
-                    Task {
-                        await appState.performOperation(
-                            category: "Volumes",
-                            title: "Create Volume \(req.name)",
-                            redactedCommand: SecretRedactor.formatCommandPreview(executable: "container", arguments: req.buildCLIArguments())
-                        ) {
-                            try await appState.runtimeService.createVolume(request: req)
-                            return "Created volume '\(req.name)'."
+                    Group {
+                        if let sizeBytes, let free, sizeBytes > free {
+                            Text("Larger than this Mac's free space (\(NordicFormat.bytes(fromByteCount: free, countStyle: .file))). That's allowed, since the volume only grows as it's filled, but it can't be filled completely.")
+                                .foregroundStyle(NordicTheme.statusAmber)
+                        } else if let free {
+                            Text("Uses space only as data is written. This Mac has \(NordicFormat.bytes(fromByteCount: free, countStyle: .file)) free.")
+                                .foregroundStyle(NordicTheme.secondaryText)
+                        } else {
+                            Text("Uses space only as data is written.").foregroundStyle(NordicTheme.secondaryText)
                         }
                     }
+                    .font(.system(size: 11))
+                    .fixedSize(horizontal: false, vertical: true)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
-                .disabled(req.name.isEmpty)
+                NordicFormField(title: "Journal", hint: Self.journalExplanation(createJournalMode),
+                                info: "How the ext4 filesystem protects data against a crash. Ordered suits almost everything.") {
+                    Picker("Journal", selection: $createJournalMode) {
+                        Text("Ordered").tag(Ext4JournalMode.ordered)
+                        Text("Writeback").tag(Ext4JournalMode.writeback)
+                        Text("Full journal").tag(Ext4JournalMode.journal)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                }
             }
+
+            DisclosureGroup("Advanced") {
+                VStack(alignment: .leading, spacing: NordicTheme.Spacing.l) {
+                    NordicFormField(title: "Journal size", hint: "Optional, e.g. 64M. Leave empty for the default.",
+                                    info: "Space reserved for the filesystem journal.") {
+                        TextField("default", text: $createJournalSize)
+                            .textFieldStyle(.roundedBorder)
+                            .font(NordicTheme.monoFontRegular)
+                            .frame(width: 150)
+                    }
+                    NordicKeyValueEditor(title: "Labels", keyPlaceholder: "key", valuePlaceholder: "value", entries: $createLabels)
+                }
+                .padding(.top, NordicTheme.Spacing.s)
+            }
+            .font(.system(size: 12.5, weight: .semibold))
+
+            NordicCommandPreview(arguments: req.buildCLIArguments())
         }
-        .padding(20)
-        .frame(width: 500)
+    }
+
+    static func journalExplanation(_ mode: Ext4JournalMode) -> String {
+        switch mode {
+        case .ordered: return "Recommended. Metadata is journaled and data is written before it, so files are never left with garbage after a crash."
+        case .writeback: return "Fastest. Only metadata is journaled; after a crash, recently written files may contain old data."
+        case .journal: return "Safest and slowest. Data and metadata are both journaled."
+        }
+    }
+
+    private func volumeProblem(_ req: VolumeCreateRequest) -> String? {
+        if req.name.isEmpty { return "Give the volume a name." }
+        if let err = ValidationUtils.validateVolumeName(req.name) { return err }
+        if CreateSheetChecks.nameTaken(req.name, in: appState.volumes.map(\.name)) { return "A volume called \(req.name) already exists." }
+        if !req.sizeSpec.isEmpty, ByteSizeSpec.bytes(req.sizeSpec) == nil { return "Write the size as a number and unit, e.g. 512M or 20G." }
+        if !req.journalSize.isEmpty, ByteSizeSpec.bytes(req.journalSize) == nil { return "Write the journal size as a number and unit, e.g. 64M." }
+        return nil
+    }
+
+    private func createVolume(_ req: VolumeCreateRequest) {
+        showCreateSheet = false
+        Task {
+            await appState.performOperation(
+                category: "Volumes",
+                title: "Create Volume \(req.name)",
+                redactedCommand: SecretRedactor.formatCommandPreview(executable: "container", arguments: req.buildCLIArguments())
+            ) {
+                try await appState.runtimeService.createVolume(request: req)
+                return "Created volume '\(req.name)'."
+            }
+            if appState.volumes.contains(where: { $0.id == req.name }) { appState.selectedVolumeID = req.name }
+        }
     }
 }
