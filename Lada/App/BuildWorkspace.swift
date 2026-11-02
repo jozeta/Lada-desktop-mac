@@ -111,3 +111,26 @@ public final class BuildWorkspace: ObservableObject {
         }
     }
 }
+
+/// The Stacks screen's compose file and activity, kept in `AppState` so edits survive leaving the
+/// screen.
+@MainActor
+public final class StackWorkspace: ObservableObject {
+    public enum Tab: String, CaseIterable, Identifiable {
+        case services = "Services"
+        case file = "Compose File"
+        case logs = "Logs"
+        public var id: String { rawValue }
+    }
+
+    @Published public var yamlText: String = ComposeStackTemplate.allTemplates[0].yamlContent
+    @Published public var currentFileURL: URL?
+    @Published public var isDeploying = false
+    @Published public var consoleLines: [String] = []
+    @Published public var tab: Tab = .services
+    @Published public var logsText = ""
+    @Published public var isLoadingLogs = false
+    @Published public var logSearch = ""
+    @Published public var logPaused = false
+    @Published public var logAutoScroll = true
+}

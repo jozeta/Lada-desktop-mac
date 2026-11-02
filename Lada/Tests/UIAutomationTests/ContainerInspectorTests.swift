@@ -131,6 +131,32 @@ final class ContainerInspectorTests: XCTestCase {
         XCTAssertFalse(store.openContainerIDs.contains("gone"), "deleted containers lose their workspace")
     }
 
+    func testStackEditsSurviveLeavingTheScreen() async throws {
+        let preferences = AppPreferences()
+        preferences.hasCompletedFirstLaunchSetup = true
+        let appState = AppState(preferences: preferences, injectedService: MockContainerRuntimeService())
+        await appState.refreshAll(isUserInitiated: false)
+        appState.editorDraftComposeYAML = "name: from-editor\nservices:\n  web:\n    image: nginx\n"
+        appState.selectedSection = .stacks
+
+        let win = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 1300, height: 820), styleMask: [.titled], backing: .buffered, defer: false)
+        win.contentView = NSHostingView(rootView: MainWindowView(appState: appState).frame(width: 1300, height: 820))
+        win.orderBack(nil)
+        window = win
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertTrue(appState.stacks.yamlText.contains("from-editor"), "editor draft is applied")
+        XCTAssertNil(appState.editorDraftComposeYAML, "and consumed once")
+
+        appState.stacks.yamlText += "  db:\n    image: postgres\n"
+        appState.stacks.tab = .file
+        appState.selectedSection = .networks
+        try await Task.sleep(for: .milliseconds(300))
+        appState.selectedSection = .stacks
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertTrue(appState.stacks.yamlText.contains("image: postgres"), "edits survive leaving Stacks")
+        XCTAssertEqual(appState.stacks.tab, .file)
+    }
+
     /// Opt-in: types into the real terminal view (synthesized key events, like a keyboard) against
     /// a running container and checks the shell answers. Skipped unless `LADA_LIVE_CONTAINER` is set;
     /// with `LADA_SNAPSHOT_DIR` it also saves a picture of the terminal.

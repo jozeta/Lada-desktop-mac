@@ -6,6 +6,14 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Stacks redesigned for clarity: a one-line explanation, the stack's state in words ("2 of 3
+  services running"), Start / Stop / Remove next to it, and Services, Compose File and Logs tabs.
+  Services is the default, with a three-step "How it works" guide until the stack is started
+  (including whether services can reach each other by name) and cards that show the short image,
+  start order, what each service waits for and its localhost ports
+- Fix: the compose editor reset to the first template whenever you left Stacks, losing edits, and a
+  file opened from the Dockerfile Editor was re-applied on every return; the compose file, tab and
+  activity are now kept in `AppState` and a handed-over draft is applied once
 - Builds redesigned as a guided flow: what a build is, (1) choose the project folder (the
   Dockerfile/Containerfile is detected), (2) name the image (validated, suggested from the folder),
   (3) Build, with "step 2 of 3" progress, the BuildKit error line when it fails, and Run This Image
