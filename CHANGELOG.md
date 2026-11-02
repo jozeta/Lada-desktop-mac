@@ -6,6 +6,11 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Redesign, step 1 (foundation): spacing, radius and motion tokens (`NordicTheme.Spacing`,
+  `.Radius`, `.Motion`) with Reduce Motion respected; cards and panels share one style (continuous
+  10 pt corners, hairline border); status badges are softer capsules and a running container's dot
+  pulses; the main sidebar uses Nordic rows (accent pill, hover) instead of the translucent system
+  list, and its badges only count live resources (containers as running/total)
 - Security: no more well-known database passwords. Låda no longer injects
   `POSTGRES_PASSWORD=postgres` / `MYSQL_ROOT_PASSWORD=rootpassword`; presets get a fresh random
   24-character secret per deploy, the environment editor has a generate button, and creating a

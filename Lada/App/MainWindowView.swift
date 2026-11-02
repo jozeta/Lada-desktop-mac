@@ -182,30 +182,32 @@ public struct MainWindowView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
 
-            List(selection: $appState.selectedSection) {
-                Section("Workloads") {
+            // Nordic navigation (same style as Settings) instead of the system's translucent
+            // sidebar list. Badges only count live resources.
+            ScrollView {
+                VStack(alignment: .leading, spacing: 1) {
+                    sidebarGroup("Workloads")
                     sidebarRow(for: .overview, icon: .overview, badge: nil)
-                    sidebarRow(for: .containers, icon: .containers, badge: appState.containers.count)
-                    sidebarRow(for: .stacks, icon: .stacks, badge: ComposeStackTemplate.allTemplates.count)
-                    sidebarRow(for: .images, icon: .images, badge: appState.images.count)
-                    sidebarRow(for: .imageLibrary, icon: .imageLibrary, badge: DockerHubService.curatedCatalog.count)
+                    sidebarRow(for: .containers, icon: .containers, badge: containerBadge)
+                    sidebarRow(for: .stacks, icon: .stacks, badge: nil)
+                    sidebarRow(for: .images, icon: .images, badge: appState.images.isEmpty ? nil : "\(appState.images.count)")
+                    sidebarRow(for: .imageLibrary, icon: .imageLibrary, badge: nil)
                     sidebarRow(for: .dockerfileEditor, icon: .dockerfileEditor, badge: nil)
-                    sidebarRow(for: .builds, icon: .builds, badge: appState.buildHistory.isEmpty ? nil : appState.buildHistory.count)
-                }
+                    sidebarRow(for: .builds, icon: .builds, badge: nil)
 
-                Section("Infrastructure") {
-                    sidebarRow(for: .networks, icon: .networks, badge: appState.networks.count)
-                    sidebarRow(for: .volumes, icon: .volumes, badge: appState.volumes.count)
-                    sidebarRow(for: .machines, icon: .machines, badge: appState.machines.count)
-                    sidebarRow(for: .registries, icon: .registries, badge: appState.registries.count)
-                }
+                    sidebarGroup("Infrastructure")
+                    sidebarRow(for: .networks, icon: .networks, badge: appState.networks.isEmpty ? nil : "\(appState.networks.count)")
+                    sidebarRow(for: .volumes, icon: .volumes, badge: appState.volumes.isEmpty ? nil : "\(appState.volumes.count)")
+                    sidebarRow(for: .machines, icon: .machines, badge: appState.machines.isEmpty ? nil : "\(appState.machines.count)")
+                    sidebarRow(for: .registries, icon: .registries, badge: appState.registries.isEmpty ? nil : "\(appState.registries.count)")
 
-                Section("System") {
-                    sidebarRow(for: .activity, icon: .activity, badge: appState.activityEvents.isEmpty ? nil : appState.activityEvents.count)
+                    sidebarGroup("System")
+                    sidebarRow(for: .activity, icon: .activity, badge: nil)
                     sidebarRow(for: .settings, icon: .settings, badge: nil)
                 }
+                .padding(.horizontal, NordicTheme.Spacing.s)
+                .padding(.bottom, NordicTheme.Spacing.m)
             }
-            .listStyle(.sidebar)
             .accessibilityIdentifier(AccessibilityID.sidebar)
 
             Divider().overlay(NordicTheme.borderSubtle)
@@ -215,35 +217,35 @@ public struct MainWindowView: View {
         .background(NordicTheme.sidebarBackground)
     }
 
-    private func sidebarRow(for section: NavigationSection, icon: LadaIconKind, badge: Int?) -> some View {
-        let isSelected = appState.selectedSection == section
-        return NavigationLink(value: section) {
-            HStack(spacing: 10) {
-                LadaIcon(icon, size: 16)
-                    .foregroundStyle(
-                        isSelected
-                            ? NordicTheme.accent(for: appState.preferences.accentThemeChoice)
-                            : NordicTheme.secondaryText
-                    )
-                Text(section.rawValue)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                Spacer()
-                if let badge {
-                    Text(verbatim: "\(badge)")
-                        .font(NordicTheme.monoFontSmall)
-                        .foregroundStyle(isSelected ? NordicTheme.primaryText : NordicTheme.secondaryText)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 1)
-                        .background(
-                            Capsule().fill(
-                                isSelected
-                                    ? Color.primary.opacity(0.16)
-                                    : Color.primary.opacity(0.08)
-                            )
-                        )
-                }
-            }
+    /// Running / total, the number that matters at a glance.
+    private var containerBadge: String? {
+        guard !appState.containers.isEmpty else { return nil }
+        let running = appState.containers.filter { $0.state == .running }.count
+        return "\(running)/\(appState.containers.count)"
+    }
+
+    private func sidebarGroup(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 10.5, weight: .semibold))
+            .tracking(0.5)
+            .textCase(.uppercase)
+            .foregroundStyle(NordicTheme.secondaryText.opacity(0.8))
+            .padding(.horizontal, NordicTheme.Spacing.s + 2)
+            .padding(.top, NordicTheme.Spacing.l)
+            .padding(.bottom, NordicTheme.Spacing.xs)
+    }
+
+    private func sidebarRow(for section: NavigationSection, icon: LadaIconKind, badge: String?) -> some View {
+        SidebarNavRow(
+            title: section.rawValue,
+            icon: icon,
+            badge: badge,
+            isSelected: appState.selectedSection == section,
+            accent: NordicTheme.accent(for: appState.preferences.accentThemeChoice)
+        ) {
+            appState.selectedSection = section
         }
+        .accessibilityIdentifier("lada.sidebar.\(section.id)")
     }
 
     private var sidebarFooter: some View {
@@ -452,6 +454,51 @@ private struct WindowDropPassthroughConfiguringView: NSViewRepresentable {
                 unregisterBlockingDragDestinations(in: subview)
             }
         }
+    }
+}
+
+/// One sidebar destination: custom icon, title and an optional count, with an accent pill that
+/// slides between rows (matched geometry) and a soft hover state.
+private struct SidebarNavRow: View {
+    let title: String
+    let icon: LadaIconKind
+    let badge: String?
+    let isSelected: Bool
+    let accent: Color
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                LadaIcon(icon, size: 15)
+                    .foregroundStyle(isSelected ? accent : NordicTheme.secondaryText)
+                    .frame(width: 18)
+                Text(title)
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(NordicTheme.primaryText)
+                Spacer(minLength: 4)
+                if let badge {
+                    Text(verbatim: badge)
+                        .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                        .foregroundStyle(isSelected ? accent : NordicTheme.secondaryText)
+                        .contentTransition(.numericText())
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6.5)
+            .background(
+                RoundedRectangle(cornerRadius: NordicTheme.Radius.control, style: .continuous)
+                    .fill(isSelected ? accent.opacity(0.14) : (hovered ? NordicTheme.borderSubtle.opacity(0.55) : .clear))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+        .animation(NordicTheme.Motion.quick, value: hovered)
+        .animation(NordicTheme.Motion.quick, value: isSelected)
+        .animation(NordicTheme.Motion.data, value: badge)
+        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
 }
 

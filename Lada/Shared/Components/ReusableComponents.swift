@@ -25,14 +25,20 @@ public struct NordicStatusBadge: View {
     public let label: String
     public let tone: OperationalBadgeTone
     public var showDot: Bool = true
+    /// A soft pulse on the dot for live states (a running container).
+    public var isLive: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pulse = false
 
-    public init(label: String, tone: OperationalBadgeTone, showDot: Bool = true) {
+    public init(label: String, tone: OperationalBadgeTone, showDot: Bool = true, isLive: Bool = false) {
         self.label = label
         self.tone = tone
         self.showDot = showDot
+        self.isLive = isLive
     }
 
     public init(containerState: ContainerState) {
+        self.isLive = containerState == .running
         self.label = containerState.displayTitle
         switch containerState {
         case .running: self.tone = .positive
@@ -55,24 +61,33 @@ public struct NordicStatusBadge: View {
     public var body: some View {
         HStack(spacing: 5) {
             if showDot {
-                Circle()
-                    .fill(tone.color)
-                    .frame(width: 6, height: 6)
+                ZStack {
+                    if isLive && !reduceMotion {
+                        Circle()
+                            .fill(tone.color.opacity(0.35))
+                            .frame(width: 6, height: 6)
+                            .scaleEffect(pulse ? 2.2 : 1)
+                            .opacity(pulse ? 0 : 1)
+                    }
+                    Circle()
+                        .fill(tone.color)
+                        .frame(width: 6, height: 6)
+                }
+                .frame(width: 8, height: 8)
+                .onAppear {
+                    guard isLive && !reduceMotion else { return }
+                    withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) { pulse = true }
+                }
             }
             Text(label)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(tone.color)
+                .contentTransition(.opacity)
         }
-        .padding(.horizontal, 7)
-        .padding(.vertical, 2.5)
-        .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(tone.color.opacity(0.10))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 4)
-                .strokeBorder(tone.color.opacity(0.28), lineWidth: 1)
-        )
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Capsule(style: .continuous).fill(tone.color.opacity(0.12)))
+        .animation(NordicTheme.Motion.quick, value: label)
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Status: \(label)")
@@ -709,16 +724,7 @@ public struct NordicCard<Content: View>: View {
 
     public var body: some View {
         content()
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(NordicTheme.contentSurface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(NordicTheme.borderSubtle, lineWidth: 1)
-            )
+            .nordicPanel()
     }
 }
 

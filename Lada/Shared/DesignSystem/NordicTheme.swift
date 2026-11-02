@@ -131,17 +131,65 @@ public enum NordicTheme {
     public static let subtitleFont = Font.system(size: 13, weight: .medium, design: .default)
 }
 
+// MARK: - Layout & Motion Tokens
+
+public extension NordicTheme {
+    /// 4-pt spacing scale. Use these instead of ad-hoc paddings.
+    enum Spacing {
+        public static let xxs: CGFloat = 2
+        public static let xs: CGFloat = 4
+        public static let s: CGFloat = 8
+        public static let m: CGFloat = 12
+        public static let l: CGFloat = 16
+        public static let xl: CGFloat = 24
+        public static let xxl: CGFloat = 32
+    }
+
+    enum Radius {
+        /// Buttons, fields, badges, list rows.
+        public static let control: CGFloat = 6
+        /// Panels and cards.
+        public static let card: CGFloat = 10
+    }
+
+    /// Short, calm animations. Views that move content check Reduce Motion (`motion(_:)`).
+    enum Motion {
+        /// Hover, highlight and colour changes.
+        public static let quick = Animation.easeOut(duration: 0.14)
+        /// Layout and state changes.
+        public static let standard = Animation.spring(response: 0.32, dampingFraction: 0.86)
+        /// Numbers and charts settling to new values.
+        public static let data = Animation.easeInOut(duration: 0.35)
+    }
+}
+
 // MARK: - Panels
 
 public extension View {
-    /// The standard Låda panel: elevated surface, 6 pt corners and a hairline border.
-    func nordicPanel(padding: CGFloat = 14) -> some View {
+    /// The standard Låda panel: elevated surface, continuous 10 pt corners and a hairline border.
+    func nordicPanel(padding: CGFloat = NordicTheme.Spacing.l) -> some View {
         self
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(NordicTheme.elevatedSurface)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
+            .background(
+                RoundedRectangle(cornerRadius: NordicTheme.Radius.card, style: .continuous)
+                    .fill(NordicTheme.elevatedSurface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: NordicTheme.Radius.card, style: .continuous)
+                    .strokeBorder(NordicTheme.borderSubtle, lineWidth: 1)
+            )
+    }
+
+    /// Hover feedback for clickable cards: the border picks up the accent and the card lifts a
+    /// little. No movement with Reduce Motion.
+    func nordicHoverHighlight(accent: Color = NordicTheme.accent()) -> some View {
+        modifier(NordicHoverHighlight(accent: accent))
+    }
+
+    /// Applies `animation` unless the user has turned on Reduce Motion.
+    func nordicMotion<V: Equatable>(_ animation: Animation, value: V) -> some View {
+        modifier(NordicReducibleAnimation(animation: animation, value: value))
     }
 
     /// A settings form drawn as a Nordic panel. `.columns` (labels in a leading column) instead of
@@ -150,6 +198,34 @@ public extension View {
         self
             .formStyle(.columns)
             .nordicPanel(padding: 16)
+    }
+}
+
+private struct NordicHoverHighlight: ViewModifier {
+    let accent: Color
+    @State private var hovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                RoundedRectangle(cornerRadius: NordicTheme.Radius.card, style: .continuous)
+                    .strokeBorder(accent.opacity(hovered ? 0.45 : 0), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(hovered && !reduceMotion ? 0.08 : 0), radius: 8, y: 3)
+            .offset(y: hovered && !reduceMotion ? -1 : 0)
+            .onHover { hovered = $0 }
+            .animation(NordicTheme.Motion.quick, value: hovered)
+    }
+}
+
+private struct NordicReducibleAnimation<V: Equatable>: ViewModifier {
+    let animation: Animation
+    let value: V
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.animation(reduceMotion ? nil : animation, value: value)
     }
 }
 
