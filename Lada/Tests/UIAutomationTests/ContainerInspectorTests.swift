@@ -199,6 +199,40 @@ final class ContainerInspectorTests: XCTestCase {
         }
     }
 
+    func testStacksStartEmptyAndClearAfterASuccessfulStart() async throws {
+        let preferences = AppPreferences()
+        preferences.hasCompletedFirstLaunchSetup = true
+        let appState = AppState(preferences: preferences, injectedService: MockContainerRuntimeService())
+        await appState.refreshAll(isUserInitiated: false)
+        let work = appState.stacks
+        XCTAssertTrue(work.isEmpty, "Stacks starts empty")
+
+        // Build your own: name it, add a service with the form's writer.
+        work.newStack(named: "My Shop")
+        XCTAssertEqual(work.parsed.projectName, "my-shop")
+        work.yamlText = ComposeDocument.upsert(ComposeServiceSpec(serviceName: "web", containerName: "", imageReference: "nginx:1.31-alpine"), in: work.yamlText)
+        work.rename(to: "shop")
+        XCTAssertEqual(work.parsed.projectName, "shop")
+        XCTAssertEqual(work.parsed.services.map(\.serviceName), ["web"])
+
+        await work.start(appState: appState)
+        XCTAssertTrue(work.isEmpty, "the window clears after a successful start")
+        XCTAssertEqual(work.lastStarted, .init(name: "shop", serviceCount: 1))
+        XCTAssertTrue(appState.containers.contains { $0.composeProject == "shop" && $0.state == .running })
+        XCTAssertNotNil(work.deployedCompose(for: "shop"))
+
+        // It can be reopened for editing (Containers → Open in Stacks).
+        work.reopen(stack: "shop")
+        XCTAssertEqual(work.parsed.services.map(\.serviceName), ["web"])
+
+        // A failed start keeps everything so it can be fixed: postgres without a password is rejected.
+        work.newStack(named: "broken")
+        work.yamlText = ComposeDocument.upsert(ComposeServiceSpec(serviceName: "db", containerName: "", imageReference: "postgres:17-alpine"), in: work.yamlText)
+        await work.start(appState: appState)
+        XCTAssertFalse(work.isEmpty, "nothing is cleared when a service failed")
+        XCTAssertTrue(work.consoleLines.contains { $0.contains("Failed to start 'db'") }, work.consoleLines.joined(separator: "\n"))
+    }
+
     /// Opt-in: types into the real terminal view (synthesized key events, like a keyboard) against
     /// a running container and checks the shell answers. Skipped unless `LADA_LIVE_CONTAINER` is set;
     /// with `LADA_SNAPSHOT_DIR` it also saves a picture of the terminal.

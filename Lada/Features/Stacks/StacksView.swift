@@ -8,6 +8,8 @@ public struct StacksView: View {
 
     @ObservedObject private var work: StackWorkspace
     @State private var editTarget: ServiceEditTarget?
+    @State private var nameDraft = ""
+    @State private var newStackName = ""
 
     enum ServiceEditTarget: Identifiable {
         case add
@@ -55,6 +57,7 @@ public struct StacksView: View {
                 Spacer()
                 if work.tab == .services {
                     Button {
+                        if work.isEmpty { work.newStack(named: "my-stack") }
                         editTarget = .add
                     } label: {
                         Label("Add Service", systemImage: "plus")
@@ -142,11 +145,23 @@ public struct StacksView: View {
                     .lineLimit(2)
             }
             HStack(spacing: NordicTheme.Spacing.m) {
+                if work.isEmpty {
+                    Text("No stack open. Build one yourself or start from a template below.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(NordicTheme.secondaryText)
+                } else {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: NordicTheme.Spacing.s) {
-                        Text(parsedStack.projectName)
+                        TextField("stack name", text: $nameDraft)
+                            .textFieldStyle(.plain)
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(NordicTheme.primaryText)
+                            .fixedSize()
+                            .onSubmit { work.rename(to: nameDraft) }
+                            .onAppear { nameDraft = parsedStack.projectName }
+                            .onChange(of: parsedStack.projectName) { _, new in nameDraft = new }
+                            .help("Stack name (press Return to apply)")
+                            .accessibilityIdentifier("lada.stacks.name")
                         Text(work.currentFileURL?.lastPathComponent ?? "unsaved")
                             .font(.system(size: 11))
                             .foregroundStyle(NordicTheme.secondaryText)
@@ -158,20 +173,13 @@ public struct StacksView: View {
                         .font(.system(size: 12))
                         .foregroundStyle(runningCountInStack > 0 ? NordicTheme.statusGreen : NordicTheme.secondaryText)
                 }
+                }
                 Spacer()
                 Menu {
-                    Button("New Empty Stack") {
-                        work.currentFileURL = nil
-                        work.yamlText = "name: my-stack\n\nservices:\n"
-                        work.tab = .services
-                    }
+                    Button("New Empty Stack") { work.newStack(named: "my-stack") }
                     Menu("Start from a Template") {
                         ForEach(ComposeStackTemplate.allTemplates) { template in
-                            Button("\(template.title) — \(template.subtitle)") {
-                                work.currentFileURL = nil
-                                work.yamlText = template.instantiate()
-                                work.tab = .services
-                            }
+                            Button("\(template.title) — \(template.subtitle)") { work.useTemplate(template) }
                         }
                     }
                     Divider()
@@ -229,7 +237,7 @@ public struct StacksView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(accent)
-                .disabled(work.isDeploying || parsedStack.services.isEmpty || (runningCountInStack == parsedStack.services.count && !parsedStack.services.isEmpty))
+                .disabled(work.isEmpty || work.isDeploying || parsedStack.services.isEmpty || (runningCountInStack == parsedStack.services.count && !parsedStack.services.isEmpty))
                 .accessibilityIdentifier("lada.stacks.start")
             }
         }
@@ -242,6 +250,9 @@ public struct StacksView: View {
     /// activity of the last start/stop.
     private var servicesTab: some View {
         ScrollView {
+            if work.isEmpty {
+                emptyStart
+            } else {
             VStack(alignment: .leading, spacing: NordicTheme.Spacing.m) {
                 if existingCountInStack == 0 && !work.isDeploying {
                     howItWorks
@@ -278,7 +289,116 @@ public struct StacksView: View {
                 }
             }
             .padding(NordicTheme.Spacing.l)
+            }
         }
+    }
+
+    /// The empty start: a confirmation after a successful start, then the two ways to begin.
+    private var emptyStart: some View {
+        VStack(alignment: .leading, spacing: NordicTheme.Spacing.l) {
+            if let started = work.lastStarted {
+                HStack(spacing: NordicTheme.Spacing.m) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(NordicTheme.statusGreen)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Stack \(started.name) is running")
+                            .font(.system(size: 13.5, weight: .semibold))
+                        Text("All \(started.serviceCount) service\(started.serviceCount == 1 ? "" : "s") started. You'll find them grouped under \(started.name) in Containers.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(NordicTheme.secondaryText)
+                    }
+                    Spacer()
+                    Button("Show in Containers") {
+                        appState.selectedContainerID = "stack:\(started.name)"
+                        appState.selectedSection = .containers
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(accent)
+                    Button {
+                        work.lastStarted = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Dismiss")
+                }
+                .nordicPanel()
+            }
+
+            // 1. Build your own
+            VStack(alignment: .leading, spacing: NordicTheme.Spacing.m) {
+                Label("Build your own stack", systemImage: "square.stack.3d.up")
+                    .font(.system(size: 14, weight: .semibold))
+                Text("Name it, then add services one by one with a form (or type them in the Compose File tab).")
+                    .font(.system(size: 12))
+                    .foregroundStyle(NordicTheme.secondaryText)
+                HStack {
+                    TextField("my-stack", text: $newStackName)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 260)
+                        .onSubmit { createOwnStack() }
+                        .accessibilityIdentifier("lada.stacks.newName")
+                    Button("Create Stack") { createOwnStack() }
+                        .buttonStyle(.borderedProminent)
+                        .tint(accent)
+                        .accessibilityIdentifier("lada.stacks.create")
+                }
+            }
+            .nordicPanel()
+
+            // 2. Templates
+            VStack(alignment: .leading, spacing: NordicTheme.Spacing.m) {
+                Label("Or start from a template", systemImage: "doc.on.doc")
+                    .font(.system(size: 14, weight: .semibold))
+                Text("A ready-made stack you can adjust before starting. Passwords are generated for you.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(NordicTheme.secondaryText)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: NordicTheme.Spacing.m)], spacing: NordicTheme.Spacing.m) {
+                    ForEach(ComposeStackTemplate.allTemplates) { template in
+                        templateCard(template)
+                    }
+                }
+            }
+            .nordicPanel()
+        }
+        .padding(NordicTheme.Spacing.l)
+    }
+
+    private func templateCard(_ template: ComposeStackTemplate) -> some View {
+        let services = ComposeParser.parse(yaml: template.yamlContent).services
+        return Button {
+            work.useTemplate(template)
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(template.title)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(NordicTheme.primaryText)
+                Text(template.subtitle)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(NordicTheme.secondaryText)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Text(services.map(\.serviceName).joined(separator: " · "))
+                    .font(.system(size: 10.5, design: .monospaced))
+                    .foregroundStyle(accent)
+                    .lineLimit(1)
+            }
+            .padding(NordicTheme.Spacing.m)
+            .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
+            .nordicSurface()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .nordicHoverHighlight(accent: accent)
+        .help("Use this template")
+    }
+
+    private func createOwnStack() {
+        work.newStack(named: newStackName.isEmpty ? "my-stack" : newStackName)
+        newStackName = ""
+        editTarget = .add
     }
 
     private var howItWorks: some View {

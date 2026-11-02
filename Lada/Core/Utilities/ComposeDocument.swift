@@ -119,6 +119,17 @@ public enum ComposeDocument {
         return cleaned.joined(separator: "\n")
     }
 
+    /// Sets the top-level `name:` (the stack/project name), adding it at the top if missing.
+    public static func setProjectName(_ name: String, in yaml: String) -> String {
+        var lines = yaml.components(separatedBy: "\n")
+        if let i = lines.firstIndex(where: { isTopLevelKey($0, "name") }) {
+            lines[i] = "name: \(name)"
+        } else {
+            lines.insert(contentsOf: ["name: \(name)", ""], at: 0)
+        }
+        return lines.joined(separator: "\n")
+    }
+
     // MARK: - Helpers
 
     private static func isTopLevel(_ line: String) -> Bool {

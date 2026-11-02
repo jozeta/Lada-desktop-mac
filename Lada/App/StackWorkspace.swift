@@ -11,7 +11,69 @@ public final class StackWorkspace: ObservableObject {
         public var id: String { rawValue }
     }
 
-    @Published public var yamlText: String = ComposeStackTemplate.allTemplates[0].instantiate()
+    /// Starts empty: build a stack yourself or pick a template.
+    @Published public var yamlText: String = ""
+    /// The stack that was just started successfully (the window was cleared after it).
+    @Published public var lastStarted: StartedStack?
+
+    public struct StartedStack: Equatable {
+        public let name: String
+        public let serviceCount: Int
+    }
+
+    public var isEmpty: Bool { yamlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    /// A new, empty stack with a name, ready for Add Service.
+    public func newStack(named name: String) {
+        let clean = Self.cleanName(name)
+        currentFileURL = nil
+        yamlText = "name: \(clean)\n\nservices:\n"
+        tab = .services
+        lastStarted = nil
+    }
+
+    public func useTemplate(_ template: ComposeStackTemplate) {
+        currentFileURL = nil
+        yamlText = template.instantiate()
+        tab = .services
+        lastStarted = nil
+    }
+
+    /// Renames the stack (the compose file's `name:`).
+    public func rename(to name: String) {
+        yamlText = ComposeDocument.setProjectName(Self.cleanName(name), in: yamlText)
+    }
+
+    static func cleanName(_ raw: String) -> String {
+        let s = raw.lowercased()
+            .replacingOccurrences(of: "[^a-z0-9_-]+", with: "-", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-_"))
+        return s.isEmpty ? "my-stack" : s
+    }
+
+    // MARK: Started stacks
+
+    private static let deployedKey = "lada.stacks.deployedCompose"
+
+    /// The compose file of a stack started from here, so it can be reopened for editing later.
+    public func deployedCompose(for stack: String) -> String? {
+        (UserDefaults.standard.dictionary(forKey: Self.deployedKey) as? [String: String])?[stack]
+    }
+
+    /// Loads a started stack's compose file back into the editor.
+    public func reopen(stack: String) {
+        guard let yaml = deployedCompose(for: stack) else { return }
+        currentFileURL = nil
+        yamlText = yaml
+        tab = .services
+        lastStarted = nil
+    }
+
+    private func rememberDeployed(name: String, yaml: String) {
+        var all = (UserDefaults.standard.dictionary(forKey: Self.deployedKey) as? [String: String]) ?? [:]
+        all[name] = yaml
+        UserDefaults.standard.set(all, forKey: Self.deployedKey)
+    }
     @Published public var currentFileURL: URL?
     @Published public var isDeploying = false
     @Published public var consoleLines: [String] = []
@@ -115,6 +177,22 @@ public final class StackWorkspace: ObservableObject {
         await appState.refreshAll(isUserInitiated: false)
         consoleLines.append("==> Stack '\(parsed.projectName)' orchestration finished.")
         await refreshLogs(appState: appState)
+
+        // Success = every service's container exists and runs. Then the window is cleared for the
+        // next stack; the compose file is remembered so the stack can be reopened from Containers.
+        let stack = parsed
+        let allRunning = !stack.services.isEmpty && stack.services.allSatisfy { svc in
+            appState.containers.first { $0.id == svc.containerName }?.state == .running
+        }
+        if allRunning {
+            rememberDeployed(name: stack.projectName, yaml: yamlText)
+            lastStarted = StartedStack(name: stack.projectName, serviceCount: stack.services.count)
+            yamlText = ""
+            currentFileURL = nil
+            consoleLines = []
+            logsText = ""
+            tab = .services
+        }
     }
 
     /// Stops services in reverse dependency order; they keep their data.

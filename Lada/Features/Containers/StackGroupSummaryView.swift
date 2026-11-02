@@ -56,7 +56,7 @@ struct StackGroupSummaryView: View {
     let group: ContainerStackGroup
 
     private var accent: Color { NordicTheme.accent(for: appState.preferences.accentThemeChoice) }
-    private var isOpenInStacks: Bool { appState.stacks.parsed.projectName == group.name }
+    private var isOpenInStacks: Bool { !appState.stacks.isEmpty && appState.stacks.parsed.projectName == group.name }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -85,13 +85,16 @@ struct StackGroupSummaryView: View {
                     .controlSize(.small)
                 }
                 Button {
+                    if !isOpenInStacks { appState.stacks.reopen(stack: group.name) }
                     appState.selectedSection = .stacks
                 } label: {
                     Label("Open in Stacks", systemImage: "square.stack.3d.up")
                 }
                 .controlSize(.small)
-                .disabled(!isOpenInStacks)
-                .help(isOpenInStacks ? "Edit this stack's services" : "Open this stack's compose file in Stacks to edit it")
+                .disabled(!isOpenInStacks && appState.stacks.deployedCompose(for: group.name) == nil)
+                .help(isOpenInStacks || appState.stacks.deployedCompose(for: group.name) != nil
+                      ? "Open this stack's compose file in Stacks to edit it"
+                      : "This stack was not started from this Mac's Stacks screen, so its compose file is unknown")
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: NordicTheme.Spacing.s) {

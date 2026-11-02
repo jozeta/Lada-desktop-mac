@@ -6,6 +6,11 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Stacks starts empty with two ways in: build your own (name it, then Add Service) or pick one of
+  the template cards. The stack name is editable in the header. After a stack starts successfully
+  (every service running) the window clears and shows a confirmation with Show in Containers; the
+  compose file is remembered so Open in Stacks on the stack's group in Containers can reopen it. If
+  any service fails, nothing is cleared
 - Frosted-glass look: one calm Nordic backdrop (a soft fjord-to-sand gradient) behind every
   section, panels and cards in frosted material with a fine light edge and soft shadow, toolbars
   and headers in bar material, and a translucent sidebar. Terminal, code editors and logs stay solid
