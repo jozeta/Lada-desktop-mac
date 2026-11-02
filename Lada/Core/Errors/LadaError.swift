@@ -63,6 +63,21 @@ public struct LadaError: Error, LocalizedError, Codable, Sendable, Equatable, Id
             .joined(separator: "\n")
         let lower = combined.lowercased()
 
+        // The CLI drops the XPC connection when it cannot talk to the running API server, most
+        // often because the services still run an older release after an upgrade (seen with a
+        // 1.6.1 CLI against a 1.5.0 `container-apiserver`: `run` fails, `list` still works).
+        if lower.contains("xpc connection error") || lower.contains("connection interrupted") || lower.contains("connection invalid") {
+            return LadaError(
+                category: .apiServerFailure,
+                explanation: "Lost the connection to the container API server (\(firstMeaningfulLine(from: combined))).",
+                exitStatus: exitStatus,
+                diagnosticOutput: combined,
+                suggestedRemediation: "If you recently upgraded `container`, the services still run the old version: restart them (Dashboard → Restart Services, or `container system stop` then `container system start`). Otherwise start the container system.",
+                isRetryable: true,
+                documentationURL: URL(string: "https://github.com/apple/container/blob/main/docs/command-reference.md#container-system-start")
+            )
+        }
+
         if lower.contains("apiserver is not running") || lower.contains("connection refused") || lower.contains("xpc") && lower.contains("unregistered") {
             return LadaError(
                 category: .apiServerFailure,
@@ -152,10 +167,18 @@ public struct LadaError: Error, LocalizedError, Codable, Sendable, Equatable, Id
         )
     }
 
-    private static func firstMeaningfulLine(from text: String) -> String {
-        let line = text.components(separatedBy: .newlines)
+    /// The line that explains a failure: the CLI's `Error: …` line if there is one, otherwise the
+    /// first line that is not progress output such as `[0/6] [0s]` (which the CLI also writes to
+    /// stderr before failing).
+    static func firstMeaningfulLine(from text: String) -> String {
+        let lines = text.components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespaces) }
-            .first { !$0.isEmpty } ?? "The runtime operation failed."
+            .filter { !$0.isEmpty }
+        if let error = lines.first(where: { $0.hasPrefix("Error:") }) {
+            return SecretRedactor.redact(String(error.dropFirst("Error:".count)).trimmingCharacters(in: .whitespaces))
+        }
+        let isProgress: (String) -> Bool = { $0.range(of: #"^\[\d+/\d+\]"#, options: .regularExpression) != nil }
+        let line = lines.first { !isProgress($0) } ?? "The runtime operation failed."
         return SecretRedactor.redact(line)
     }
 }

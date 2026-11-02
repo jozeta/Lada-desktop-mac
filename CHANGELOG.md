@@ -6,6 +6,10 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Fix: failed CLI commands showed progress output (`[0/6] [0s]`) as the error. The CLI's `Error:`
+  line is shown instead, and a dropped XPC connection (for example a 1.6.1 CLI against a
+  still-running 1.5.0 API server, where `run` fails but `list` works) is reported as an API server
+  problem with "Restart Services" as the fix
 - Fix: dashboard "Cluster CPU Load" averaged per-container percentages; it is now weighted by
   allotted vCPUs (cores in use ÷ vCPUs). System points only combine containers measured in the
   same round, and an inspector refresh no longer adds a system point mixing fresh and stale data

@@ -90,4 +90,19 @@ final class ValidationAndRedactionTests: XCTestCase {
         try store.deletePassword(for: "ghcr.io", account: "octocat")
         XCTAssertNil(try store.loadPassword(for: "ghcr.io", account: "octocat"))
     }
+
+    func testRunFailureAgainstMismatchedApiServerShowsTheRealError() {
+        // Exact stderr from `container run` (CLI 1.6.1) against a 1.5.0 API server.
+        let stderr = "[0/6] [0s]\n[0/6] [0s]\nError: interrupted: \"XPC connection error: Connection interrupted\"\nEnsure container system service has been started with `container system start`.\n"
+        let error = LadaError.classifyCLIError(command: ["run", "-d", "alpine:latest"], exitStatus: 1, stderr: stderr, stdout: "")
+        XCTAssertEqual(error.category, .apiServerFailure)
+        XCTAssertFalse(error.explanation.contains("[0/6]"))
+        XCTAssertTrue(error.explanation.contains("XPC connection error"))
+        XCTAssertTrue(error.suggestedRemediation.contains("Restart Services"))
+    }
+
+    func testFirstMeaningfulLineSkipsProgressOutput() {
+        XCTAssertEqual(LadaError.firstMeaningfulLine(from: "[1/6] [2s]\nimage not reachable\n"), "image not reachable")
+        XCTAssertEqual(LadaError.firstMeaningfulLine(from: "[0/6] [0s]\nError: something broke\n"), "something broke")
+    }
 }
