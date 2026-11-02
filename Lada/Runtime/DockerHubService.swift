@@ -121,8 +121,9 @@ public struct DockerHubRepositoryItem: Identifiable, Codable, Sendable, Equatabl
             imageReference: imageReference(forTag: selectedTag),
             startImmediately: true,
             commandArguments: defaultCommand,
-            interactive: true,
-            allocateTTY: true,
+            // Services run detached without a terminal; shell images get `-t` from the builder.
+            interactive: false,
+            allocateTTY: false,
             publishedPorts: recommendedPorts,
             mounts: recommendedVolumes,
             environmentVariables: recommendedEnv,

@@ -6,6 +6,10 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Fix: every Image Library launch used `run -d -i -t`, which container 1.6.1 rejects from a
+  non-terminal with "Operation not supported by device". Detached runs no longer get `-i`;
+  shell images (alpine, ubuntu, …) get `-t` so they keep running, and services get no terminal
+  flags. Shell images are now recognised by repository name (e.g. `docker.io/library/alpine`)
 - Fix: failed CLI commands showed progress output (`[0/6] [0s]`) as the error. The CLI's `Error:`
   line is shown instead, and a dropped XPC connection (for example a 1.6.1 CLI against a
   still-running 1.5.0 API server, where `run` fails but `list` works) is reported as an API server

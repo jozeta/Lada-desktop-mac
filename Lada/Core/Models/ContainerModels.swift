@@ -722,6 +722,17 @@ public struct ContainerCreateRequest: Codable, Sendable, Equatable {
         )
     }
 
+    /// Whether an image's default command is an interactive shell (alpine, ubuntu, …), matched on
+    /// the repository name so `alpine:3.24`, `docker.io/library/alpine:latest` and
+    /// `alpine@sha256:…` all count.
+    public static func isShellBaseImage(_ reference: String) -> Bool {
+        var repo = reference.lowercased()
+        if let at = repo.firstIndex(of: "@") { repo = String(repo[..<at]) }
+        if let slash = repo.lastIndex(of: "/") { repo = String(repo[repo.index(after: slash)...]) }
+        if let colon = repo.firstIndex(of: ":") { repo = String(repo[..<colon]) }
+        return ["alpine", "ubuntu", "debian", "busybox", "fedora", "golang", "rust", "swift", "python", "node", "ruby", "php", "eclipse-temurin"].contains(repo)
+    }
+
     /// Generates the exact `container` CLI argument array (`run -d` or `create`)
     public func buildCLIArguments() -> [String] {
         var args: [String] = []
@@ -740,18 +751,16 @@ public struct ContainerCreateRequest: Codable, Sendable, Equatable {
             args.append("--rm")
         }
         let lowerImage = imageReference.lowercased()
-        let isShellBaseImage = (
-            lowerImage.hasPrefix("alpine") ||
-            lowerImage.hasPrefix("ubuntu") ||
-            lowerImage.hasPrefix("debian") ||
-            lowerImage.hasPrefix("busybox") ||
-            lowerImage.hasPrefix("fedora") ||
-            lowerImage.hasPrefix("golang") ||
-            lowerImage.hasPrefix("rust") ||
-            lowerImage.hasPrefix("swift")
-        ) && commandArguments.isEmpty && entrypointOverride.trimmingCharacters(in: .whitespaces).isEmpty
+        let isShellBaseImage = Self.isShellBaseImage(imageReference)
+            && commandArguments.isEmpty && entrypointOverride.trimmingCharacters(in: .whitespaces).isEmpty
 
-        if interactive || (startImmediately && isShellBaseImage) {
+        // Terminal flags. Låda runs the CLI without a terminal, and `container run -d -i -t` from a
+        // non-terminal fails in 1.6.1 with "Operation not supported by device" (ENODEV), so a
+        // detached run never gets `-i`. A shell image whose default command is a shell exits at
+        // once without a TTY, so detached shell images get `-t`, which keeps the shell waiting
+        // (verified: `-d -t` stays running, `-d` and `-d -i` stop). Interactive sessions use the
+        // Terminal tab (`container exec -it`) instead.
+        if interactive && !startImmediately {
             args.append("-i")
         }
         if allocateTTY || (startImmediately && isShellBaseImage) {

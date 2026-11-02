@@ -58,7 +58,8 @@ final class CLIArgumentBuilderTests: XCTestCase {
         XCTAssertTrue(args.contains("--name"))
         XCTAssertTrue(args.contains("api-gateway"))
         XCTAssertTrue(args.contains("-t"))
-        XCTAssertTrue(args.contains("-i"))
+        // `run -d -i -t` from a non-terminal fails with ENODEV on container 1.6.1: never `-i` when detached.
+        XCTAssertFalse(args.contains("-i"))
         XCTAssertTrue(args.contains("--rm"))
         XCTAssertTrue(args.contains("--read-only"))
         XCTAssertTrue(args.contains("--ssh"))
@@ -246,5 +247,40 @@ final class CLIArgumentBuilderTests: XCTestCase {
             "virtualization=true",
             "kernel=/opt/vmlinux"
         ])
+    }
+
+    // MARK: - Image Library launches (regression: "Operation not supported by device")
+
+    func testLibraryAlpineLaunchIsDetachedWithTTYOnly() throws {
+        let alpine = try XCTUnwrap(DockerHubService.curatedCatalog.first { $0.slug == "alpine" })
+        let args = alpine.buildDeployRequest(selectedTag: "latest").buildCLIArguments()
+        XCTAssertEqual(Array(args.prefix(2)), ["run", "-d"])
+        XCTAssertTrue(args.contains("-t"), "a shell image needs a TTY to stay running when detached")
+        XCTAssertFalse(args.contains("-i"))
+    }
+
+    func testLibraryServiceLaunchHasNoTerminalFlags() throws {
+        let nginx = try XCTUnwrap(DockerHubService.curatedCatalog.first { $0.slug == "nginx" })
+        let args = nginx.buildDeployRequest(selectedTag: "latest").buildCLIArguments()
+        XCTAssertFalse(args.contains("-i"))
+        XCTAssertFalse(args.contains("-t"))
+    }
+
+    func testShellImageDetectionUsesRepositoryName() {
+        XCTAssertTrue(ContainerCreateRequest.isShellBaseImage("docker.io/library/alpine:latest"))
+        XCTAssertTrue(ContainerCreateRequest.isShellBaseImage("ubuntu@sha256:abc"))
+        XCTAssertTrue(ContainerCreateRequest.isShellBaseImage("alpine"))
+        XCTAssertFalse(ContainerCreateRequest.isShellBaseImage("nginx:alpine"))
+        XCTAssertFalse(ContainerCreateRequest.isShellBaseImage("ghcr.io/acme/alpine-tools:1"))
+    }
+
+    func testCreateWithoutStartKeepsInteractiveFlags() {
+        var req = ContainerCreateRequest(name: "shell", imageReference: "alpine:latest", startImmediately: false)
+        req.interactive = true
+        req.allocateTTY = true
+        let args = req.buildCLIArguments()
+        XCTAssertEqual(args.first, "create")
+        XCTAssertTrue(args.contains("-i"))
+        XCTAssertTrue(args.contains("-t"))
     }
 }

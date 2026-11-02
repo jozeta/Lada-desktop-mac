@@ -921,6 +921,10 @@ public struct CreateContainerWizardView: View {
                 .font(.system(size: 12))
             Toggle("Keep STDIN open (`-i / --interactive`)", isOn: $request.interactive)
                 .font(.system(size: 12))
+                .disabled(request.startImmediately)
+                .help(request.startImmediately
+                    ? "Not used for containers started right away: Låda starts them detached without a terminal (`-d -i -t` fails there). Use the Terminal tab for an interactive shell."
+                    : "Keep STDIN open when the container is started later.")
             Toggle("Allocate a pseudo-TTY (`-t / --tty`)", isOn: $request.allocateTTY)
                 .font(.system(size: 12))
             Toggle("Forward host SSH agent socket (`--ssh`)", isOn: $request.sshAgentForwarding)
