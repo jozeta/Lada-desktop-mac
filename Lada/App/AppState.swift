@@ -559,7 +559,7 @@ public final class AppState: ObservableObject {
         // executable (`swift run`) or a test process.
         guard Bundle.main.bundleIdentifier != nil, Bundle.main.bundleURL.pathExtension == "app" else { return }
         let center = UNUserNotificationCenter.current()
-        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+        center.requestAuthorization(options: [.alert, .sound]) { @Sendable granted, _ in
             guard granted else { return }
             let content = UNMutableNotificationContent()
             content.title = title

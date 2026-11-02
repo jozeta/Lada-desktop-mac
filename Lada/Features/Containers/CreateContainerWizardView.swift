@@ -293,7 +293,7 @@ public struct CreateContainerWizardView: View {
         .frame(minWidth: 740, minHeight: 580)
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
             guard let provider = providers.first else { return false }
-            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+            _ = provider.loadObject(ofClass: URL.self) { @Sendable url, _ in
                 guard let url else { return }
                 Task { @MainActor in
                     applyDroppedDockerfile(url: url)

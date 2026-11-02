@@ -544,7 +544,7 @@ public struct ContainerFileBrowserView: View {
         var handled = false
         for provider in providers where provider.canLoadObject(ofClass: URL.self) {
             handled = true
-            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+            _ = provider.loadObject(ofClass: URL.self) { @Sendable url, _ in
                 guard let url else { return }
                 Task { @MainActor in
                     await uploadHostFile(url: url)

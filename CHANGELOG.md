@@ -6,6 +6,11 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Fix: opening a container's Terminal tab crashed the app (regression from the Swift 6 switch: the
+  PTY read handler, written inside a main-actor class, was treated as main-actor code and trapped
+  when called on a background queue). Background callbacks (PTY, drag-and-drop loading,
+  notification permission) are now explicitly `@Sendable`; terminal output also keeps multi-byte
+  characters split between reads intact
 - Redesign, step 1 (foundation): spacing, radius and motion tokens (`NordicTheme.Spacing`,
   `.Radius`, `.Motion`) with Reduce Motion respected; cards and panels share one style (continuous
   10 pt corners, hairline border); status badges are softer capsules and a running container's dot

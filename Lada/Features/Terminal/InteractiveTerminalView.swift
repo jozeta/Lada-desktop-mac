@@ -121,25 +121,28 @@ public final class PTYTerminalSession: ObservableObject {
         let flags = fcntl(mfd, F_GETFL)
         _ = fcntl(mfd, F_SETFL, flags | O_NONBLOCK)
 
+        // These handlers run on a background queue. They are written inside this @MainActor class,
+        // so they must be explicitly @Sendable: otherwise Swift 6 treats them as main-actor code
+        // and its runtime isolation check traps as soon as the terminal produces output.
+        let decoder = PTYOutputDecoder()
         let source = DispatchSource.makeReadSource(fileDescriptor: mfd, queue: .global(qos: .userInteractive))
-        source.setEventHandler { [weak self] in
+        source.setEventHandler { @Sendable [weak self] in
             var buffer = [UInt8](repeating: 0, count: 4096)
             let bytesRead = read(mfd, &buffer, buffer.count)
-            if bytesRead > 0 {
-                let rawChunk = String(decoding: buffer.prefix(bytesRead), as: UTF8.self)
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    self.ingestPTYChunk(rawChunk)
-                }
+            guard bytesRead > 0 else { return }
+            let chunk = decoder.decode(Array(buffer.prefix(bytesRead)))
+            guard !chunk.isEmpty else { return }
+            Task { @MainActor [weak self] in
+                self?.ingestPTYChunk(chunk)
             }
         }
-        source.setCancelHandler {
+        source.setCancelHandler { @Sendable in
             close(mfd)
         }
         self.readSource = source
         source.resume()
 
-        proc.terminationHandler = { [weak self] terminated in
+        proc.terminationHandler = { @Sendable [weak self] terminated in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.isRunning = false
@@ -689,3 +692,30 @@ public struct InteractiveTerminalView: View {
         }
     }
 }
+
+/// Decodes PTY output to text without breaking multi-byte UTF-8 characters that are split
+/// between two reads: the incomplete tail is kept for the next chunk.
+final class PTYOutputDecoder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var pending: [UInt8] = []
+
+    func decode(_ bytes: [UInt8]) -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        var data = pending + bytes
+        // Keep back up to 3 bytes if the buffer ends inside a multi-byte sequence.
+        var cut = data.count
+        var i = data.count - 1
+        var continuation = 0
+        while i >= 0 && continuation < 3 && (data[i] & 0xC0) == 0x80 { continuation += 1; i -= 1 }
+        if i >= 0 {
+            let lead = data[i]
+            let needed = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : lead >= 0xC0 ? 2 : 1
+            if needed > continuation + 1 { cut = i }
+        }
+        pending = Array(data[cut...])
+        data.removeSubrange(cut...)
+        return String(decoding: data, as: UTF8.self)
+    }
+}
+

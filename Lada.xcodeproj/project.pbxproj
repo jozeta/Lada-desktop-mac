@@ -28,6 +28,7 @@
 				Tests/UnitTests/ImageReferenceSuggesterTests.swift,
 				Tests/UnitTests/LadaSmokeTests.swift,
 				Tests/UnitTests/OutputParserTests.swift,
+				Tests/UnitTests/PTYTerminalSessionTests.swift,
 				Tests/UnitTests/RealOutputParserTests.swift,
 				Tests/UnitTests/RuntimeCapabilitiesAndHealthTests.swift,
 				Tests/UnitTests/SecretHandlingTests.swift,

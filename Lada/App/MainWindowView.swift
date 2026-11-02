@@ -143,7 +143,7 @@ public struct MainWindowView: View {
     private func handleWindowDrop(providers: [NSItemProvider]) -> Bool {
         for provider in providers {
             if provider.canLoadObject(ofClass: URL.self) {
-                _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                _ = provider.loadObject(ofClass: URL.self) { @Sendable url, _ in
                     guard let url else { return }
                     Task { @MainActor in
                         _ = appState.handleDroppedDockerfile(url: url)
@@ -152,7 +152,7 @@ public struct MainWindowView: View {
                 return true
             }
             if provider.canLoadObject(ofClass: NSString.self) {
-                _ = provider.loadObject(ofClass: NSString.self) { item, _ in
+                _ = provider.loadObject(ofClass: NSString.self) { @Sendable item, _ in
                     guard let str = item as? String else { return }
                     Task { @MainActor in
                         appState.handleDroppedDockerfileText(str)
