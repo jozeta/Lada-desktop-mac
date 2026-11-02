@@ -6,6 +6,10 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Create Container: image names autocomplete as you type (local images first, then the Image
+  Library catalog; after `repo:` it completes that repository's arm64 tags). ↑/↓, Return/Tab and
+  Esc work from the keyboard; nothing is fetched over the network while typing. The Presets menu
+  lists the whole catalog instead of the first 10
 - Settings: the section list is drawn with Nordic surfaces instead of a second translucent system
   sidebar (in light mode its selected row was unreadable), and forms sit in standard Nordic panels
   instead of the system's grouped inset box. Adds a shared `nordicPanel()` modifier

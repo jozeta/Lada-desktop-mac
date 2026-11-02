@@ -18,4 +18,5 @@ public enum AccessibilityID {
     public static let filesEditorNotice = "lada.files.editorNotice"
     public static let restartServicesButton = "lada.dashboard.restartServices"
     public static let wizardDNSAliasesField = "lada.wizard.dnsAliases"
+    public static let imageReferenceField = "lada.wizard.imageReference"
 }

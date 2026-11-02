@@ -375,11 +375,14 @@ public struct CreateContainerWizardView: View {
                             Text("Image & Tag *:")
                                 .font(.system(size: 12, weight: .medium))
                             HStack(spacing: 8) {
-                                TextField("e.g. nginx:1.27-alpine, postgres:16-alpine, alpine:latest", text: $request.imageReference)
-                                    .textFieldStyle(.roundedBorder)
-                                    .font(NordicTheme.monoFontRegular)
+                                ImageReferenceField(
+                                    text: $request.imageReference,
+                                    placeholder: "Start typing: nginx, postgres:17-alpine, alpine…",
+                                    localReferences: appState.images.map(\.fullReference),
+                                    accent: NordicTheme.accent(for: appState.preferences.accentThemeChoice)
+                                )
                                 Menu("Presets") {
-                                    ForEach(DockerHubService.curatedCatalog.prefix(10)) { item in
+                                    ForEach(DockerHubService.curatedCatalog) { item in
                                         Button("\(item.slug) — \(item.description.prefix(45))…") {
                                             let preset = item.buildDeployRequest(
                                                 selectedTag: item.availableTags.first ?? "latest",
@@ -548,9 +551,12 @@ public struct CreateContainerWizardView: View {
                     Text("Image & Tag *:")
                         .font(.system(size: 12, weight: .medium))
                     HStack(spacing: 8) {
-                        TextField("e.g. alpine:latest, nginx:1.27-alpine", text: $request.imageReference)
-                            .textFieldStyle(.roundedBorder)
-                            .font(NordicTheme.monoFontRegular)
+                        ImageReferenceField(
+                            text: $request.imageReference,
+                            placeholder: "Start typing: alpine, nginx:1.31-alpine…",
+                            localReferences: appState.images.map(\.fullReference),
+                            accent: NordicTheme.accent(for: appState.preferences.accentThemeChoice)
+                        )
                         if !appState.images.isEmpty {
                             Menu("Local Images") {
                                 ForEach(appState.images) { img in
