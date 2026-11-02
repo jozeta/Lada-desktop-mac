@@ -536,7 +536,7 @@ public struct CreateContainerWizardView: View {
     @ViewBuilder
     private var basicSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            NordicSectionHeader("Basic Configuration", subtitle: "Identity, OCI image reference, and initial command execution.")
+            NordicSectionHeader("Basic Configuration", subtitle: "Identity, OCI image reference, and initial command execution.", info: "The container's name and the image it runs. Names must be unique; the image is pulled if it isn't on this Mac.")
 
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 10) {
                 GridRow {
@@ -647,7 +647,7 @@ public struct CreateContainerWizardView: View {
     @ViewBuilder
     private var networkingSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            NordicSectionHeader("Networking & Port Forwarding", subtitle: "Attach to an isolated vmnet network and forward host ports.")
+            NordicSectionHeader("Networking & Port Forwarding", subtitle: "Attach to an isolated vmnet network and forward host ports.", info: "Which network the container joins and which ports on your Mac forward into it (`-p host:container`).")
 
             HStack(spacing: 12) {
                 Text("Network:")
@@ -754,7 +754,7 @@ public struct CreateContainerWizardView: View {
     @ViewBuilder
     private var storageSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            NordicSectionHeader("Storage Mounts", subtitle: "Attach host directories (virtiofs), persistent ext4 named volumes, or in-memory tmpfs mounts.")
+            NordicSectionHeader("Storage Mounts", subtitle: "Attach host directories (virtiofs), persistent ext4 named volumes, or in-memory tmpfs mounts.", info: "Keep data outside the container: a folder on your Mac or a named volume survives deleting the container.")
 
             HStack(spacing: 8) {
                 Button {
@@ -844,7 +844,7 @@ public struct CreateContainerWizardView: View {
     @ViewBuilder
     private var environmentSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            NordicSectionHeader("Environment Variables", subtitle: "Sensitive keys (PASSWORD, TOKEN, SECRET, KEY) are automatically masked.")
+            NordicSectionHeader("Environment Variables", subtitle: "Sensitive keys (PASSWORD, TOKEN, SECRET, KEY) are automatically masked.", info: "Settings passed to the program in the container (`-e KEY=value`). Values of keys that look secret are hidden in previews and logs.")
 
             HStack(spacing: 8) {
                 Text("Environment File (`--env-file`):")
@@ -876,7 +876,7 @@ public struct CreateContainerWizardView: View {
     @ViewBuilder
     private var resourcesSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            NordicSectionHeader("VM Resource Allocation", subtitle: "Each container executes in its own lightweight Linux VM.")
+            NordicSectionHeader("VM Resource Allocation", subtitle: "Each container executes in its own lightweight Linux VM.", info: "Each container is its own small virtual machine; this sets its CPUs and memory limit.")
 
             HStack(spacing: 20) {
                 Stepper(value: $request.cpus, in: 1...max(16, appState.hostEnvironment.processorCount)) {
@@ -919,7 +919,7 @@ public struct CreateContainerWizardView: View {
     @ViewBuilder
     private var securitySection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            NordicSectionHeader("Security & Execution Options", subtitle: "Configure rootfs protection, Linux capabilities, init reaping, and SSH forwarding.")
+            NordicSectionHeader("Security & Execution Options", subtitle: "Configure rootfs protection, Linux capabilities, init reaping, and SSH forwarding.", info: "Read-only root filesystem, the user the process runs as, and other hardening options.")
 
             Toggle("Mount root filesystem as read-only (`--read-only`)", isOn: $request.readOnlyRootfs)
                 .font(.system(size: 12))
@@ -973,7 +973,7 @@ public struct CreateContainerWizardView: View {
     @ViewBuilder
     private var advancedAndSummarySection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            NordicSectionHeader("Platform, Labels & Summary", subtitle: "Target architecture, OCI labels, and pre-flight verification.")
+            NordicSectionHeader("Platform, Labels & Summary", subtitle: "Target architecture, OCI labels, and pre-flight verification.", info: "CPU architecture (arm64 runs natively; amd64 uses Rosetta), labels for organising containers, and the exact command Låda will run.")
 
             HStack(spacing: 12) {
                 Text("Platform Override (`--platform`):")

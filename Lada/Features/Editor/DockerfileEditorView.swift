@@ -569,7 +569,8 @@ public struct DockerfileEditorView: View {
                 HStack {
                     NordicSectionHeader(
                         "Deployment Settings",
-                        subtitle: "Customize name, ports, env, and mounts before deploying."
+                        subtitle: "Customize name, ports, env, and mounts before deploying.",
+                        info: "Settings for the container that Build & Run starts, filled in from the Dockerfile (EXPOSE, ENV, VOLUME). Edit them before deploying."
                     )
                     Spacer()
                     Button("Sync from Dockerfile") {
@@ -1211,9 +1212,14 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
 
         public func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
-            if lastChangeWasTypedCharacter, let editor = textView as? DockerfileNSTextView {
+            if let editor = textView as? DockerfileNSTextView {
+                if lastChangeWasTypedCharacter {
+                    autoComplete(in: editor)
+                } else if editor.completionPopup.isVisible, !editor.isInsertingCompletion {
+                    // Backspace and the like narrow or widen the open list.
+                    refreshPopup(in: editor)
+                }
                 lastChangeWasTypedCharacter = false
-                autoComplete(in: editor)
             }
             parent.text = textView.string
             applySyntaxHighlighting(to: textView)
@@ -1223,6 +1229,12 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
 
         public func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
+            // Moving the caret elsewhere (click, arrows without the list) closes the list.
+            if let editor = textView as? DockerfileNSTextView, editor.completionPopup.isVisible,
+               !editor.isInsertingCompletion, !lastChangeWasTypedCharacter,
+               editor.rangeForUserCompletion.location != editor.popupAnchor {
+                editor.completionPopup.hide()
+            }
             updateCursorContext(in: textView)
             textView.enclosingScrollView?.verticalRulerView?.needsDisplay = true
         }
@@ -1271,12 +1283,14 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
             let typed = (textView.string as NSString).character(at: cursor - 1)
             // Whitespace and newlines end a word; complete again only after a space following an
             // instruction or argument (e.g. "FROM ", "EXPOSE ").
-            if typed == 0x0A { return }
-            guard !suggestions(in: textView, upTo: cursor).isEmpty else { return }
-            DispatchQueue.main.async { [weak textView] in
-                guard let textView, !textView.isInsertingCompletion else { return }
-                textView.complete(nil)
-            }
+            if typed == 0x0A { textView.completionPopup.hide(); return }
+            refreshPopup(in: textView)
+        }
+
+        /// Shows the list for the word at the caret, or hides it when nothing fits.
+        func refreshPopup(in textView: DockerfileNSTextView) {
+            let items = suggestions(in: textView, upTo: textView.selectedRange().location)
+            textView.showCompletionPopup(items: items)
         }
 
         func insertCompletion(_ insertion: String, in textView: NSTextView) {
@@ -1412,10 +1426,51 @@ final class DockerfileNSTextView: NSTextView {
         return NSRange(location: start, length: cursor - start)
     }
 
+    let completionPopup = CompletionPopupController()
+    /// Where the word the open list completes starts (to tell typing from moving away).
+    private(set) var popupAnchor = NSNotFound
+
+    func showCompletionPopup(items: [String]) {
+        guard let window, !items.isEmpty else { completionPopup.hide(); return }
+        let range = rangeForUserCompletion
+        popupAnchor = range.location
+        let caret = firstRect(forCharacterRange: NSRange(location: range.location, length: 0), actualRange: nil)
+        completionPopup.show(items: items, caretRect: caret, parent: window) { [weak self] item in
+            self?.acceptCompletion(item)
+        }
+    }
+
+    /// Replaces the word at the caret with `item`.
+    func acceptCompletion(_ item: String) {
+        let range = rangeForUserCompletion
+        isInsertingCompletion = true
+        defer { isInsertingCompletion = false }
+        if shouldChangeText(in: range, replacementString: item) {
+            replaceCharacters(in: range, with: item)
+            didChangeText()
+        }
+    }
+
+    /// Option-Esc opens the list on demand.
+    override func complete(_ sender: Any?) {
+        guard let coordinator = delegate as? DockerfileCodeEditorRepresentable.Coordinator else { return }
+        coordinator.refreshPopup(in: self)
+    }
+
     override func insertCompletion(_ word: String, forPartialWordRange charRange: NSRange, movement: Int, isFinal flag: Bool) {
         isInsertingCompletion = true
         defer { isInsertingCompletion = false }
         super.insertCompletion(word, forPartialWordRange: charRange, movement: movement, isFinal: flag)
+    }
+
+    override func resignFirstResponder() -> Bool {
+        completionPopup.hide()
+        return super.resignFirstResponder()
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil { completionPopup.hide() }
+        super.viewWillMove(toWindow: newWindow)
     }
     /// Re-highlights with the new appearance's palette (light/dark switch).
     var onAppearanceChange: (() -> Void)?
@@ -1426,7 +1481,16 @@ final class DockerfileNSTextView: NSTextView {
     }
 
     override func keyDown(with event: NSEvent) {
-        // Trigger completion when pressing Option+Escape or F5
+        if completionPopup.isVisible {
+            switch event.keyCode {
+            case 125: completionPopup.moveSelection(by: 1); return      // ↓
+            case 126: completionPopup.moveSelection(by: -1); return     // ↑
+            case 36, 76, 48: completionPopup.acceptSelection(); return  // Return, Enter, Tab
+            case 53: completionPopup.hide(); return                     // Esc
+            default: break
+            }
+        }
+        // Option-Esc opens the list on demand.
         if event.keyCode == 53 && event.modifierFlags.contains(.option) {
             complete(nil)
             return

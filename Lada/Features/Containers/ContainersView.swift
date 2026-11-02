@@ -87,8 +87,7 @@ public struct ContainersView: View {
     }
 
     private var filteredContainers: [ContainerModel] {
-        let query = appState.globalSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return appState.containers
+        appState.containers
             .filter { c in
                 switch stateFilter {
                 case .all: break
@@ -96,11 +95,6 @@ public struct ContainersView: View {
                 case .stopped: if c.state != .stopped && c.state != .stopping { return false }
                 case .createdOrExited: if c.state != .created && c.state != .exited { return false }
                 case .unknown: if c.state != .unknown { return false }
-                }
-                if !query.isEmpty {
-                    return c.id.lowercased().contains(query)
-                        || c.imageReference.lowercased().contains(query)
-                        || (c.primaryIPv4?.lowercased().contains(query) ?? false)
                 }
                 return true
             }

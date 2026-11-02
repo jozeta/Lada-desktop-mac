@@ -24,7 +24,14 @@ public final class AppState: ObservableObject {
     // MARK: - Navigation & Global UI State
 
     @Published public var selectedSection: NavigationSection = .overview
+    /// The toolbar's universal search text.
     @Published public var globalSearchQuery: String = ""
+    /// A search for the Image Library to run when it next appears (set by universal search).
+    @Published public var pendingLibrarySearch: String?
+    /// Bumped by a user refresh (toolbar, ⌘R) so open views also reload what they fetched
+    /// themselves: logs, a folder listing, stack logs.
+    @Published public private(set) var refreshGeneration = 0
+    @Published public private(set) var isUserRefreshing = false
     @Published public var showSetupWizard: Bool = false
     @Published public var showCreateContainerSheet: Bool = false
     @Published public var createContainerInitialRequest: ContainerCreateRequest? = nil
@@ -88,7 +95,11 @@ public final class AppState: ObservableObject {
     @Published public var volumes: [VolumeModel] = []
     @Published public var selectedVolumeID: String? = nil
 
-    @Published public var machines: [MachineModel] = []
+    @Published public var machines: [MachineModel] = [] {
+        didSet { machineWorkspaces.reconcile(with: machines) }
+    }
+    /// Per-machine inspector state (tab, terminal session, files, logs).
+    public let machineWorkspaces = MachineWorkspaceStore()
     @Published public var selectedMachineID: String? = nil
 
     @Published public var registries: [RegistryModel] = []
@@ -172,6 +183,68 @@ public final class AppState: ObservableObject {
                     await self.refreshFastWorkloadState()
                 }
             }
+        }
+    }
+
+    /// Refresh from the toolbar or ⌘R: waits for a poll in progress instead of being skipped by
+    /// it, refreshes everything, then tells open views to reload their own data.
+    public func userRefresh() async {
+        guard !isUserRefreshing else { return }
+        isUserRefreshing = true
+        defer { isUserRefreshing = false }
+        for _ in 0..<50 where isRefreshing {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        await refreshAll(isUserInitiated: true)
+        refreshGeneration += 1
+    }
+
+    // MARK: - Universal search
+
+    public var searchInputs: UniversalSearch.Inputs {
+        var inputs = UniversalSearch.Inputs()
+        inputs.containers = containers
+        inputs.images = images
+        inputs.machines = machines
+        inputs.volumes = volumes
+        inputs.networks = networks
+        inputs.registries = registries
+        inputs.catalog = DockerHubService.curatedCatalog
+        return inputs
+    }
+
+    /// Goes to a search result's page and selects it.
+    public func open(_ destination: UniversalSearchResult.Destination) {
+        switch destination {
+        case .container(let id):
+            if let project = containers.first(where: { $0.id == id })?.composeProject {
+                collapsedContainerStacks.remove(project)
+            }
+            selectedSection = .containers
+            selectedContainerID = id
+        case .stack(let name):
+            collapsedContainerStacks.remove(name)
+            selectedSection = .containers
+            selectedContainerID = ContainerListRow.stackPrefix + name
+        case .image(let id):
+            selectedSection = .images
+            selectedImageID = id
+        case .machine(let id):
+            selectedSection = .machines
+            selectedMachineID = id
+        case .volume(let id):
+            selectedSection = .volumes
+            selectedVolumeID = id
+        case .network(let id):
+            selectedSection = .networks
+            selectedNetworkID = id
+        case .registry:
+            selectedSection = .registries
+        case .libraryImage(let name):
+            pendingLibrarySearch = name
+            selectedSection = .imageLibrary
+        case .section(let section):
+            selectedSection = section
         }
     }
 
@@ -368,7 +441,7 @@ public final class AppState: ObservableObject {
                   s.cpuUsageUsec >= prev.cpuUsageUsec,
                   s.networkRxBytes >= prev.networkRxBytes, s.networkTxBytes >= prev.networkTxBytes,
                   s.blockReadBytes >= prev.blockReadBytes, s.blockWriteBytes >= prev.blockWriteBytes,
-                  let containerCPUs = containers.first(where: { $0.id == s.id })?.configuration.cpus
+                  let containerCPUs = Self.allocatedCPUs(forStatsID: s.id, containers: containers, machines: machines)
             else { continue }
 
             let dt = now.timeIntervalSince(prevTime)
@@ -409,6 +482,14 @@ public final class AppState: ObservableObject {
         if onlyUpdateIDs == nil {
             recordAggregateSystemTelemetrySample(at: now)
         }
+    }
+
+    /// vCPUs behind a `container stats` row: a container's, or a machine's (machines report stats
+    /// under their underlying container ID).
+    nonisolated static func allocatedCPUs(forStatsID id: String, containers: [ContainerModel], machines: [MachineModel]) -> Int? {
+        if let c = containers.first(where: { $0.id == id }) { return c.configuration.cpus }
+        if let m = machines.first(where: { $0.containerID == id }), m.cpus > 0 { return m.cpus }
+        return nil
     }
 
     /// Telemetry points kept per container and for the dashboard: 5 minutes at the 2 s sample rate.
@@ -753,46 +834,46 @@ public final class AppState: ObservableObject {
 
     /// Launches a real native macOS `Terminal.app` window connected to `container exec -it <id>` via an interactive shell script.
     public func openExternalTerminalForContainer(id: String, preferredShell: String? = nil) {
+        guard ValidationUtils.isValidContainerName(id) else { return }
         let execPath = installation.executablePath ?? "/usr/local/bin/container"
-        let sanitizedID = id.replacingOccurrences(of: "[^a-zA-Z0-9_.-]", with: "-", options: .regularExpression)
-        let scriptURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("lada-shell-\(sanitizedID).command")
-
-        let shellLogic: String
+        let shellArgs: [String]
         if let preferredShell, !preferredShell.isEmpty {
-            shellLogic = "exec \"\(execPath)\" exec -it \"\(id)\" \(preferredShell)"
+            shellArgs = [preferredShell]
         } else {
-            shellLogic = """
-            "\(execPath)" exec -it "\(id)" /bin/sh -c 'if [ -x /bin/bash ]; then exec /bin/bash; elif [ -x /bin/ash ]; then exec /bin/ash; else exec /bin/sh; fi'
-            """
+            shellArgs = ["/bin/sh", "-c", "if [ -x /bin/bash ]; then exec /bin/bash; elif [ -x /bin/ash ]; then exec /bin/ash; else exec /bin/sh; fi"]
         }
+        launchExternalTerminal(
+            name: "shell-\(id)",
+            heading: "Connected to Apple Container '\(id)'",
+            command: [execPath, "exec", "-it", id] + shellArgs,
+            activityDetail: "Launched macOS Terminal session connected to container '\(id)'."
+        )
+    }
 
-        let scriptContent = """
-        #!/bin/sh
-        clear
-        printf "\\033[1;36m==> Lada: Connected to Apple Container '%s'\\033[0m\\n" "\(id)"
-        printf "\\033[0;90m    Command: %s exec -it %s\\033[0m\\n\\n" "\(execPath)" "\(id)"
-        \(shellLogic)
-        status=$?
-        if [ $status -ne 0 ]; then
-            printf "\\n\\033[1;31m[Lada] Container shell exited with status %d.\\033[0m\\n" "$status"
-            read -r -p "Press Enter to close this terminal window..." _
-        fi
-        """
+    /// Opens the machine's login shell (`container machine run -i -t -n <id>`) in Terminal.app.
+    public func openExternalTerminalForMachine(id: String) {
+        guard ValidationUtils.isValidMachineName(id) else { return }
+        let execPath = installation.executablePath ?? "/usr/local/bin/container"
+        launchExternalTerminal(
+            name: "machine-\(id)",
+            heading: "Connected to container machine '\(id)'",
+            command: [execPath, "machine", "run", "-i", "-t", "-n", id],
+            activityDetail: "Launched macOS Terminal session in machine '\(id)'."
+        )
+    }
 
+    private func launchExternalTerminal(name: String, heading: String, command: [String], activityDetail: String) {
+        let sanitized = name.replacingOccurrences(of: "[^a-zA-Z0-9_.-]", with: "-", options: .regularExpression)
+        let scriptURL = FileManager.default.temporaryDirectory.appendingPathComponent("lada-\(sanitized).command")
         do {
-            try scriptContent.write(to: scriptURL, atomically: true, encoding: .utf8)
-            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+            try ExternalTerminalScript.make(heading: heading, command: command).write(to: scriptURL, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scriptURL.path)
             NSWorkspace.shared.open(scriptURL)
-            recordActivity(
-                category: "Terminal",
-                title: "Opened Terminal (\(id))",
-                detail: "Launched macOS Terminal session connected to container '\(id)'."
-            )
+            recordActivity(category: "Terminal", title: "Opened Terminal (\(name))", detail: activityDetail)
         } catch {
             activeError = LadaError(
                 category: .internalError,
-                explanation: "Failed to launch external macOS Terminal for container '\(id)': \(error.localizedDescription)",
+                explanation: "Failed to open Terminal.app: \(error.localizedDescription)",
                 suggestedRemediation: "Ensure Terminal.app is available or use the built-in Terminal tab.",
                 isRetryable: true
             )

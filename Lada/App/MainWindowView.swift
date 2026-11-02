@@ -5,6 +5,8 @@ public struct MainWindowView: View {
     @ObservedObject var appState: AppState
     @FocusState private var isSearchFocused: Bool
     @State private var isDockerfileDropTargeted: Bool = false
+    @StateObject private var search = UniversalSearchPanel()
+    @State private var searchAnchor = ScreenAnchor()
 
     public init(appState: AppState) {
         self.appState = appState
@@ -323,60 +325,63 @@ public struct MainWindowView: View {
         ToolbarItemGroup(placement: .navigation) {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(NordicTheme.secondaryText)
-                TextField("Filter resources…", text: $appState.globalSearchQuery)
+                    .foregroundStyle(isSearchFocused ? NordicTheme.accent(for: appState.preferences.accentThemeChoice) : NordicTheme.secondaryText)
+                TextField("Search everything…", text: $appState.globalSearchQuery)
                     .textFieldStyle(.plain)
-                    .frame(width: 190)
+                    .frame(width: 240)
                     .focused($isSearchFocused)
+                    .onSubmit { search.openSelection() }
+                    .onKeyPress(.downArrow) { search.moveSelection(by: 1); return .handled }
+                    .onKeyPress(.upArrow) { search.moveSelection(by: -1); return .handled }
+                    .onKeyPress(.escape) { clearSearch(); return .handled }
                     .accessibilityIdentifier(AccessibilityID.globalSearchField)
+                    .help("Search containers, stacks, images, machines, volumes, networks, registries, Image Library presets and pages")
                 if !appState.globalSearchQuery.isEmpty {
-                    Button {
-                        appState.globalSearchQuery = ""
-                    } label: {
+                    Button(action: clearSearch) {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(NordicTheme.secondaryText)
                     }
                     .buttonStyle(.plain)
+                    .help("Clear search")
                 }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .nordicChip()
+            .background(ScreenAnchorReader(anchor: searchAnchor))
+            .onChange(of: appState.globalSearchQuery) { _, query in updateSearch(query) }
+            .onChange(of: isSearchFocused) { _, focused in
+                if focused {
+                    updateSearch(appState.globalSearchQuery)
+                } else {
+                    // Let a click on a result land before the list closes.
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(200))
+                        if !isSearchFocused { search.hide() }
+                    }
+                }
+            }
+            .onAppear {
+                search.onOpen = { result in
+                    appState.open(result.destination)
+                    appState.globalSearchQuery = ""
+                    isSearchFocused = false
+                }
+            }
         }
 
         ToolbarItemGroup(placement: .primaryAction) {
             Button {
-                appState.createContainerInitialRequest = nil
-                appState.showCreateContainerSheet = true
+                Task { await appState.userRefresh() }
             } label: {
-                Label("New Container", systemImage: "plus.rectangle.on.rectangle")
+                if appState.isUserRefreshing {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
             }
-            .help("Create or Run Container (⌘N)")
-            .accessibilityIdentifier(AccessibilityID.newContainerButton)
-
-            Button {
-                appState.selectedSection = .images
-                appState.showPullImageSheet = true
-            } label: {
-                Label("Pull Image", systemImage: "arrow.down.to.line")
-            }
-            .help("Pull OCI Image (⇧⌘N)")
-            .accessibilityIdentifier(AccessibilityID.pullImageButton)
-
-            Button {
-                appState.selectedSection = .dockerfileEditor
-            } label: {
-                Label("Build Image", systemImage: "hammer")
-            }
-            .help("Build an image in the Dockerfile Editor")
-            .accessibilityIdentifier(AccessibilityID.buildImageButton)
-
-            Button {
-                Task { await appState.refreshAll() }
-            } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
-            }
-            .help("Refresh Runtime State (⌘R)")
+            .disabled(appState.isUserRefreshing)
+            .help("Refresh everything, including the open page's logs and files (⌘R)")
             .accessibilityIdentifier(AccessibilityID.refreshButton)
 
             Button {
@@ -386,6 +391,16 @@ public struct MainWindowView: View {
             }
             .help("Open Settings (⌘,)")
         }
+    }
+
+    private func updateSearch(_ query: String) {
+        guard isSearchFocused || !query.isEmpty else { search.hide(); return }
+        search.update(query: query, inputs: appState.searchInputs, anchor: searchAnchor)
+    }
+
+    private func clearSearch() {
+        appState.globalSearchQuery = ""
+        search.hide()
     }
 
     private var simulationBanner: some View {

@@ -227,6 +227,11 @@ public struct MachineModel: Identifiable, Codable, Sendable, Equatable {
     public let kernelPath: String?
     public let username: String?
     public let rawInspectJSON: String?
+    /// The container that runs the machine (`containerId` in `machine inspect`). `container
+    /// stats`, `exec` and `copy` take this ID, not the machine's name.
+    public let containerID: String?
+    /// The user's home inside the machine (`userSetup.home`).
+    public let homeDirectory: String?
 
     public init(
         id: String,
@@ -243,7 +248,9 @@ public struct MachineModel: Identifiable, Codable, Sendable, Equatable {
         virtualizationEnabled: Bool = false,
         kernelPath: String? = nil,
         username: String? = nil,
-        rawInspectJSON: String? = nil
+        rawInspectJSON: String? = nil,
+        containerID: String? = nil,
+        homeDirectory: String? = nil
     ) {
         self.id = id
         self.status = status
@@ -260,6 +267,17 @@ public struct MachineModel: Identifiable, Codable, Sendable, Equatable {
         self.kernelPath = kernelPath
         self.username = username
         self.rawInspectJSON = rawInspectJSON
+        self.containerID = containerID
+        self.homeDirectory = homeDirectory
+    }
+}
+
+extension MachineModel {
+    func withDefault(_ isDefault: Bool) -> MachineModel {
+        MachineModel(id: id, status: status, isDefault: isDefault, ipAddress: ipAddress, cpus: cpus, memoryBytes: memoryBytes,
+                     diskSizeBytes: diskSizeBytes, createdDate: createdDate, startedDate: startedDate, imageReference: imageReference,
+                     homeMount: homeMount, virtualizationEnabled: virtualizationEnabled, kernelPath: kernelPath, username: username,
+                     rawInspectJSON: rawInspectJSON, containerID: containerID, homeDirectory: homeDirectory)
     }
 }
 

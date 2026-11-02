@@ -10,14 +10,8 @@ public struct ActivityView: View {
     }
 
     private var filteredEvents: [ActivityEvent] {
-        let query = appState.globalSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return appState.activityEvents.filter { ev in
-            let matchesCat = selectedCategory == "All" || ev.category.lowercased().contains(selectedCategory.lowercased())
-            let matchesQuery = query.isEmpty
-                || ev.title.lowercased().contains(query)
-                || ev.detail.lowercased().contains(query)
-                || (ev.redactedCommand?.lowercased().contains(query) ?? false)
-            return matchesCat && matchesQuery
+        appState.activityEvents.filter { ev in
+            selectedCategory == "All" || ev.category.lowercased().contains(selectedCategory.lowercased())
         }
     }
 
@@ -221,18 +215,22 @@ public struct SettingsView: View {
 
     private var generalSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            NordicSectionHeader("General Preferences", subtitle: "Startup landing section, refresh interval, and confirmation prompts")
+            NordicSectionHeader("General Preferences", subtitle: "Startup landing section, refresh interval, and confirmation prompts", info: "How Låda starts and behaves: the page it opens on, how often the full inventory refreshes, and which actions ask for confirmation.")
             Form {
                 Picker("Default Landing Screen", selection: $prefs.defaultLandingSectionRaw) {
                     ForEach(NavigationSection.allCases) { sec in
                         Text(sec.rawValue).tag(sec.rawValue)
                     }
                 }
+                .nordicInfo("The page Låda opens on when it starts.")
                 Stepper(value: $prefs.autoRefreshIntervalSeconds, in: 5...120, step: 5) {
                     Text(verbatim: "Auto-Refresh Interval: \(prefs.autoRefreshIntervalSeconds)s")
                 }
+                .nordicInfo("How often Låda reloads everything from the runtime (images, volumes, networks…). Containers and live stats refresh every 2 seconds regardless.")
                 Toggle("Confirm Destructive Actions (Delete / Prune)", isOn: $prefs.confirmDestructiveActions)
+                    .nordicInfo("Ask before deleting or pruning containers, images, volumes and networks.")
                 Toggle("Confirm Before Stopping Running Containers", isOn: $prefs.confirmStopContainer)
+                    .nordicInfo("Ask before stopping a running container.")
             }
             .nordicFormPanel()
         }
@@ -242,7 +240,8 @@ public struct SettingsView: View {
         VStack(alignment: .leading, spacing: 14) {
             NordicSectionHeader(
                 "System & Runtime Dependency Management",
-                subtitle: "Inspect, start/stop, verify, and repair Apple's official `container` runtime"
+                subtitle: "Inspect, start/stop, verify, and repair Apple's official `container` runtime",
+                info: "Where the runtime is installed, its version and whether its services are running."
             )
 
             VStack(alignment: .leading, spacing: 10) {
@@ -322,7 +321,7 @@ public struct SettingsView: View {
             .nordicSurface()
 
             VStack(alignment: .leading, spacing: 8) {
-                NordicSectionHeader("Prerequisite Verification Summary")
+                NordicSectionHeader("Prerequisite Verification Summary", info: "Checks that this Mac can run Apple's container runtime: Apple silicon, macOS version, the CLI and its services.")
                 ForEach(appState.prerequisites) { item in
                     HStack {
                         NordicStatusBadge(prerequisiteStatus: item.status)
@@ -344,13 +343,15 @@ public struct SettingsView: View {
         VStack(alignment: .leading, spacing: 14) {
             NordicSectionHeader(
                 "Default Container Resources & Runtime Properties",
-                subtitle: "Configure default CPU/RAM allocations and inspect `container system property list`"
+                subtitle: "Configure default CPU/RAM allocations and inspect `container system property list`",
+                info: "The runtime's services (`container system start/stop`). Restart them after upgrading the CLI so versions match."
             )
 
             Form {
                 Stepper(value: $prefs.defaultContainerCPUs, in: 1...32) {
                     Text(verbatim: "Default Container CPUs: \(prefs.defaultContainerCPUs) cores")
                 }
+                .nordicInfo("CPUs a new container gets unless you choose otherwise in the Create Container wizard.")
                 Picker("Default Container Memory", selection: $prefs.defaultContainerMemoryMB) {
                     Text("512 MB").tag(512)
                     Text("1 GB").tag(1024)
@@ -358,20 +359,23 @@ public struct SettingsView: View {
                     Text("4 GB").tag(4096)
                     Text("8 GB").tag(8192)
                 }
+                .nordicInfo("Memory a new container gets unless you choose otherwise.")
                 Stepper(value: $prefs.defaultBuildCPUs, in: 1...32) {
                     Text(verbatim: "Default BuildKit CPUs: \(prefs.defaultBuildCPUs) cores")
                 }
+                .nordicInfo("CPUs for the BuildKit builder that builds images from Dockerfiles.")
                 Picker("Default BuildKit Memory", selection: $prefs.defaultBuildMemoryMB) {
                     Text("1 GB").tag(1024)
                     Text("2 GB").tag(2048)
                     Text("4 GB").tag(4096)
                     Text("8 GB").tag(8192)
                 }
+                .nordicInfo("Memory for the BuildKit builder. Large builds may need more.")
             }
             .nordicFormPanel()
 
             VStack(alignment: .leading, spacing: 8) {
-                NordicSectionHeader("Runtime System Properties (`container system property list`)")
+                NordicSectionHeader("Runtime System Properties (`container system property list`)", info: "Defaults the runtime applies to new containers and machines, read from `container system property list`. Change them with `container system property set`.")
                 LabeledContent("container.cpus", value: "\(appState.systemProperties.container.cpus)")
                     .font(NordicTheme.monoFontSmall)
                 LabeledContent("container.memory", value: appState.systemProperties.container.memory)
@@ -418,23 +422,26 @@ public struct SettingsView: View {
 
     private var appearanceSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            NordicSectionHeader("Technical Nordic Appearance", subtitle: "Theme, accent color, and table density")
+            NordicSectionHeader("Technical Nordic Appearance", subtitle: "Theme, accent color, and table density", info: "Light or dark mode, the accent colour and how dense tables are. Applies at once.")
             Form {
                 Picker("Theme Mode", selection: $prefs.appearanceModeRaw) {
                     ForEach(AppAppearanceMode.allCases, id: \.rawValue) { mode in
                         Text(mode.displayName).tag(mode.rawValue)
                     }
                 }
+                .nordicInfo("Follow macOS, or always use light or dark.")
                 Picker("Accent Palette", selection: $prefs.accentThemeChoiceRaw) {
                     ForEach(AccentThemeChoice.allCases, id: \.rawValue) { choice in
                         Text(choice.displayName).tag(choice.rawValue)
                     }
                 }
+                .nordicInfo("The colour used for selection, buttons and charts.")
                 Picker("Interface Density", selection: $prefs.uiDensityModeRaw) {
                     ForEach(UIDensityMode.allCases, id: \.rawValue) { density in
                         Text(density.displayName).tag(density.rawValue)
                     }
                 }
+                .nordicInfo("How much space rows and panels use.")
             }
             .nordicFormPanel()
         }
@@ -442,11 +449,14 @@ public struct SettingsView: View {
 
     private var notificationsSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            NordicSectionHeader("Notifications & Alerts")
+            NordicSectionHeader("Notifications & Alerts", info: "macOS notifications for finished operations and containers that stop unexpectedly. Only available when Låda runs as an app bundle.")
             Form {
                 Toggle("Notify on Build Completion", isOn: $prefs.notifyBuildCompletion)
+                    .nordicInfo("A macOS notification when an image build finishes.")
                 Toggle("Notify on Container Operations Failure", isOn: $prefs.notifyContainerFailures)
+                    .nordicInfo("A macOS notification when a container operation fails or a container stops unexpectedly.")
                 Toggle("Notify on Runtime Health Degradation", isOn: $prefs.notifyRuntimeFailures)
+                    .nordicInfo("A macOS notification when the runtime's services stop or report a problem.")
             }
             .nordicFormPanel()
         }
@@ -456,7 +466,8 @@ public struct SettingsView: View {
         VStack(alignment: .leading, spacing: 14) {
             NordicSectionHeader(
                 "Diagnostics & Redacted Support Bundle",
-                subtitle: "Inspect system logs and export privacy-redacted diagnostic reports"
+                subtitle: "Inspect system logs and export privacy-redacted diagnostic reports",
+                info: "Saves a diagnostics report with secrets removed, for troubleshooting or a bug report."
             )
 
             HStack(spacing: 10) {
@@ -525,16 +536,20 @@ public struct SettingsView: View {
 
     private var advancedSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            NordicSectionHeader("Advanced Runtime Overrides")
+            NordicSectionHeader("Advanced Runtime Overrides", info: "For unusual setups: point Låda at a different `container` binary or change how it talks to the runtime. Leave empty to auto-detect.")
             Form {
                 TextField("Custom `container` CLI Path Override (leave blank for automatic discovery)", text: $prefs.customCLIExecutablePath)
                     .font(NordicTheme.monoFontRegular)
+                    .nordicInfo("Use a specific `container` binary instead of the one found in /usr/local/bin or /opt/homebrew/bin.")
                 Toggle("Enable Experimental Path Masking Options (`--masked-path`, `--read-only-path`)", isOn: $prefs.enableExperimentalPathMasking)
+                    .nordicInfo("Shows the experimental --masked-path and --read-only-path options in the Create Container wizard (experimental in container 1.6).")
                 Toggle("Enable Verbose Developer Command Logging", isOn: $prefs.enableDeveloperLogging)
+                    .nordicInfo("Logs every command Låda runs, with secrets removed, for troubleshooting.")
                 Toggle("Enable Simulation Mode When `container` CLI Is Not Installed", isOn: $prefs.useSimulationWhenCLIMissing)
                     .onChange(of: prefs.useSimulationWhenCLIMissing) { _, _ in
                         Task { await appState.refreshAll() }
                     }
+                    .nordicInfo("Without the CLI, Låda shows a simulated runtime so you can explore the app. Nothing is created on your Mac.")
             }
             .nordicFormPanel()
         }

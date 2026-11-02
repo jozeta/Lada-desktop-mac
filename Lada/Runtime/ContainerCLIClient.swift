@@ -561,9 +561,25 @@ public final class ContainerCLIClient: ContainerRuntimeService, @unchecked Senda
 
     // MARK: - Container Machines
 
+    /// `machine list` omits the image, home mount, user and underlying container; `machine
+    /// inspect` (one ID per call) has them, so each machine is inspected and the list entry is
+    /// the fallback.
     public func listMachines() async throws -> [MachineModel] {
         let res = try await runCLI(["machine", "list", "--format", "json"], timeoutSeconds: 15)
-        return try ContainerOutputParser.parseMachines(jsonString: res.stdout)
+        let listed = try ContainerOutputParser.parseMachines(jsonString: res.stdout)
+        return await withTaskGroup(of: (Int, MachineModel?).self) { group in
+            for (index, machine) in listed.enumerated() where ValidationUtils.isValidMachineName(machine.id) {
+                group.addTask { [self] in (index, try? await self.inspectMachine(id: machine.id)) }
+            }
+            var merged = listed
+            for await (index, inspected) in group {
+                if let inspected {
+                    // `default` is only reported by `list`.
+                    merged[index] = inspected.withDefault(listed[index].isDefault)
+                }
+            }
+            return merged
+        }
     }
 
     public func inspectMachine(id: String) async throws -> MachineModel {

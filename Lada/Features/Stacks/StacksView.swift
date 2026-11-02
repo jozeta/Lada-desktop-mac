@@ -116,6 +116,9 @@ public struct StacksView: View {
                 StackServiceEditorView(appState: appState, work: work, service: svc) { editTarget = nil }
             }
         }
+        .onChange(of: appState.refreshGeneration) { _, _ in
+            if work.tab == .logs { Task { await work.refreshLogs(appState: appState) } }
+        }
         .onChange(of: work.tab) { _, tab in
             if tab == .logs { Task { await work.refreshLogs(appState: appState) } }
         }

@@ -20,9 +20,25 @@ public struct ContainerFileEntry: Identifiable, Equatable, Sendable {
     }
 }
 
+/// What the Files tab browses: a container, or a machine through its underlying container
+/// (`container exec` and `container copy` take the machine's `containerId`).
+public struct FileBrowserTarget: Equatable, Sendable {
+    /// The ID that `container exec` / `container copy` accept.
+    public let execID: String
+    /// Shown to the user.
+    public let name: String
+    public let isRunning: Bool
+
+    public init(execID: String, name: String, isRunning: Bool) {
+        self.execID = execID
+        self.name = name
+        self.isRunning = isRunning
+    }
+}
+
 public struct ContainerFileBrowserView: View {
     @ObservedObject var appState: AppState
-    public let container: ContainerModel
+    public let target: FileBrowserTarget
 
     @State private var isLoadingDirectory: Bool = false
     @State private var directoryError: String? = nil
@@ -39,8 +55,12 @@ public struct ContainerFileBrowserView: View {
     @ObservedObject private var state: ContainerFilesState
 
     public init(appState: AppState, container: ContainerModel, state: ContainerFilesState) {
+        self.init(appState: appState, target: FileBrowserTarget(execID: container.id, name: container.id, isRunning: container.state == .running), state: state)
+    }
+
+    public init(appState: AppState, target: FileBrowserTarget, state: ContainerFilesState) {
         self.appState = appState
-        self.container = container
+        self.target = target
         self.state = state
     }
 
@@ -63,11 +83,11 @@ public struct ContainerFileBrowserView: View {
             browserToolbar
             Divider().overlay(NordicTheme.borderSubtle)
 
-            if container.state != .running {
+            if !target.isRunning {
                 NordicEmptyState(
                     icon: .volumes,
-                    title: "Container Is Not Running",
-                    description: "Start '\(container.id)' to browse, edit, upload, or download files inside the container filesystem."
+                    title: "\(target.name) Is Not Running",
+                    description: "Start '\(target.name)' to browse, edit, upload, or download files inside the container filesystem."
                 )
             } else {
                 HSplitView {
@@ -87,7 +107,7 @@ public struct ContainerFileBrowserView: View {
             handleDroppedHostFiles(providers: providers)
         }
         .overlay {
-            if isFileDropTargeted && container.state == .running {
+            if isFileDropTargeted && target.isRunning {
                 ZStack {
                     Color.black.opacity(0.38)
                     VStack(spacing: 8) {
@@ -107,8 +127,11 @@ public struct ContainerFileBrowserView: View {
         .sheet(isPresented: $showNewFolderSheet) {
             newFolderSheetView
         }
-        .task(id: "\(container.id)-\(container.state.rawValue)") {
-            if container.state == .running {
+        .onChange(of: appState.refreshGeneration) { _, _ in
+            if target.isRunning { Task { await loadDirectory(path: state.currentPath) } }
+        }
+        .task(id: "\(target.execID)-\(target.isRunning)") {
+            if target.isRunning {
                 await loadDirectory(path: state.currentPath)
             }
         }
@@ -125,7 +148,7 @@ public struct ContainerFileBrowserView: View {
                     Image(systemName: "chevron.up")
                 }
                 .controlSize(.small)
-                .disabled(state.currentPath == "/" || container.state != .running)
+                .disabled(state.currentPath == "/" || !target.isRunning)
                 .help("Go to Parent Directory")
 
                 // Breadcrumbs
@@ -183,7 +206,7 @@ public struct ContainerFileBrowserView: View {
                             }
                             .controlSize(.mini)
                             .buttonStyle(.bordered)
-                            .disabled(container.state != .running)
+                            .disabled(!target.isRunning)
                         }
                     }
                 }
@@ -220,7 +243,7 @@ public struct ContainerFileBrowserView: View {
             .help("Refresh Directory")
         }
         .controlSize(.small)
-        .disabled(container.state != .running)
+        .disabled(!target.isRunning)
         .fixedSize()
     }
 
@@ -443,7 +466,7 @@ public struct ContainerFileBrowserView: View {
     }
 
     private var fileOps: ContainerFileOperations {
-        ContainerFileOperations(runtime: appState.runtimeService, containerID: container.id)
+        ContainerFileOperations(runtime: appState.runtimeService, containerID: target.execID)
     }
 
     private func loadDirectory(path: String) async {
@@ -554,7 +577,7 @@ public struct ContainerFileBrowserView: View {
     }
 
     private func handleDroppedHostFiles(providers: [NSItemProvider]) -> Bool {
-        guard container.state == .running else { return false }
+        guard target.isRunning else { return false }
         var handled = false
         for provider in providers where provider.canLoadObject(ofClass: URL.self) {
             handled = true

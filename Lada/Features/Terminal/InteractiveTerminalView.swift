@@ -394,8 +394,36 @@ struct InteractivePTYCanvasRepresentable: NSViewRepresentable {
 
 // MARK: - Main InteractiveTerminalView
 
+/// What the Terminal tab connects to.
+public enum TerminalTarget: Equatable, Sendable {
+    /// `container exec -i -t <id> <shell>` with the chosen shell.
+    case container(ContainerModel)
+    /// `container machine run -i -t -n <id>`: the machine's login shell, as your user.
+    case machine(MachineModel)
+
+    var name: String {
+        switch self {
+        case .container(let c): return c.id
+        case .machine(let m): return m.id
+        }
+    }
+
+    var isRunning: Bool {
+        switch self {
+        case .container(let c): return c.state == .running
+        // `machine run` boots a stopped machine, so a machine can always be connected to.
+        case .machine: return true
+        }
+    }
+
+    var choosesShell: Bool {
+        if case .container = self { return true }
+        return false
+    }
+}
+
 public struct InteractiveTerminalView: View {
-    public let container: ContainerModel
+    public let target: TerminalTarget
     public let executablePath: String?
     public var onOpenExternalTerminal: ((String) -> Void)? = nil
     /// Owned by the container's workspace, so the shell outlives this view (tab and container
@@ -408,7 +436,16 @@ public struct InteractiveTerminalView: View {
         session: PTYTerminalSession,
         onOpenExternalTerminal: ((String) -> Void)? = nil
     ) {
-        self.container = container
+        self.init(target: .container(container), executablePath: executablePath, session: session, onOpenExternalTerminal: onOpenExternalTerminal)
+    }
+
+    public init(
+        target: TerminalTarget,
+        executablePath: String?,
+        session: PTYTerminalSession,
+        onOpenExternalTerminal: ((String) -> Void)? = nil
+    ) {
+        self.target = target
         self.executablePath = executablePath
         self.session = session
         self.onOpenExternalTerminal = onOpenExternalTerminal
@@ -417,11 +454,11 @@ public struct InteractiveTerminalView: View {
     public var body: some View {
         VStack(spacing: 0) {
             toolbar
-            if container.state != .running {
+            if !target.isRunning {
                 NordicEmptyState(
                     icon: .machines,
                     title: "Container Is Not Running",
-                    description: "Start '\(container.id)' to open a shell in it."
+                    description: "Start '\(target.name)' to open a shell in it."
                 )
             } else {
                 GeometryReader { geo in
@@ -437,15 +474,20 @@ public struct InteractiveTerminalView: View {
             }
         }
         .onAppear {
-            if container.state == .running && !session.isRunning {
-                session.startContainerSession(executablePath: executablePath, container: container)
-            }
+            if target.isRunning && !session.isRunning { connect() }
         }
-        .onChange(of: container.state) { _, newState in
+        .onChange(of: target.isRunning) { _, running in
             // Connect when the container is started while this tab is open.
-            if newState == .running && !session.isRunning {
-                session.startContainerSession(executablePath: executablePath, container: container)
-            }
+            if running && !session.isRunning { connect() }
+        }
+    }
+
+    private func connect() {
+        switch target {
+        case .container(let container):
+            session.startContainerSession(executablePath: executablePath, container: container)
+        case .machine(let machine):
+            session.startMachineSession(executablePath: executablePath, machine: machine)
         }
     }
 
@@ -454,7 +496,7 @@ public struct InteractiveTerminalView: View {
             Circle()
                 .fill(session.isRunning ? NordicTheme.statusGreen : NordicTheme.secondaryText.opacity(0.5))
                 .frame(width: 7, height: 7)
-            Text(session.isRunning ? "\(session.selectedShell) in \(container.id)" : "Disconnected")
+            Text(session.isRunning ? (target.choosesShell ? "\(session.selectedShell) in \(target.name)" : "Login shell in \(target.name)") : "Disconnected")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(NordicTheme.primaryText)
                 .lineLimit(1)
@@ -464,27 +506,27 @@ public struct InteractiveTerminalView: View {
 
             Spacer()
 
-            Picker("Shell", selection: $session.selectedShell) {
-                Text("sh").tag("/bin/sh")
-                Text("bash").tag("/bin/bash")
-                Text("ash").tag("/bin/ash")
-                Text("zsh").tag("/bin/zsh")
+            if target.choosesShell {
+                Picker("Shell", selection: $session.selectedShell) {
+                    Text("sh").tag("/bin/sh")
+                    Text("bash").tag("/bin/bash")
+                    Text("ash").tag("/bin/ash")
+                    Text("zsh").tag("/bin/zsh")
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .fixedSize()
+                .controlSize(.small)
+                .help("Shell to start (reconnect to apply)")
             }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .fixedSize()
-            .controlSize(.small)
-            .help("Shell to start (reconnect to apply)")
 
             if session.isRunning {
                 Button("Disconnect") { session.terminateSession() }
                     .controlSize(.small)
             } else {
-                Button("Connect") {
-                    session.startContainerSession(executablePath: executablePath, container: container)
-                }
+                Button("Connect") { connect() }
                 .controlSize(.small)
-                .disabled(container.state != .running)
+                .disabled(!target.isRunning)
             }
 
             Button {
@@ -511,7 +553,7 @@ public struct InteractiveTerminalView: View {
                     Image(systemName: "macwindow.on.rectangle")
                 }
                 .controlSize(.small)
-                .disabled(container.state != .running)
+                .disabled(!target.isRunning)
                 .help("Open in Terminal.app")
             }
         }

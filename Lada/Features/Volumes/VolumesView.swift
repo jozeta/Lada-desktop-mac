@@ -276,7 +276,7 @@ public struct VolumesView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 8) {
-                        NordicSectionHeader("Volume Metadata")
+                        NordicSectionHeader("Volume Metadata", info: "Where the volume's disk image lives on your Mac, its format and size, from `container volume inspect`.")
                         LabeledContent("Driver", value: volume.driver)
                         LabeledContent("Filesystem", value: volume.format)
                         LabeledContent("Sparse Capacity", value: NordicFormat.bytes(fromByteCount: Int64(volume.sizeInBytes ?? 0), countStyle: .file))
@@ -294,7 +294,7 @@ public struct VolumesView: View {
                     .nordicSurface()
 
                     VStack(alignment: .leading, spacing: 8) {
-                        NordicSectionHeader("Mounted By (\(attached.count))")
+                        NordicSectionHeader("Mounted By (\(attached.count))", info: "Containers that have this volume mounted. A volume in use can't be deleted.")
                         if attached.isEmpty {
                             Text("No containers currently mount this volume.")
                                 .font(.system(size: 12))

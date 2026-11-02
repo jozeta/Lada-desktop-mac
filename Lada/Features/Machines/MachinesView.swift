@@ -15,17 +15,6 @@ public struct MachinesView: View {
     @State private var createBootImmediately = true
     @State private var validationMessage: String? = nil
 
-    // Machine detail tabs
-    @State private var detailTab = "config"
-    @State private var editCPUs = 4
-    @State private var editMemoryGB = 8
-    @State private var editHomeMount: HomeMountMode = .rw
-    @State private var editVirtualization = false
-    @State private var machineLogsText = ""
-    @State private var machineCommandInput = "uname -a && df -h"
-    @State private var machineCommandOutput = ""
-    @State private var isRunningMachineCmd = false
-
     public init(appState: AppState) {
         self.appState = appState
     }
@@ -51,13 +40,19 @@ public struct MachinesView: View {
 
             if let selectedId = appState.selectedMachineID,
                let machine = appState.machines.first(where: { $0.id == selectedId }) {
-                machineDetailPane(for: machine)
-                    .frame(minWidth: 400, idealWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
+                MachineDetailView(
+                    appState: appState,
+                    machine: machine,
+                    workspace: appState.machineWorkspaces.workspace(for: machine.id),
+                    onDelete: { machinePendingDeletion = machine }
+                )
+                .id(machine.id)
+                .frame(minWidth: 460, idealWidth: 560, maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 NordicEmptyState(
                     icon: .machines,
                     title: "Select a Machine",
-                    description: "Choose a persistent Linux virtual machine from the list to reconfigure its CPU/RAM/home-mount settings, run commands, or inspect boot logs."
+                    description: "Choose a machine to see its details and live activity, open its shell, browse its files, read its logs or change its settings."
                 )
                 .frame(minWidth: 400, idealWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.clear)
@@ -102,16 +97,6 @@ public struct MachinesView: View {
             Button("Cancel", role: .cancel) {}
         } message: { target in
             Text("Permanently remove Linux virtual machine '\(target.name)' and its virtual disk image?")
-        }
-        .onChange(of: appState.selectedMachineID) { _, newValue in
-            guard let id = newValue, let m = appState.machines.first(where: { $0.id == id }) else { return }
-            editCPUs = max(1, m.cpus)
-            editMemoryGB = max(1, Int(m.memoryBytes / (1024 * 1024 * 1024)))
-            editHomeMount = m.homeMount
-            editVirtualization = m.virtualizationEnabled
-            Task {
-                machineLogsText = (try? await appState.runtimeService.fetchMachineLogs(id: id, bootLogs: false, tailLines: 200)) ?? ""
-            }
         }
     }
 
@@ -277,166 +262,6 @@ public struct MachinesView: View {
         .accessibilityIdentifier(AccessibilityID.machineTable)
     }
 
-    private func machineDetailPane(for machine: MachineModel) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            NordicDetailHeader(
-                title: machine.name,
-                subtitle: machine.ipAddress ?? machine.imageReference ?? "Linux VM",
-                badge: NordicStatusBadge(containerState: machine.status)
-            ) {
-                Button(role: .destructive) {
-                    machinePendingDeletion = machine
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-                .controlSize(.small)
-            }
-
-            Picker("Tab", selection: $detailTab) {
-                Text("Configuration").tag("config")
-                Text("Run Command").tag("exec")
-                Text("Boot Logs").tag("logs")
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(12)
-
-            Divider().overlay(NordicTheme.borderSubtle)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    if detailTab == "config" {
-                        machineConfigurationEditor(for: machine)
-                    } else if detailTab == "exec" {
-                        machineCommandRunner(for: machine)
-                    } else {
-                        machineLogsInspector(for: machine)
-                    }
-                }
-                .padding(16)
-            }
-        }
-        .background(Color.clear)
-    }
-
-    private func machineConfigurationEditor(for machine: MachineModel) -> some View {
-        let req = MachineUpdateRequest(
-            name: machine.name,
-            cpus: editCPUs,
-            memoryGB: editMemoryGB,
-            homeMount: editHomeMount,
-            enableVirtualization: editVirtualization
-        )
-        return VStack(alignment: .leading, spacing: 12) {
-            NordicSectionHeader(
-                "Hardware & Mount Settings",
-                subtitle: machine.status == .running ? "Stop machine before applying changes via `container machine set`" : "Ready to reconfigure"
-            )
-            Stepper(value: $editCPUs, in: 1...32) {
-                Text(verbatim: "CPUs: \(editCPUs) cores")
-            }
-            Stepper(value: $editMemoryGB, in: 1...64) {
-                Text(verbatim: "Memory: \(editMemoryGB) GB")
-            }
-            Picker("Home Directory Mount", selection: $editHomeMount) {
-                ForEach(HomeMountMode.allCases, id: \.rawValue) { mode in
-                    Text(mode.displayTitle).tag(mode)
-                }
-            }
-            Toggle("Expose Nested Virtualization", isOn: $editVirtualization)
-
-            Text(SecretRedactor.formatCommandPreview(executable: "container", arguments: req.buildCLIArguments()))
-                .font(NordicTheme.monoFontSmall)
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(NordicTheme.codeSurface)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-
-            HStack {
-                Spacer()
-                Button("Apply Machine Settings") {
-                    Task {
-                        await appState.performOperation(
-                            category: "Machines",
-                            title: "Reconfigure Machine \(machine.name)",
-                            redactedCommand: SecretRedactor.formatCommandPreview(executable: "container", arguments: req.buildCLIArguments())
-                        ) {
-                            try await appState.runtimeService.updateMachineConfig(request: req)
-                            return "Updated configuration for machine '\(machine.name)'."
-                        }
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
-                .controlSize(.small)
-                .disabled(machine.status == .running)
-            }
-        }
-        .padding(14)
-        .nordicSurface()
-    }
-
-    private func machineCommandRunner(for machine: MachineModel) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            NordicSectionHeader(
-                "Execute Command inside \(machine.name)",
-                subtitle: "Runs `container machine run --name \(machine.name) <cmd>`"
-            )
-            HStack {
-                TextField("Command (e.g. uname -a)", text: $machineCommandInput)
-                    .textFieldStyle(.roundedBorder)
-                    .font(NordicTheme.monoFontRegular)
-                Button(isRunningMachineCmd ? "Running…" : "Run") {
-                    isRunningMachineCmd = true
-                    let parts = machineCommandInput.split(separator: " ").map(String.init)
-                    Task {
-                        let res = try? await appState.runtimeService.runInMachine(
-                            id: machine.id,
-                            command: parts.isEmpty ? ["uname", "-a"] : parts,
-                            asRoot: false
-                        )
-                        machineCommandOutput = res?.combinedOutput ?? "Failed to execute command."
-                        isRunningMachineCmd = false
-                        await appState.refreshAll(isUserInitiated: false)
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
-                .disabled(isRunningMachineCmd)
-            }
-
-            Text(machineCommandOutput.isEmpty ? "Command output will appear here." : machineCommandOutput)
-                .font(NordicTheme.monoFontRegular)
-                .textSelection(.enabled)
-                .padding(10)
-                .frame(maxWidth: .infinity, minHeight: 160, alignment: .topLeading)
-                .background(NordicTheme.codeSurface)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-        }
-    }
-
-    private func machineLogsInspector(for machine: MachineModel) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                NordicSectionHeader("Machine Boot & Console Logs")
-                Spacer()
-                Button("Refresh") {
-                    Task {
-                        machineLogsText = (try? await appState.runtimeService.fetchMachineLogs(id: machine.id, bootLogs: false, tailLines: 200)) ?? ""
-                    }
-                }
-                .controlSize(.small)
-            }
-            Text(machineLogsText.isEmpty ? "No machine logs available." : machineLogsText)
-                .font(NordicTheme.monoFontRegular)
-                .textSelection(.enabled)
-                .padding(10)
-                .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
-                .background(NordicTheme.codeSurface)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-        }
-    }
-
     private var createMachineSheet: some View {
         let req = MachineCreateRequest(
             name: createName.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -455,24 +280,32 @@ public struct MachinesView: View {
             Form {
                 TextField("Machine Name (e.g. dev-vm)", text: $createName)
                     .font(NordicTheme.monoFontRegular)
+                    .nordicInfo("Lowercase letters, digits and hyphens. Used with `container machine run -n <name>`.")
                 TextField("Base Image (e.g. alpine:latest, ubuntu:24.04)", text: $createImage)
                     .font(NordicTheme.monoFontRegular)
+                    .nordicInfo("The Linux image the machine's disk starts from, e.g. alpine:3.22 or ubuntu:24.04.")
                 Stepper(value: $createCPUs, in: 1...32) {
                     Text(verbatim: "CPUs: \(createCPUs) cores")
                 }
+                .nordicInfo("Virtual CPUs the machine may use; shared with your Mac, not reserved.")
                 Stepper(value: $createMemoryGB, in: 1...64) {
                     Text(verbatim: "Memory: \(createMemoryGB) GB")
                 }
+                .nordicInfo("The most memory the machine can use; taken from your Mac only as needed.")
                 Picker("Home Directory Mount", selection: $createHomeMount) {
                     ForEach(HomeMountMode.allCases, id: \.rawValue) { mode in
                         Text(mode.displayTitle).tag(mode)
                     }
                 }
+                .nordicInfo("Share your Mac home folder into the machine read-write, read-only, or not at all.")
                 Toggle("Boot Machine Immediately", isOn: $createBootImmediately)
+                    .nordicInfo("Start the machine as soon as it is created.")
                 Toggle("Enable Nested Virtualization (--virtualization)", isOn: $createVirtualization)
+                    .nordicInfo("Lets the machine run its own VMs (KVM). Needs an M3 chip or newer.")
                 Toggle("Set as Default Machine (--set-default)", isOn: $createSetDefault)
+                    .nordicInfo("The default machine is used by machine commands that don't name one.")
             }
-            .formStyle(.grouped)
+            .nordicFormPanel()
 
             if let msg = validationMessage {
                 Text(msg)
@@ -484,8 +317,7 @@ public struct MachinesView: View {
                 .font(NordicTheme.monoFontSmall)
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(NordicTheme.codeSurface)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .nordicChip()
 
             HStack {
                 Button("Cancel") { showCreateSheet = false }
@@ -514,6 +346,7 @@ public struct MachinesView: View {
             }
         }
         .padding(20)
-        .frame(width: 520)
+        .frame(width: 560)
+        .nordicPageBackground()
     }
 }

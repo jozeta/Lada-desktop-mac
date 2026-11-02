@@ -248,7 +248,9 @@ public final class MockContainerRuntimeService: ContainerRuntimeService, @unchec
                 imageReference: "alpine:3.22",
                 homeMount: .rw,
                 virtualizationEnabled: false,
-                username: NSUserName()
+                username: NSUserName(),
+                containerID: "dev-3f9a2c",
+                homeDirectory: "/home/\(NSUserName())"
             )
         ]
 
@@ -432,6 +434,26 @@ public final class MockContainerRuntimeService: ContainerRuntimeService, @unchec
                 blockReadBytes: diskRead,
                 blockWriteBytes: diskWrite,
                 numProcesses: 4
+            )
+        } + machineStats(ids: ids)
+    }
+
+    /// Running machines report stats under their underlying container ID, like the real runtime.
+    private func machineStats(ids: [String]) -> [ContainerStatsModel] {
+        let machines = lock.withLock { simulatedMachines.filter { $0.status == .running && $0.containerID != nil } }
+        let uptime = max(1.0, Date().timeIntervalSince(Date(timeIntervalSinceReferenceDate: 0)).truncatingRemainder(dividingBy: 86_400))
+        return machines.compactMap { m in
+            guard let cid = m.containerID, ids.isEmpty || ids.contains(cid) else { return nil }
+            return ContainerStatsModel(
+                id: cid,
+                cpuUsageUsec: UInt64(uptime * 90_000),
+                memoryUsageBytes: m.memoryBytes / 9,
+                memoryLimitBytes: m.memoryBytes,
+                networkRxBytes: UInt64(uptime * 8_000),
+                networkTxBytes: UInt64(uptime * 3_000),
+                blockReadBytes: UInt64(uptime * 20_000),
+                blockWriteBytes: UInt64(uptime * 9_000),
+                numProcesses: 7
             )
         }
     }
@@ -984,11 +1006,13 @@ public final class MockContainerRuntimeService: ContainerRuntimeService, @unchec
                 homeMount: request.homeMount,
                 virtualizationEnabled: request.enableVirtualization,
                 kernelPath: request.customKernelPath.isEmpty ? nil : request.customKernelPath,
-                username: NSUserName()
+                username: NSUserName(),
+                containerID: "\(name)-\(String(UUID().uuidString.prefix(6)).lowercased())",
+                homeDirectory: "/home/\(NSUserName())"
             )
             if request.setDefault {
                 simulatedMachines = simulatedMachines.map {
-                    MachineModel(id: $0.id, status: $0.status, isDefault: false, ipAddress: $0.ipAddress, cpus: $0.cpus, memoryBytes: $0.memoryBytes, diskSizeBytes: $0.diskSizeBytes, createdDate: $0.createdDate, startedDate: $0.startedDate, imageReference: $0.imageReference, homeMount: $0.homeMount, virtualizationEnabled: $0.virtualizationEnabled, kernelPath: $0.kernelPath, username: $0.username)
+                    MachineModel(id: $0.id, status: $0.status, isDefault: false, ipAddress: $0.ipAddress, cpus: $0.cpus, memoryBytes: $0.memoryBytes, diskSizeBytes: $0.diskSizeBytes, createdDate: $0.createdDate, startedDate: $0.startedDate, imageReference: $0.imageReference, homeMount: $0.homeMount, virtualizationEnabled: $0.virtualizationEnabled, kernelPath: $0.kernelPath, username: $0.username, containerID: $0.containerID, homeDirectory: $0.homeDirectory)
                 }
             }
             simulatedMachines.append(machine)
@@ -1001,7 +1025,7 @@ public final class MockContainerRuntimeService: ContainerRuntimeService, @unchec
             guard let idx = simulatedMachines.firstIndex(where: { $0.id == id }) else { return }
             let m = simulatedMachines[idx]
             simulatedMachines[idx] = MachineModel(
-                id: m.id, status: .running, isDefault: m.isDefault, ipAddress: "192.168.64.10", cpus: m.cpus, memoryBytes: m.memoryBytes, diskSizeBytes: m.diskSizeBytes, createdDate: m.createdDate, startedDate: Date(), imageReference: m.imageReference, homeMount: m.homeMount, virtualizationEnabled: m.virtualizationEnabled, kernelPath: m.kernelPath, username: m.username
+                id: m.id, status: .running, isDefault: m.isDefault, ipAddress: "192.168.64.10", cpus: m.cpus, memoryBytes: m.memoryBytes, diskSizeBytes: m.diskSizeBytes, createdDate: m.createdDate, startedDate: Date(), imageReference: m.imageReference, homeMount: m.homeMount, virtualizationEnabled: m.virtualizationEnabled, kernelPath: m.kernelPath, username: m.username, containerID: m.containerID, homeDirectory: m.homeDirectory
             )
         }
     }
@@ -1012,7 +1036,7 @@ public final class MockContainerRuntimeService: ContainerRuntimeService, @unchec
             guard let idx = simulatedMachines.firstIndex(where: { $0.id == id }) else { return }
             let m = simulatedMachines[idx]
             simulatedMachines[idx] = MachineModel(
-                id: m.id, status: .stopped, isDefault: m.isDefault, ipAddress: nil, cpus: m.cpus, memoryBytes: m.memoryBytes, diskSizeBytes: m.diskSizeBytes, createdDate: m.createdDate, startedDate: nil, imageReference: m.imageReference, homeMount: m.homeMount, virtualizationEnabled: m.virtualizationEnabled, kernelPath: m.kernelPath, username: m.username
+                id: m.id, status: .stopped, isDefault: m.isDefault, ipAddress: nil, cpus: m.cpus, memoryBytes: m.memoryBytes, diskSizeBytes: m.diskSizeBytes, createdDate: m.createdDate, startedDate: nil, imageReference: m.imageReference, homeMount: m.homeMount, virtualizationEnabled: m.virtualizationEnabled, kernelPath: m.kernelPath, username: m.username, containerID: m.containerID, homeDirectory: m.homeDirectory
             )
         }
     }
@@ -1041,7 +1065,9 @@ public final class MockContainerRuntimeService: ContainerRuntimeService, @unchec
                 homeMount: request.homeMount,
                 virtualizationEnabled: request.enableVirtualization,
                 kernelPath: request.customKernelPath.isEmpty ? nil : request.customKernelPath,
-                username: m.username
+                username: m.username,
+                containerID: m.containerID,
+                homeDirectory: m.homeDirectory
             )
         }
     }
@@ -1050,7 +1076,7 @@ public final class MockContainerRuntimeService: ContainerRuntimeService, @unchec
         try record("setDefaultMachine:\(id)")
         lock.withLock {
             simulatedMachines = simulatedMachines.map {
-                MachineModel(id: $0.id, status: $0.status, isDefault: $0.id == id, ipAddress: $0.ipAddress, cpus: $0.cpus, memoryBytes: $0.memoryBytes, diskSizeBytes: $0.diskSizeBytes, createdDate: $0.createdDate, startedDate: $0.startedDate, imageReference: $0.imageReference, homeMount: $0.homeMount, virtualizationEnabled: $0.virtualizationEnabled, kernelPath: $0.kernelPath, username: $0.username)
+                MachineModel(id: $0.id, status: $0.status, isDefault: $0.id == id, ipAddress: $0.ipAddress, cpus: $0.cpus, memoryBytes: $0.memoryBytes, diskSizeBytes: $0.diskSizeBytes, createdDate: $0.createdDate, startedDate: $0.startedDate, imageReference: $0.imageReference, homeMount: $0.homeMount, virtualizationEnabled: $0.virtualizationEnabled, kernelPath: $0.kernelPath, username: $0.username, containerID: $0.containerID, homeDirectory: $0.homeDirectory)
             }
         }
     }

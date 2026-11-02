@@ -69,7 +69,8 @@ public struct SetupWizardView: View {
                     NordicSectionHeader(
                         "Prerequisite Checklist",
                         subtitle: "Apple's container runtime requires Apple silicon and macOS 26+.",
-                        trailingText: isChecking ? "Checking…" : "Verified \(appState.systemStatus.checkedAt.formatted(date: .omitted, time: .standard))"
+                        trailingText: isChecking ? "Checking…" : "Verified \(appState.systemStatus.checkedAt.formatted(date: .omitted, time: .standard))",
+                        info: "Låda checks what Apple's container runtime needs before you start."
                     )
 
                     VStack(spacing: 1) {
@@ -152,7 +153,8 @@ public struct SetupWizardView: View {
         VStack(alignment: .leading, spacing: 10) {
             NordicSectionHeader(
                 "Official Apple Container Installer & Manual Commands",
-                subtitle: "Signed packages are fetched directly over HTTPS from github.com/apple/container/releases."
+                subtitle: "Signed packages are fetched directly over HTTPS from github.com/apple/container/releases.",
+                info: "Install or update Apple's `container` CLI from its official GitHub release, verified before installing."
             )
 
             VStack(alignment: .leading, spacing: 10) {

@@ -655,15 +655,18 @@ public enum ContainerOutputParser {
             let createdDate = parseDateValue(dict["createdDate"])
             let startedDate = parseDateValue(dict["startedDate"])
 
-            var imageRef: String? = nil
-            if let imgObj = configDict["image"] as? [String: Any] {
-                imageRef = imgObj["reference"] as? String
-            }
-            let homeMountRaw = (bootConfig["homeMount"] as? String) ?? "rw"
+            // `machine inspect` (1.6.x) has image, homeMount and userSetup at the top level; older
+            // shapes nested them under configuration / bootConfig.
+            let imageObj = (dict["image"] as? [String: Any]) ?? (configDict["image"] as? [String: Any])
+            let imageRef = imageObj?["reference"] as? String
+            let homeMountRaw = (dict["homeMount"] as? String) ?? (bootConfig["homeMount"] as? String) ?? "rw"
             let homeMount = HomeMountMode(rawValue: homeMountRaw) ?? .rw
-            let virt = (bootConfig["virtualization"] as? Bool) ?? false
-            let kernelPath = bootConfig["kernelPath"] as? String
-            let username = (configDict["userSetup"] as? [String: Any])?["username"] as? String
+            let virt = (dict["virtualization"] as? Bool) ?? (bootConfig["virtualization"] as? Bool) ?? false
+            let kernelPath = (dict["kernelPath"] as? String) ?? (bootConfig["kernelPath"] as? String)
+            let userSetup = (dict["userSetup"] as? [String: Any]) ?? (configDict["userSetup"] as? [String: Any])
+            let username = userSetup?["username"] as? String
+            let homeDirectory = userSetup?["home"] as? String
+            let containerID = dict["containerId"] as? String
 
             let prettyJSON: String?
             if let rawData = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]) {
@@ -687,7 +690,9 @@ public enum ContainerOutputParser {
                 virtualizationEnabled: virt,
                 kernelPath: kernelPath,
                 username: username,
-                rawInspectJSON: prettyJSON
+                rawInspectJSON: prettyJSON,
+                containerID: containerID,
+                homeDirectory: homeDirectory
             )
         }
     }

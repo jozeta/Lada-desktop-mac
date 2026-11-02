@@ -18,16 +18,7 @@ public struct ImagesView: View {
         self.appState = appState
     }
 
-    private var filteredImages: [ImageModel] {
-        let query = appState.globalSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else { return appState.images }
-        return appState.images.filter {
-            $0.fullReference.lowercased().contains(query)
-                || $0.repository.lowercased().contains(query)
-                || $0.tag.lowercased().contains(query)
-                || $0.digest.lowercased().contains(query)
-        }
-    }
+    private var filteredImages: [ImageModel] { appState.images }
 
     private func containersReferencing(_ image: ImageModel) -> [ContainerModel] {
         appState.containers.filter {
@@ -353,7 +344,7 @@ public struct ImagesView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 8) {
-                        NordicSectionHeader("Image Manifest Summary")
+                        NordicSectionHeader("Image Manifest Summary", info: "The image's OCI manifest: its digest, media type and creation date, from `container image inspect`.")
                         LabeledContent("Repository", value: image.repository)
                         LabeledContent("Tag", value: image.tag)
                         LabeledContent("Registry Origin", value: image.registryOrigin)
@@ -369,7 +360,8 @@ public struct ImagesView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             NordicSectionHeader(
                                 "Variant: \(variant.platformString)",
-                                trailingText: NordicFormat.bytes(fromByteCount: variant.sizeBytes, countStyle: .file)
+                                trailingText: NordicFormat.bytes(fromByteCount: variant.sizeBytes, countStyle: .file),
+                                info: "The image's platform variants (architectures). Containers use the one matching this Mac when available."
                             )
                             if let ep = variant.entrypoint, !ep.isEmpty {
                                 LabeledContent("Entrypoint", value: ep.joined(separator: " "))

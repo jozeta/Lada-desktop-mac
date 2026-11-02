@@ -39,7 +39,8 @@ public struct DashboardView: View {
                 NordicSectionHeader(
                     "System & Runtime Telemetry",
                     subtitle: "Live state reported by Apple's `container` runtime and `container-apiserver`.",
-                    trailingText: appState.installation.cliVersion.map { "container v\($0.description)" } ?? "CLI Not Installed"
+                    trailingText: appState.installation.cliVersion.map { "container v\($0.description)" } ?? "CLI Not Installed",
+                    info: "Live state reported by the runtime: whether it's running, how many containers and images exist, and the image builder."
                 )
 
                 LazyVGrid(columns: [
@@ -119,7 +120,8 @@ public struct DashboardView: View {
                 subtitle: runningContainers.isEmpty
                     ? "Start a container to stream real-time CPU, Memory, Network, and Disk I/O telemetry."
                     : "Real-time aggregate telemetry across \(runningContainers.count) running container VM(s) (`container stats`).",
-                trailingText: "\(runningContainers.count) running • \(totalProcs) PIDs"
+                trailingText: "\(runningContainers.count) running • \(totalProcs) PIDs",
+                info: "CPU, memory, network and disk activity of all running containers together, sampled every 2 seconds for the last 5 minutes."
             )
 
             LazyVGrid(
@@ -303,7 +305,8 @@ public struct DashboardView: View {
         VStack(alignment: .leading, spacing: 10) {
             NordicSectionHeader(
                 "Runtime Disk Usage (`container system df`)",
-                trailingText: NordicFormat.bytes(fromByteCount: Int64(appState.diskUsage.totalBytes), countStyle: .file)
+                trailingText: NordicFormat.bytes(fromByteCount: Int64(appState.diskUsage.totalBytes), countStyle: .file),
+                info: "Space used by images, containers and volumes (`container system df`), and how full this Mac's disk is."
             )
 
             if let disk = appState.hostDiskSpace {
@@ -430,7 +433,8 @@ public struct DashboardView: View {
             NordicSectionHeader(
                 "Active Containers",
                 subtitle: "Running containers first, busiest CPU first.",
-                trailingText: "\(runningContainers.count) running"
+                trailingText: "\(runningContainers.count) running",
+                info: "Containers sorted with running ones first and the busiest at the top. Inspect opens one in Containers."
             )
 
             if appState.containers.isEmpty {
@@ -513,7 +517,8 @@ public struct DashboardView: View {
         VStack(alignment: .leading, spacing: 10) {
             NordicSectionHeader(
                 "Recent Operations & Alerts",
-                trailingText: failedEvents.isEmpty ? "0 failures" : "\(failedEvents.count) failed"
+                trailingText: failedEvents.isEmpty ? "0 failures" : "\(failedEvents.count) failed",
+                info: "The latest operations Låda ran, and anything that failed."
             )
 
             if appState.activityEvents.isEmpty {

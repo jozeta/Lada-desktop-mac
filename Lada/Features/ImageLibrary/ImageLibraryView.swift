@@ -36,14 +36,6 @@ public struct ImageLibraryView: View {
             list = list.filter { $0.architectures.contains("arm64") }
         }
 
-        let globalQ = appState.globalSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !globalQ.isEmpty {
-            list = list.filter {
-                $0.name.localizedCaseInsensitiveContains(globalQ) ||
-                $0.description.localizedCaseInsensitiveContains(globalQ)
-            }
-        }
-
         switch selectedSort {
         case .mostPulls:
             list.sort { $0.pullCount > $1.pullCount }
@@ -109,6 +101,8 @@ public struct ImageLibraryView: View {
                 }
             }
         }
+        .onAppear(perform: consumePendingSearch)
+        .onChange(of: appState.pendingLibrarySearch) { _, _ in consumePendingSearch() }
         .task(id: searchQuery) {
             try? await Task.sleep(for: .milliseconds(280))
             guard !Task.isCancelled else { return }
@@ -427,5 +421,12 @@ public struct ImageLibraryView: View {
             pullingSlug = nil
             pullStatusMessage = ""
         }
+    }
+
+    /// Runs a search handed over by the toolbar's universal search.
+    private func consumePendingSearch() {
+        guard let pending = appState.pendingLibrarySearch else { return }
+        searchQuery = pending
+        appState.pendingLibrarySearch = nil
     }
 }

@@ -34,7 +34,7 @@ public struct LadaApp: App {
                 Divider()
 
                 Button("Refresh Runtime State") {
-                    Task { await appState.refreshAll() }
+                    Task { await appState.userRefresh() }
                 }
                 .keyboardShortcut("r", modifiers: [.command])
             }

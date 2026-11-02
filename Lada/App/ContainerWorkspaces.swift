@@ -81,3 +81,66 @@ public final class ContainerWorkspaceStore: ObservableObject {
         }
     }
 }
+
+// MARK: - Machines
+
+/// One machine's inspector state, kept like a container's: tab, shell, files and logs survive
+/// switching machines and sections.
+@MainActor
+public final class MachineWorkspace: ObservableObject {
+    public enum Tab: String, CaseIterable, Identifiable {
+        case overview = "Overview"
+        case terminal = "Terminal"
+        case files = "Files"
+        case logs = "Logs"
+        case settings = "Settings"
+        case inspect = "Inspect"
+        public var id: String { rawValue }
+    }
+
+    public let machineID: String
+    @Published public var tab: Tab
+    public let terminal = PTYTerminalSession()
+    public let files = ContainerFilesState()
+    @Published public var logsText = ""
+
+    init(machineID: String, tab: Tab) {
+        self.machineID = machineID
+        self.tab = tab
+    }
+
+    func close() {
+        terminal.terminateSession()
+    }
+}
+
+@MainActor
+public final class MachineWorkspaceStore: ObservableObject {
+    private var workspaces: [String: MachineWorkspace] = [:]
+    private(set) var lastUsedTab: MachineWorkspace.Tab = .overview
+
+    public init() {}
+
+    public func workspace(for machineID: String) -> MachineWorkspace {
+        if let existing = workspaces[machineID] { return existing }
+        let ws = MachineWorkspace(machineID: machineID, tab: lastUsedTab)
+        workspaces[machineID] = ws
+        return ws
+    }
+
+    public func select(_ tab: MachineWorkspace.Tab, for machineID: String) {
+        workspace(for: machineID).tab = tab
+        lastUsedTab = tab
+    }
+
+    public var openMachineIDs: Set<String> { Set(workspaces.keys) }
+
+    /// Closes workspaces (and shells) of deleted machines.
+    public func reconcile(with machines: [MachineModel]) {
+        let ids = Set(machines.map(\.id))
+        for (id, ws) in workspaces where !ids.contains(id) {
+            ws.close()
+            workspaces[id] = nil
+        }
+    }
+}

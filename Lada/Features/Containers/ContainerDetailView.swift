@@ -209,6 +209,9 @@ public struct ContainerDetailView: View {
         } message: {
             Text("Deleting '\(container.id)' permanently removes its writable root filesystem image. Named volumes and host bind-mounted directories are preserved.")
         }
+        .onChange(of: appState.refreshGeneration) { _, _ in
+            Task { await loadLogs() }
+        }
         .task(id: container.id) {
             // Cached logs of this container show at once; then refresh.
             // Telemetry comes from AppState's single poll loop; this loop only tails logs.
@@ -230,7 +233,7 @@ public struct ContainerDetailView: View {
     /// can still grow (measured from the image file, so it works for stopped containers too).
     @ViewBuilder
     private var containerDiskSection: some View {
-        NordicSectionHeader("Disk", subtitle: "Space used by this container's root filesystem on this Mac.")
+        NordicSectionHeader("Disk", subtitle: "Space used by this container's root filesystem on this Mac.", info: "Measured from the container's sparse rootfs.ext4 image on this Mac. Used is what it occupies now; free is how much more it can grow.")
         Group {
             if let disk = appState.containerDisks[container.id] {
                 VStack(alignment: .leading, spacing: NordicTheme.Spacing.s) {
@@ -275,7 +278,7 @@ public struct ContainerDetailView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                NordicSectionHeader("Details")
+                NordicSectionHeader("Details", info: "What the runtime reports for this container (`container inspect`).")
 
                 Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 8) {
                     GridRow {
@@ -358,7 +361,8 @@ public struct ContainerDetailView: View {
                 NordicSectionHeader(
                     "Performance",
                     subtitle: isRunning ? nil : "Start the container to see live CPU, memory, network and disk activity.",
-                    trailingText: isRunning ? (stats?.numProcesses ?? latestSample?.numProcesses).map { "\($0) processes" } : nil
+                    trailingText: isRunning ? (stats?.numProcesses ?? latestSample?.numProcesses).map { "\($0) processes" } : nil,
+                    info: "Measured every 2 seconds with `container stats`. CPU is a share of the container's vCPUs."
                 )
 
                 LazyVGrid(
@@ -453,7 +457,7 @@ public struct ContainerDetailView: View {
                 }
 
                 // Maintenance Actions
-                NordicSectionHeader("Maintenance")
+                NordicSectionHeader("Maintenance", info: "Reclaim Space trims unused blocks from the container's disk image (`container clean`). Export saves its filesystem as a tar file (`container export`).")
                 HStack(spacing: 10) {
                     if container.state == .running {
                         Button("Reclaim Space") {
@@ -554,7 +558,7 @@ public struct ContainerDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .nordicSurface()
 
-                NordicSectionHeader("Effective Configuration (`container inspect \(container.id)`)")
+                NordicSectionHeader("Effective Configuration (`container inspect \(container.id)`)", info: "The full configuration the runtime uses for this container, as JSON from `container inspect`.")
 
                 Text(SecretRedactor.redact(container.rawInspectJSON ?? encodeConfigurationPreview()))
                     .font(NordicTheme.monoFontRegular)
@@ -577,7 +581,7 @@ public struct ContainerDetailView: View {
     private var networkingTab: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                NordicSectionHeader("Active Network Attachments")
+                NordicSectionHeader("Active Network Attachments", info: "The networks this container is connected to, with its address and DNS names on each.")
                 if container.networks.isEmpty {
                     Text("No active network attachments (container is stopped). Configured networks: \(container.configuration.configuredNetworks.map { net in container.configuration.networkAliases[net].map { "\(net) (aliases: \($0.joined(separator: ", ")))" } ?? net }.joined(separator: ", "))")
                         .font(.system(size: 12))
@@ -613,7 +617,7 @@ public struct ContainerDetailView: View {
                     }
                 }
 
-                NordicSectionHeader("Published Host Ports (`-p`)")
+                NordicSectionHeader("Published Host Ports (`-p`)", info: "Ports on your Mac forwarded into the container. The dot shows whether something answers on the port right now.")
                 if container.configuration.publishedPorts.isEmpty {
                     Text("No host ports published.")
                         .font(.system(size: 12))
@@ -678,7 +682,7 @@ public struct ContainerDetailView: View {
     private var storageTab: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                NordicSectionHeader("Configured Mounts & Volumes")
+                NordicSectionHeader("Configured Mounts & Volumes", info: "Folders from your Mac (virtiofs) and named volumes mounted into the container.")
                 if container.configuration.mounts.isEmpty {
                     Text("No external bind mounts, volumes, or tmpfs mounts attached.")
                         .font(.system(size: 12))
@@ -720,7 +724,8 @@ public struct ContainerDetailView: View {
             VStack(alignment: .leading, spacing: 12) {
                 NordicSectionHeader(
                     "Process Environment Variables",
-                    subtitle: "Sensitive values are masked by default."
+                    subtitle: "Sensitive values are masked by default.",
+                    info: "Environment variables set in this container. Values of secret-looking keys are hidden."
                 )
 
                 if container.configuration.environment.isEmpty {

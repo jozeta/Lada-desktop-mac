@@ -243,7 +243,7 @@ public struct NetworksView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 8) {
-                        NordicSectionHeader("Subnet & Routing")
+                        NordicSectionHeader("Subnet & Routing", info: "The network's address range and gateway. Containers on it get an address from this subnet and can reach each other.")
                         LabeledContent("Mode", value: network.mode.uppercased())
                         LabeledContent("Plugin", value: network.plugin)
                             .font(NordicTheme.monoFontSmall)
@@ -259,7 +259,7 @@ public struct NetworksView: View {
                     .nordicSurface()
 
                     VStack(alignment: .leading, spacing: 8) {
-                        NordicSectionHeader("Attached Containers (\(attached.count))")
+                        NordicSectionHeader("Attached Containers (\(attached.count))", info: "Containers currently connected to this network.")
                         if attached.isEmpty {
                             Text("No containers are currently attached to '\(network.name)'.")
                                 .font(.system(size: 12))

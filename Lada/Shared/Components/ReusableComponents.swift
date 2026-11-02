@@ -80,20 +80,26 @@ public struct NordicSectionHeader: View {
     public let title: String
     public var subtitle: String?
     public var trailingText: String?
+    /// Optional explanation, shown in an ⓘ hover card next to the title.
+    public var info: String?
 
-    public init(_ title: String, subtitle: String? = nil, trailingText: String? = nil) {
+    public init(_ title: String, subtitle: String? = nil, trailingText: String? = nil, info: String? = nil) {
         self.title = title
         self.subtitle = subtitle
         self.trailingText = trailingText
+        self.info = info
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Text(title.uppercased())
                     .font(NordicTheme.sectionHeaderFont)
                     .tracking(0.6)
                     .foregroundStyle(NordicTheme.secondaryText)
+                if let info {
+                    NordicInfoTip(info, title: title)
+                }
                 Spacer()
                 if let trailingText {
                     Text(trailingText)
