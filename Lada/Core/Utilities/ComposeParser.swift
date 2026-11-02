@@ -17,6 +17,10 @@ public struct ComposeServiceSpec: Identifiable, Codable, Sendable, Equatable {
     public var networks: [String]
     /// `networks: <name>: aliases:` entries (all networks combined; Låda deploys a stack on one network).
     public var networkAliases: [String]
+    /// `mem_limit:` in MiB (e.g. `2g` → 2048); nil uses the app's default container memory.
+    public var memoryLimitMB: Int?
+    /// `cpus:` rounded up to whole vCPUs (the runtime allots whole CPUs); nil uses the default.
+    public var cpuLimit: Int?
 
     public init(
         serviceName: String,
@@ -30,7 +34,9 @@ public struct ComposeServiceSpec: Identifiable, Codable, Sendable, Equatable {
         workingDirectory: String = "",
         dependsOn: [String] = [],
         networks: [String] = [],
-        networkAliases: [String] = []
+        networkAliases: [String] = [],
+        memoryLimitMB: Int? = nil,
+        cpuLimit: Int? = nil
     ) {
         self.serviceName = serviceName
         self.containerName = containerName
@@ -44,6 +50,8 @@ public struct ComposeServiceSpec: Identifiable, Codable, Sendable, Equatable {
         self.dependsOn = dependsOn
         self.networks = networks
         self.networkAliases = networkAliases
+        self.memoryLimitMB = memoryLimitMB
+        self.cpuLimit = cpuLimit
     }
 }
 
@@ -267,13 +275,13 @@ public struct ComposeStackTemplate: Identifiable, Sendable {
 
             services:
               prometheus:
-                image: docker.io/prom/prometheus:latest
+                image: docker.io/prom/prometheus:v3.15.1
                 container_name: telemetry-prometheus
                 ports:
                   - "9090:9090"
 
               grafana:
-                image: docker.io/grafana/grafana:latest
+                image: docker.io/grafana/grafana:13.3.0
                 container_name: telemetry-grafana
                 ports:
                   - "3001:3000"
@@ -387,6 +395,584 @@ public struct ComposeStackTemplate: Identifiable, Sendable {
                 environment:
                   VAULT_DEV_ROOT_TOKEN_ID: {{secret:token}}
                   VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+            """
+        ),
+        ComposeStackTemplate(
+            id: "lamp",
+            title: "LAMP: PHP + MariaDB + phpMyAdmin",
+            subtitle: "Apache with PHP 8.4 on port 8090, MariaDB, and phpMyAdmin on port 8091",
+            projectName: "lamp",
+            yamlContent: """
+            name: lamp
+
+            services:
+              db:
+                image: docker.io/library/mariadb:11.8
+                container_name: lamp-mariadb
+                command: --datadir=/var/lib/mysql/data
+                environment:
+                  MARIADB_ROOT_PASSWORD: {{secret:root}}
+                  MARIADB_DATABASE: app
+                  MARIADB_USER: app
+                  MARIADB_PASSWORD: {{secret:db}}
+                volumes:
+                  - lamp_db:/var/lib/mysql
+
+              web:
+                image: docker.io/library/php:8.4-apache
+                container_name: lamp-web
+                command: sh -c "echo '<?php phpinfo();' > /var/www/html/index.php && exec apache2-foreground"
+                ports:
+                  - "8090:80"
+                depends_on:
+                  - db
+
+              phpmyadmin:
+                image: docker.io/library/phpmyadmin:5.2
+                container_name: lamp-phpmyadmin
+                ports:
+                  - "8091:80"
+                environment:
+                  PMA_HOST: db
+                depends_on:
+                  - db
+
+            volumes:
+              lamp_db:
+            """
+        ),
+        ComposeStackTemplate(
+            id: "mongo-express",
+            title: "MongoDB + Mongo Express",
+            subtitle: "MongoDB 8 on port 27017 with the Mongo Express web UI on port 8092",
+            projectName: "mongo-stack",
+            yamlContent: """
+            name: mongo-stack
+
+            services:
+              mongo:
+                image: docker.io/library/mongo:8.0
+                container_name: mongo-db
+                ports:
+                  - "27017:27017"
+                environment:
+                  MONGO_INITDB_ROOT_USERNAME: admin
+                  MONGO_INITDB_ROOT_PASSWORD: {{secret:mongo}}
+                volumes:
+                  - mongo_data:/data/db
+
+              mongo-express:
+                image: docker.io/library/mongo-express:1.0
+                container_name: mongo-express
+                ports:
+                  - "8092:8081"
+                environment:
+                  ME_CONFIG_MONGODB_URL: mongodb://admin:{{secret:mongo}}@mongo:27017/
+                  ME_CONFIG_BASICAUTH_USERNAME: admin
+                  ME_CONFIG_BASICAUTH_PASSWORD: {{secret:ui}}
+                depends_on:
+                  - mongo
+
+            volumes:
+              mongo_data:
+            """
+        ),
+        ComposeStackTemplate(
+            id: "ghost-mysql",
+            title: "Ghost blog + MySQL",
+            subtitle: "The Ghost publishing platform on port 2368 with its MySQL database",
+            projectName: "ghost-blog",
+            yamlContent: """
+            name: ghost-blog
+
+            services:
+              db:
+                image: docker.io/library/mysql:8.4
+                container_name: ghost-mysql
+                command: --datadir=/var/lib/mysql/data
+                environment:
+                  MYSQL_ROOT_PASSWORD: {{secret:db}}
+                  MYSQL_DATABASE: ghost
+                volumes:
+                  - ghost_db:/var/lib/mysql
+
+              ghost:
+                image: docker.io/library/ghost:6-alpine
+                container_name: ghost-web
+                ports:
+                  - "2368:2368"
+                environment:
+                  url: http://localhost:2368
+                  database__client: mysql
+                  database__connection__host: db
+                  database__connection__user: root
+                  database__connection__password: {{secret:db}}
+                  database__connection__database: ghost
+                volumes:
+                  - ghost_content:/var/lib/ghost/content
+                depends_on:
+                  - db
+
+            volumes:
+              ghost_db:
+              ghost_content:
+            """
+        ),
+        ComposeStackTemplate(
+            id: "nextcloud",
+            title: "Nextcloud + PostgreSQL + Redis",
+            subtitle: "Your own file sync and sharing cloud on port 8093",
+            projectName: "nextcloud",
+            yamlContent: """
+            name: nextcloud
+
+            services:
+              db:
+                image: docker.io/library/postgres:17-alpine
+                container_name: nextcloud-db
+                environment:
+                  POSTGRES_USER: nextcloud
+                  POSTGRES_PASSWORD: {{secret:db}}
+                  POSTGRES_DB: nextcloud
+                  PGDATA: /var/lib/postgresql/data/pgdata
+                volumes:
+                  - nextcloud_db:/var/lib/postgresql/data
+
+              redis:
+                image: docker.io/library/redis:8-alpine
+                container_name: nextcloud-redis
+
+              app:
+                image: docker.io/library/nextcloud:31-apache
+                container_name: nextcloud-app
+                ports:
+                  - "8093:80"
+                environment:
+                  POSTGRES_HOST: db
+                  POSTGRES_DB: nextcloud
+                  POSTGRES_USER: nextcloud
+                  POSTGRES_PASSWORD: {{secret:db}}
+                  REDIS_HOST: redis
+                  NEXTCLOUD_ADMIN_USER: admin
+                  NEXTCLOUD_ADMIN_PASSWORD: {{secret:admin}}
+                  NEXTCLOUD_TRUSTED_DOMAINS: localhost
+                volumes:
+                  - nextcloud_html:/var/www/html
+                depends_on:
+                  - db
+                  - redis
+
+            volumes:
+              nextcloud_db:
+              nextcloud_html:
+            """
+        ),
+        ComposeStackTemplate(
+            id: "drupal-postgres",
+            title: "Drupal + PostgreSQL",
+            subtitle: "Drupal 11 on port 8094 with PostgreSQL; finish setup in the browser (database host: db)",
+            projectName: "drupal",
+            yamlContent: """
+            name: drupal
+
+            services:
+              db:
+                image: docker.io/library/postgres:17-alpine
+                container_name: drupal-db
+                environment:
+                  POSTGRES_USER: drupal
+                  POSTGRES_PASSWORD: {{secret:db}}
+                  POSTGRES_DB: drupal
+                  PGDATA: /var/lib/postgresql/data/pgdata
+                volumes:
+                  - drupal_db:/var/lib/postgresql/data
+
+              drupal:
+                image: docker.io/library/drupal:11-apache
+                container_name: drupal-web
+                ports:
+                  - "8094:80"
+                depends_on:
+                  - db
+
+            volumes:
+              drupal_db:
+            """
+        ),
+        ComposeStackTemplate(
+            id: "joomla-mariadb",
+            title: "Joomla + MariaDB",
+            subtitle: "Joomla 5 on port 8095 with its MariaDB database",
+            projectName: "joomla",
+            yamlContent: """
+            name: joomla
+
+            services:
+              db:
+                image: docker.io/library/mariadb:11.8
+                container_name: joomla-db
+                command: --datadir=/var/lib/mysql/data
+                environment:
+                  MARIADB_ROOT_PASSWORD: {{secret:root}}
+                  MARIADB_DATABASE: joomla
+                  MARIADB_USER: joomla
+                  MARIADB_PASSWORD: {{secret:db}}
+                volumes:
+                  - joomla_db:/var/lib/mysql
+
+              joomla:
+                image: docker.io/library/joomla:5-apache
+                container_name: joomla-web
+                ports:
+                  - "8095:80"
+                environment:
+                  JOOMLA_DB_HOST: db
+                  JOOMLA_DB_USER: joomla
+                  JOOMLA_DB_PASSWORD: {{secret:db}}
+                  JOOMLA_DB_NAME: joomla
+                depends_on:
+                  - db
+
+            volumes:
+              joomla_db:
+            """
+        ),
+        ComposeStackTemplate(
+            id: "directus-postgres",
+            title: "Directus headless CMS + PostgreSQL",
+            subtitle: "Directus on port 8055: an API and admin app over a PostgreSQL database",
+            projectName: "directus",
+            yamlContent: """
+            name: directus
+
+            services:
+              db:
+                image: docker.io/library/postgres:17-alpine
+                container_name: directus-db
+                environment:
+                  POSTGRES_USER: directus
+                  POSTGRES_PASSWORD: {{secret:db}}
+                  POSTGRES_DB: directus
+                  PGDATA: /var/lib/postgresql/data/pgdata
+                volumes:
+                  - directus_db:/var/lib/postgresql/data
+
+              directus:
+                image: docker.io/directus/directus:11
+                container_name: directus-app
+                ports:
+                  - "8055:8055"
+                environment:
+                  SECRET: {{secret:key}}
+                  DB_CLIENT: pg
+                  DB_HOST: db
+                  DB_PORT: "5432"
+                  DB_DATABASE: directus
+                  DB_USER: directus
+                  DB_PASSWORD: {{secret:db}}
+                  ADMIN_EMAIL: admin@example.com
+                  ADMIN_PASSWORD: {{secret:admin}}
+                depends_on:
+                  - db
+
+            volumes:
+              directus_db:
+            """
+        ),
+        ComposeStackTemplate(
+            id: "n8n-postgres",
+            title: "n8n workflow automation + PostgreSQL",
+            subtitle: "n8n on port 5678 storing workflows in PostgreSQL",
+            projectName: "n8n",
+            yamlContent: """
+            name: n8n
+
+            services:
+              db:
+                image: docker.io/library/postgres:17-alpine
+                container_name: n8n-db
+                environment:
+                  POSTGRES_USER: n8n
+                  POSTGRES_PASSWORD: {{secret:db}}
+                  POSTGRES_DB: n8n
+                  PGDATA: /var/lib/postgresql/data/pgdata
+                volumes:
+                  - n8n_db:/var/lib/postgresql/data
+
+              n8n:
+                image: docker.io/n8nio/n8n:2.46.4
+                container_name: n8n-app
+                ports:
+                  - "5678:5678"
+                environment:
+                  DB_TYPE: postgresdb
+                  DB_POSTGRESDB_HOST: db
+                  DB_POSTGRESDB_DATABASE: n8n
+                  DB_POSTGRESDB_USER: n8n
+                  DB_POSTGRESDB_PASSWORD: {{secret:db}}
+                  N8N_SECURE_COOKIE: "false"
+                depends_on:
+                  - db
+
+            volumes:
+              n8n_db:
+            """
+        ),
+        ComposeStackTemplate(
+            id: "keycloak-postgres",
+            title: "Keycloak identity + PostgreSQL",
+            subtitle: "Keycloak single sign-on in development mode on port 8180",
+            projectName: "keycloak",
+            yamlContent: """
+            name: keycloak
+
+            services:
+              db:
+                image: docker.io/library/postgres:17-alpine
+                container_name: keycloak-db
+                environment:
+                  POSTGRES_USER: keycloak
+                  POSTGRES_PASSWORD: {{secret:db}}
+                  POSTGRES_DB: keycloak
+                  PGDATA: /var/lib/postgresql/data/pgdata
+                volumes:
+                  - keycloak_db:/var/lib/postgresql/data
+
+              keycloak:
+                image: quay.io/keycloak/keycloak:26.8.1
+                container_name: keycloak-app
+                command: start-dev
+                ports:
+                  - "8180:8080"
+                environment:
+                  KC_DB: postgres
+                  KC_DB_URL: jdbc:postgresql://db:5432/keycloak
+                  KC_DB_USERNAME: keycloak
+                  KC_DB_PASSWORD: {{secret:db}}
+                  KC_BOOTSTRAP_ADMIN_USERNAME: admin
+                  KC_BOOTSTRAP_ADMIN_PASSWORD: {{secret:admin}}
+                depends_on:
+                  - db
+
+            volumes:
+              keycloak_db:
+            """
+        ),
+        ComposeStackTemplate(
+            id: "matomo-mariadb",
+            title: "Matomo analytics + MariaDB",
+            subtitle: "Privacy-friendly web analytics on port 8096",
+            projectName: "matomo",
+            yamlContent: """
+            name: matomo
+
+            services:
+              db:
+                image: docker.io/library/mariadb:11.8
+                container_name: matomo-db
+                command: --datadir=/var/lib/mysql/data
+                environment:
+                  MARIADB_ROOT_PASSWORD: {{secret:root}}
+                  MARIADB_DATABASE: matomo
+                  MARIADB_USER: matomo
+                  MARIADB_PASSWORD: {{secret:db}}
+                volumes:
+                  - matomo_db:/var/lib/mysql
+
+              matomo:
+                image: docker.io/library/matomo:5-apache
+                container_name: matomo-web
+                ports:
+                  - "8096:80"
+                environment:
+                  MATOMO_DATABASE_HOST: db
+                  MATOMO_DATABASE_ADAPTER: mysql
+                  MATOMO_DATABASE_USERNAME: matomo
+                  MATOMO_DATABASE_PASSWORD: {{secret:db}}
+                  MATOMO_DATABASE_DBNAME: matomo
+                depends_on:
+                  - db
+
+            volumes:
+              matomo_db:
+            """
+        ),
+        ComposeStackTemplate(
+            id: "metabase-postgres",
+            title: "Metabase BI + PostgreSQL",
+            subtitle: "Dashboards and questions over your data on port 3002",
+            projectName: "metabase",
+            yamlContent: """
+            name: metabase
+
+            services:
+              db:
+                image: docker.io/library/postgres:17-alpine
+                container_name: metabase-db
+                environment:
+                  POSTGRES_USER: metabase
+                  POSTGRES_PASSWORD: {{secret:db}}
+                  POSTGRES_DB: metabase
+                  PGDATA: /var/lib/postgresql/data/pgdata
+                volumes:
+                  - metabase_db:/var/lib/postgresql/data
+
+              metabase:
+                image: docker.io/metabase/metabase:v0.65.2.6
+                container_name: metabase-app
+                mem_limit: 2g
+                ports:
+                  - "3002:3000"
+                environment:
+                  MB_DB_TYPE: postgres
+                  MB_DB_DBNAME: metabase
+                  MB_DB_PORT: "5432"
+                  MB_DB_USER: metabase
+                  MB_DB_PASS: {{secret:db}}
+                  MB_DB_HOST: db
+                depends_on:
+                  - db
+
+            volumes:
+              metabase_db:
+            """
+        ),
+        ComposeStackTemplate(
+            id: "odoo-postgres",
+            title: "Odoo ERP + PostgreSQL",
+            subtitle: "Odoo 18 business apps on port 8069",
+            projectName: "odoo",
+            yamlContent: """
+            name: odoo
+
+            services:
+              db:
+                image: docker.io/library/postgres:17-alpine
+                container_name: odoo-db
+                environment:
+                  POSTGRES_USER: odoo
+                  POSTGRES_PASSWORD: {{secret:db}}
+                  POSTGRES_DB: postgres
+                  PGDATA: /var/lib/postgresql/data/pgdata
+                volumes:
+                  - odoo_db:/var/lib/postgresql/data
+
+              odoo:
+                image: docker.io/library/odoo:18
+                container_name: odoo-web
+                ports:
+                  - "8069:8069"
+                environment:
+                  HOST: db
+                  USER: odoo
+                  PASSWORD: {{secret:db}}
+                depends_on:
+                  - db
+
+            volumes:
+              odoo_db:
+            """
+        ),
+        ComposeStackTemplate(
+            id: "mediawiki-mariadb",
+            title: "MediaWiki + MariaDB",
+            subtitle: "A wiki on port 8097; finish setup in the browser (database host: db)",
+            projectName: "mediawiki",
+            yamlContent: """
+            name: mediawiki
+
+            services:
+              db:
+                image: docker.io/library/mariadb:11.8
+                container_name: mediawiki-db
+                command: --datadir=/var/lib/mysql/data
+                environment:
+                  MARIADB_ROOT_PASSWORD: {{secret:root}}
+                  MARIADB_DATABASE: wiki
+                  MARIADB_USER: wiki
+                  MARIADB_PASSWORD: {{secret:db}}
+                volumes:
+                  - wiki_db:/var/lib/mysql
+
+              mediawiki:
+                image: docker.io/library/mediawiki:1.44
+                container_name: mediawiki-web
+                ports:
+                  - "8097:80"
+                depends_on:
+                  - db
+
+            volumes:
+              wiki_db:
+            """
+        ),
+        ComposeStackTemplate(
+            id: "uptime-kuma",
+            title: "Uptime Kuma monitoring",
+            subtitle: "Status pages and uptime checks for your sites on port 3003",
+            projectName: "uptime",
+            yamlContent: """
+            name: uptime
+
+            services:
+              kuma:
+                image: docker.io/louislam/uptime-kuma:2
+                container_name: uptime-kuma
+                ports:
+                  - "3003:3001"
+                volumes:
+                  - kuma_data:/app/data
+
+            volumes:
+              kuma_data:
+            """
+        ),
+        ComposeStackTemplate(
+            id: "rabbitmq",
+            title: "RabbitMQ message broker",
+            subtitle: "RabbitMQ on port 5672 with its management UI on port 15672",
+            projectName: "rabbitmq",
+            yamlContent: """
+            name: rabbitmq
+
+            services:
+              rabbitmq:
+                image: docker.io/library/rabbitmq:4-management-alpine
+                container_name: rabbitmq
+                ports:
+                  - "5672:5672"
+                  - "15672:15672"
+                environment:
+                  RABBITMQ_DEFAULT_USER: lada
+                  RABBITMQ_DEFAULT_PASS: {{secret:rabbit}}
+                volumes:
+                  - rabbitmq_data:/var/lib/rabbitmq
+
+            volumes:
+              rabbitmq_data:
+            """
+        ),
+        ComposeStackTemplate(
+            id: "caddy-proxy",
+            title: "Caddy reverse proxy + app",
+            subtitle: "Caddy on port 8098 forwarding to a small web app (traefik/whoami)",
+            projectName: "caddy-proxy",
+            yamlContent: """
+            name: caddy-proxy
+
+            services:
+              app:
+                image: docker.io/traefik/whoami:v1.12.0
+                container_name: caddy-app
+
+              caddy:
+                image: docker.io/library/caddy:2-alpine
+                container_name: caddy-proxy
+                command: caddy reverse-proxy --from :80 --to app:80
+                ports:
+                  - "8098:80"
+                depends_on:
+                  - app
             """
         )
     ]
@@ -564,6 +1150,14 @@ public enum ComposeParser {
                             }
                         case "command":
                             currentService?.commandOverride = val
+                        case "mem_limit":
+                            if let bytes = ByteSizeSpec.bytes(val.replacingOccurrences(of: "\"", with: "")), bytes > 0 {
+                                currentService?.memoryLimitMB = Int(max(1, bytes / 1_048_576))
+                            }
+                        case "cpus":
+                            if let cpus = Double(val.replacingOccurrences(of: "\"", with: "")), cpus > 0 {
+                                currentService?.cpuLimit = Int(cpus.rounded(.up))
+                            }
                         case "working_dir":
                             currentService?.workingDirectory = val
                         case "ports":
@@ -745,21 +1339,11 @@ public enum ComposeParser {
         defaultMemoryMB: Int,
         dnsAliases: [String] = []
     ) -> ContainerCreateRequest {
-        var cmdArgs: [String] = []
-        var entryOverride = ""
-        let trimmedCmd = service.commandOverride.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedCmd.isEmpty {
-            let parts = trimmedCmd.split(separator: " ").map(String.init)
-            if let first = parts.first {
-                if first.hasPrefix("-") {
-                    // Passed as arguments to the image's default entrypoint (e.g. `--datadir=/var/lib/mysql/data`)
-                    cmdArgs = parts
-                } else {
-                    entryOverride = first
-                    cmdArgs = Array(parts.dropFirst())
-                }
-            }
-        }
+        // Compose semantics: `command:` replaces the image's CMD and keeps its ENTRYPOINT, so
+        // entrypoint scripts (database init, config templating) still run. Strings are split
+        // like a shell does (quotes group words); the list form is taken as is.
+        let cmdArgs = ShellWords.composeCommand(service.commandOverride)
+        let entryOverride = ""
 
         return ContainerCreateRequest(
             name: service.containerName,
@@ -773,8 +1357,8 @@ public enum ComposeParser {
             dnsAliases: dnsAliases,
             mounts: service.volumes,
             environmentVariables: service.environment,
-            cpus: defaultCPUs,
-            memoryMB: defaultMemoryMB,
+            cpus: service.cpuLimit ?? defaultCPUs,
+            memoryMB: service.memoryLimitMB ?? defaultMemoryMB,
             labels: [
                 KeyValueEntry(key: "com.lada.compose.project", value: projectName),
                 KeyValueEntry(key: "com.lada.compose.service", value: service.serviceName)
@@ -845,5 +1429,50 @@ public enum ComposeParser {
             return cleaned.isEmpty ? "stack-svc" : "\(cleaned)01"
         }
         return cleaned
+    }
+}
+
+
+/// Splits command strings the way Compose (and a POSIX shell) does, without running a shell.
+public enum ShellWords {
+    /// `sh -c "echo hi && run"` → ["sh", "-c", "echo hi && run"]. Single quotes are literal,
+    /// double quotes allow `\"` and `\\`, a backslash outside quotes escapes the next character.
+    public static func split(_ input: String) -> [String] {
+        var words: [String] = []
+        var current = ""
+        var inWord = false
+        var quote: Character?
+        var escaping = false
+        for ch in input {
+            if escaping {
+                current.append(ch); escaping = false; inWord = true; continue
+            }
+            switch quote {
+            case "'":
+                if ch == "'" { quote = nil } else { current.append(ch) }
+            case "\"":
+                if ch == "\"" { quote = nil } else if ch == "\\" { escaping = true } else { current.append(ch) }
+            default:
+                if ch == "\\" { escaping = true; inWord = true }
+                else if ch == "'" || ch == "\"" { quote = ch; inWord = true }
+                else if ch == " " || ch == "\t" || ch == "\n" {
+                    if inWord { words.append(current); current = ""; inWord = false }
+                } else { current.append(ch); inWord = true }
+            }
+        }
+        if inWord { words.append(current) }
+        return words
+    }
+
+    /// A Compose `command:` value: the flow-list form `["a", "b c"]` or a shell-style string.
+    public static func composeCommand(_ value: String) -> [String] {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        if trimmed.hasPrefix("["), trimmed.hasSuffix("]"),
+           let data = trimmed.data(using: .utf8),
+           let list = try? JSONSerialization.jsonObject(with: data) as? [String] {
+            return list
+        }
+        return split(trimmed)
     }
 }

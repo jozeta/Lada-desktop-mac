@@ -104,3 +104,45 @@ final class ResourceGraphTests: XCTestCase {
         XCTAssertFalse(IPv4.contains(cidr: "nonsense", address: "10.0.0.1"))
     }
 }
+
+@MainActor
+final class NodeGraphStateTests: XCTestCase {
+    func testCacheFollowsFiltersAndAdjacency() async {
+        let state = AppState(injectedService: MockContainerRuntimeService())
+        await state.refreshAll(isUserInitiated: false)
+        let graphState = NodeGraphState()
+        let (full, shown) = graphState.graphs(for: state)
+        XCTAssertEqual(full, shown)
+        XCTAssertFalse(graphState.adjacency.isEmpty)
+        graphState.hiddenKinds = [.container]
+        let (_, filtered) = graphState.graphs(for: state)
+        XCTAssertFalse(filtered.nodes.contains { $0.kind == .container })
+        XCTAssertFalse(graphState.adjacency.keys.contains { $0.hasPrefix("Container:") })
+    }
+
+    /// Build + every layout stays interactive for a large setup (100 containers ≈ 400 nodes).
+    func testLargeGraphPerformance() {
+        let containers = (0..<100).map { i in
+            ContainerModel(
+                id: "svc-\(i)", imageReference: "docker.io/library/app\(i % 10):1", state: .running,
+                configuration: ContainerConfigurationModel(
+                    mounts: [MountAttachment(kind: .volume, source: "vol\(i % 20)", destination: "/data", readOnly: false, volumeName: "vol\(i % 20)")],
+                    publishedPorts: [PortMapping(hostAddress: "127.0.0.1", hostPort: UInt16(9000 + i), containerPort: 80, proto: "tcp")]
+                ),
+                networks: [ContainerNetworkAttachment(network: "default", hostname: "svc-\(i)", ipv4Address: "192.168.64.\(i + 2)/24", ipv4Gateway: "192.168.64.1")]
+            )
+        }
+        let start = Date()
+        let graph = ResourceGraph.build(containers: containers, images: [], networks: [NetworkModel(id: "default", ipv4Subnet: "192.168.64.0/24", ipv4Gateway: "192.168.64.1")],
+                                        volumes: [], machines: [], registries: [])
+        let size = CGSize(width: sqrt(Double(graph.nodes.count)) * 230, height: sqrt(Double(graph.nodes.count)) * 150)
+        var timings: [String: Double] = [:]
+        for layout in GraphLayout.allCases {
+            let t = Date()
+            _ = layout.positions(for: graph, in: size)
+            timings[layout.rawValue] = Date().timeIntervalSince(t)
+        }
+        print("NodeGraph \(graph.nodes.count) nodes / \(graph.edges.count) edges, build+layouts \(Date().timeIntervalSince(start))s", timings)
+        for (name, seconds) in timings { XCTAssertLessThan(seconds, 1.0, "\(name) too slow (debug build)") }
+    }
+}

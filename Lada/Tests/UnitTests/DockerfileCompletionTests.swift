@@ -81,3 +81,41 @@ final class DockerfileEditorViewTests: XCTestCase {
         XCTAssertEqual(keywordColor, dark.keyword)
     }
 }
+
+final class DockerfileDocsTests: XCTestCase {
+    func testEveryInstructionHasAReference() {
+        for instruction in DockerfileCompletionEngine.instructions {
+            let doc = DockerfileDocs.doc(for: instruction, lineBeforeCursor: "")
+            XCTAssertEqual(doc?.instruction, instruction)
+            XCTAssertFalse(doc?.syntax.isEmpty ?? true, instruction)
+            XCTAssertFalse(doc?.example.isEmpty ?? true, instruction)
+            XCTAssertNil(doc?.highlighted, "an instruction's own page highlights nothing")
+        }
+    }
+
+    func testFlagsHighlightTheirParameter() {
+        XCTAssertEqual(DockerfileDocs.doc(for: "--mount=type=cache,target=", lineBeforeCursor: "RUN ")?.highlighted, "--mount=type=cache,target=<path>")
+        XCTAssertEqual(DockerfileDocs.doc(for: "--from=builder", lineBeforeCursor: "COPY ")?.highlighted, "--from=<stage|image>")
+        XCTAssertEqual(DockerfileDocs.doc(for: "--interval=30s", lineBeforeCursor: "HEALTHCHECK ")?.highlighted, "--interval=<duration>")
+    }
+
+    func testValuesHighlightOnlyWhenTheyMatch() {
+        XCTAssertEqual(DockerfileDocs.doc(for: "SIGQUIT", lineBeforeCursor: "STOPSIGNAL ")?.highlighted, "SIGQUIT")
+        XCTAssertEqual(DockerfileDocs.doc(for: "TARGETARCH", lineBeforeCursor: "ARG ")?.highlighted, "TARGETPLATFORM, TARGETOS, TARGETARCH")
+        // An image after FROM shows FROM's page without a wrong highlight.
+        let from = DockerfileDocs.doc(for: "nginx:1.27-alpine", lineBeforeCursor: "FROM ")
+        XCTAssertEqual(from?.instruction, "FROM")
+        XCTAssertNil(from?.highlighted)
+        XCTAssertNil(DockerfileDocs.doc(for: "x", lineBeforeCursor: "echo "))
+    }
+}
+
+@MainActor
+final class InfoTipTests: XCTestCase {
+    func testCardHeightGrowsWithText() {
+        let short = InfoTipPresenter.height(title: nil, text: "Short.")
+        let long = InfoTipPresenter.height(title: "Title", text: String(repeating: "A longer explanation that wraps. ", count: 8))
+        XCTAssertGreaterThan(long, short)
+        XCTAssertGreaterThan(short, 28)
+    }
+}

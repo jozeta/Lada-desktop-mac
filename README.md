@@ -47,7 +47,7 @@ Designed with a **Nordic frosted-glass** look (translucent window, glass panels,
 - **Starts Empty**: Build a stack yourself or start from a template. After a stack starts successfully, the screen clears and the stack lives on in Containers (Open in Stacks reopens its compose file).
 - **Two-Way Stack Builder**: Add or edit services with a form (image with autocomplete or an Image Library preset, ports, settings, storage, start order) or type in the Compose File tab. Both stay in sync, and only the affected service is rewritten, so your comments are kept.
 - **Dependency Order & DNS Aliases**: `depends_on` decides the start order, named volumes are created, and each service gets its name (plus Compose `aliases:`) as a DNS alias on the `default` network, so peers reach it as e.g. `db`. Single-label names need a default DNS domain (`container system dns create test`, then `container system property set dns.domain test`); without one the stack log says which aliases were skipped.
-- **Templates**: Website + PostgreSQL + Redis, WordPress + MySQL, PostgreSQL + Adminer, Gitea + PostgreSQL, Prometheus + Grafana, Python API + Redis, NATS + Valkey, Mailpit + private registry, and Vault (dev mode). Passwords are generated per use. Open and save any `.yml`/`.yaml` compose file, with recent files.
+- **25 Templates**: Website + PostgreSQL + Redis, WordPress + MySQL, LAMP (PHP + MariaDB + phpMyAdmin), Ghost + MySQL, Nextcloud + PostgreSQL + Redis, Drupal, Joomla, MediaWiki, Directus, Keycloak, n8n, Matomo, Metabase, Odoo, MongoDB + Mongo Express, PostgreSQL + Adminer, Gitea + PostgreSQL, Prometheus + Grafana, Uptime Kuma, Python API + Redis, NATS + Valkey, RabbitMQ, Caddy reverse proxy, Mailpit + private registry, and Vault (dev mode). Images are pinned to arm64 builds and passwords are generated per use. Apps that reach their database by service name (`db`) need the default DNS domain described above; without it they stop when they can't connect. Open and save any `.yml`/`.yaml` compose file, with recent files.
 
 ### 6. Docker Hub Image Library
 ![Docker Hub Image Library](docs/screenshots/image-library.png)
@@ -58,6 +58,7 @@ Designed with a **Nordic frosted-glass** look (translucent window, glass panels,
 ### 7. Dockerfile Editor
 ![Dockerfile Editor](docs/screenshots/dockerfile-editor.png)
 
+- **IntelliSense**: beside the completion list, a reference for the highlighted suggestion: what the instruction does, how it works, its syntax, every parameter and flag (the one you're typing highlighted) and an example.
 - **Code Completion While You Type**: Suggestions follow the cursor's context: instructions at the start of a line, then each instruction's arguments. That includes images on this Mac and from the library after `FROM`, build stages after `COPY --from=`, `ARG`/`ENV` names after `$`, flags (`--mount=type=cache`, `--chown=`, `--platform=`), ports, signals, earlier `WORKDIR`s and `USER`s, and OCI labels.
 - **Syntax Highlighting**: Nordic palette tuned for light and dark mode, on the same glass as the rest of the app, with line numbers.
 - **Starter Templates**: Nginx static site, Python HTTP service, Node.js 22, Swift 6, Go 1.23 and PostgreSQL 16 (ext4-tuned).

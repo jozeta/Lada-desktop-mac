@@ -33,7 +33,12 @@ final class LiveStackTemplateTests: XCTestCase {
                     failures.append("\(template.id)/\(svc.serviceName): \(state.map(\.rawValue) ?? "missing")\n\(logs)\n\(appState.stacks.consoleLines.suffix(4).joined(separator: "\n"))")
                 }
             }
-            await appState.stacks.remove(appState: appState)
+            // Delete by container name: a successful start clears the Stacks screen, so
+            // `stacks.remove` would have nothing left to remove.
+            for svc in stack.services {
+                try? await cli.stopContainer(id: svc.containerName, timeoutSeconds: 5)
+                try? await cli.deleteContainer(id: svc.containerName, force: true)
+            }
             for vol in stack.declaredVolumes where !volumesBefore.contains(vol) {
                 try? await cli.deleteVolume(name: vol)
             }

@@ -17,6 +17,8 @@ public enum ComposeDocument {
         }
         let command = svc.commandOverride.trimmingCharacters(in: .whitespaces)
         if !command.isEmpty { lines.append("    command: \(quoted(command))") }
+        if let cpus = svc.cpuLimit { lines.append("    cpus: \(cpus)") }
+        if let mb = svc.memoryLimitMB { lines.append("    mem_limit: \(mb % 1024 == 0 ? "\(mb / 1024)g" : "\(mb)m")") }
         let workdir = svc.workingDirectory.trimmingCharacters(in: .whitespaces)
         if !workdir.isEmpty { lines.append("    working_dir: \(quoted(workdir))") }
         if !svc.publishedPorts.isEmpty {

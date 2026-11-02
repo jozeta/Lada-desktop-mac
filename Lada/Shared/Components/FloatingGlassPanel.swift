@@ -7,8 +7,11 @@ import AppKit
 final class FloatingGlassPanel {
     private var panel: NSPanel?
     private let makeContent: () -> AnyView
+    private let material: NSVisualEffectView.Material
 
-    init<Content: View>(@ViewBuilder content: @escaping () -> Content) {
+    /// `material`: `.popover` for lists; `.fullScreenUI` is lighter and more see-through.
+    init<Content: View>(material: NSVisualEffectView.Material = .popover, @ViewBuilder content: @escaping () -> Content) {
+        self.material = material
         self.makeContent = { AnyView(content()) }
     }
 
@@ -28,6 +31,15 @@ final class FloatingGlassPanel {
         panel.orderFront(nil)
     }
 
+    /// Resizes the panel in place (keeps its top-left corner).
+    func resize(to size: NSSize) {
+        guard let panel, panel.isVisible else { return }
+        var frame = panel.frame
+        frame.origin.y += frame.height - size.height
+        frame.size = size
+        panel.setFrame(frame, display: true)
+    }
+
     func hide() {
         guard let panel, panel.isVisible else { return }
         panel.parent?.removeChildWindow(panel)
@@ -44,7 +56,7 @@ final class FloatingGlassPanel {
 
         // Real frosted glass: blurs whatever is under the panel.
         let glass = NSVisualEffectView()
-        glass.material = .popover
+        glass.material = material
         glass.blendingMode = .behindWindow
         glass.state = .active
         glass.wantsLayer = true

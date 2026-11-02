@@ -6,6 +6,35 @@ From 1.6.0 every commit bumps the version (`Scripts/bump-version.sh`); entries u
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-02
+
+- Compose `mem_limit:` and `cpus:` are honoured (and written back by the stack builder); before,
+  every stack service got the default memory and CPUs. Metabase gets 2 GB, which its JVM needs
+- New templates were run on container 1.6.1. Without a default DNS domain, services can't find
+  each other by name: LAMP, Drupal, Matomo, MediaWiki, Uptime Kuma, RabbitMQ and Caddy keep
+  running, while apps that exit when their database is unreachable (Ghost, Directus, Keycloak,
+  n8n, Nextcloud, Joomla, Odoo, Metabase, Mongo Express) stop until a DNS domain is set
+- Live stack test cleans up by container name (a successful start clears the Stacks screen, so
+  it used to leave the started stacks behind)
+
+- Stacks: 16 more templates for popular web stacks: LAMP (PHP + MariaDB + phpMyAdmin), MongoDB
+  + Mongo Express, Ghost + MySQL, Nextcloud + PostgreSQL + Redis, Drupal, Joomla, Directus,
+  n8n, Keycloak, Matomo, Metabase, Odoo, MediaWiki, Uptime Kuma, RabbitMQ and Caddy reverse
+  proxy. Every image is pinned to a version with an arm64 build (checked against the
+  registries); Prometheus and Grafana are pinned instead of `:latest`
+- Compose `command:` now follows Compose: it replaces the image's CMD and keeps its ENTRYPOINT
+  (init scripts run), and is split like a shell (quotes group words; list form supported).
+  Before, the first word replaced the entrypoint and quoted arguments were split apart
+- Dockerfile Editor IntelliSense: the completion list has a reference pane for the highlighted
+  suggestion: what the instruction does, how it works, syntax, every parameter and flag (the
+  one being completed is highlighted) and an example
+- Node Graph is faster and easier to use: the graph is built once per inventory change instead
+  of on every hover or drag frame, chips redraw only when their own state changes and no longer
+  use a blur and shadow each, and the layouts use spatial grids (Fruchterman–Reingold's grid
+  variant for force-directed). Build plus all five layouts for 332 nodes went from 3.7 s to
+  0.76 s (debug build). Clicking empty space, Esc or the selection chip's ✕ now deselects
+- Info tips open at once (no popover animation) in a lighter, more see-through frosted card
+
 ## [1.6.0] - 2026-11-02
 
 - Node Graph (Infrastructure): every resource as a node (stacks, containers, machines, images,

@@ -29,6 +29,7 @@
 				Tests/UnitTests/ContainerFileOperationsTests.swift,
 				Tests/UnitTests/DNSAliasTests.swift,
 				Tests/UnitTests/DiskSpaceTests.swift,
+				Tests/UnitTests/StackTemplateTests.swift,
 				Tests/UnitTests/AppVersionTests.swift,
 				Tests/UnitTests/SheetsAndThemeTests.swift,
 				Tests/UnitTests/ResourceGraphTests.swift,
@@ -210,7 +211,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 151;
+				CURRENT_PROJECT_VERSION = 152;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Lada/Resources/Info.plist;
@@ -218,7 +219,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.6.0;
+				MARKETING_VERSION = 1.7.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.lada.desktop;
 				PRODUCT_NAME = "Lada";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -233,7 +234,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 151;
+				CURRENT_PROJECT_VERSION = 152;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Lada/Resources/Info.plist;
@@ -241,7 +242,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.6.0;
+				MARKETING_VERSION = 1.7.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.lada.desktop;
 				PRODUCT_NAME = "Lada";
 				SWIFT_EMIT_LOC_STRINGS = YES;

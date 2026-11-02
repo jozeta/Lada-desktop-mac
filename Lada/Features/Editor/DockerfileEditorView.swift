@@ -1435,7 +1435,10 @@ final class DockerfileNSTextView: NSTextView {
         let range = rangeForUserCompletion
         popupAnchor = range.location
         let caret = firstRect(forCharacterRange: NSRange(location: range.location, length: 0), actualRange: nil)
-        completionPopup.show(items: items, caretRect: caret, parent: window) { [weak self] item in
+        let ns = string as NSString
+        let lineStart = ns.lineRange(for: NSRange(location: range.location, length: 0)).location
+        let lineBefore = ns.substring(with: NSRange(location: lineStart, length: range.location - lineStart))
+        completionPopup.show(items: items, lineBeforeCursor: lineBefore, caretRect: caret, parent: window) { [weak self] item in
             self?.acceptCompletion(item)
         }
     }

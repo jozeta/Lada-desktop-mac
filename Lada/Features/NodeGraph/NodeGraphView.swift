@@ -14,7 +14,47 @@ public final class NodeGraphState: ObservableObject {
     var laidOutIDs: Set<String> = []
     var worldSize: CGSize = .zero
 
+    // Built once per inventory change (and per type filter), not on every hover or drag frame.
+    private var cachedSignature: Int?
+    private var cachedFull = ResourceGraph()
+    private var cachedFilterKey: Set<ResourceGraph.Kind>?
+    private var cachedShown = ResourceGraph()
+    private(set) var adjacency: [String: Set<String>] = [:]
+
     public init() {}
+
+    /// The full graph and the shown (filtered) one for the current inventories.
+    func graphs(for appState: AppState) -> (full: ResourceGraph, shown: ResourceGraph) {
+        var hasher = Hasher()
+        for c in appState.containers {
+            hasher.combine(c.id); hasher.combine(c.state.rawValue); hasher.combine(c.imageReference)
+            hasher.combine(c.networks.map(\.ipv4Address)); hasher.combine(c.configuration.mounts.map(\.source))
+            hasher.combine(c.configuration.publishedPorts.map(\.hostPort))
+        }
+        for i in appState.images { hasher.combine(i.id) }
+        for n in appState.networks { hasher.combine(n.id); hasher.combine(n.ipv4Subnet) }
+        for v in appState.volumes { hasher.combine(v.id) }
+        for m in appState.machines { hasher.combine(m.id); hasher.combine(m.status.rawValue); hasher.combine(m.ipAddress) }
+        for r in appState.registries { hasher.combine(r.hostname); hasher.combine(r.isAuthenticated) }
+        let signature = hasher.finalize()
+        if signature != cachedSignature {
+            cachedSignature = signature
+            cachedFull = ResourceGraph.build(containers: appState.containers, images: appState.images, networks: appState.networks,
+                                             volumes: appState.volumes, machines: appState.machines, registries: appState.registries)
+            cachedFilterKey = nil
+        }
+        if cachedFilterKey != hiddenKinds {
+            cachedFilterKey = hiddenKinds
+            cachedShown = cachedFull.filtered(to: Set(ResourceGraph.Kind.allCases).subtracting(hiddenKinds))
+            var adj: [String: Set<String>] = [:]
+            for e in cachedShown.edges {
+                adj[e.from, default: []].insert(e.to)
+                adj[e.to, default: []].insert(e.from)
+            }
+            adjacency = adj
+        }
+        return (cachedFull, cachedShown)
+    }
 
     /// Lays out `graph`. With `keepPinned`, dragged nodes stay where they are.
     func arrange(_ graph: ResourceGraph, viewport: CGSize, keepPinned: Bool) {
@@ -56,25 +96,24 @@ public struct NodeGraphView: View {
 
     private var accent: Color { NordicTheme.accent(for: appState.preferences.accentThemeChoice) }
 
-    private var fullGraph: ResourceGraph {
-        ResourceGraph.build(containers: appState.containers, images: appState.images, networks: appState.networks,
-                            volumes: appState.volumes, machines: appState.machines, registries: appState.registries)
-    }
-
     public var body: some View {
-        let full = fullGraph
-        let graph = full.filtered(to: Set(ResourceGraph.Kind.allCases).subtracting(state.hiddenKinds))
+        let (full, graph) = state.graphs(for: appState)
         VStack(spacing: 0) {
             header(full: full, shown: graph)
             GeometryReader { geo in
                 ZStack(alignment: .topLeading) {
                     canvasBackground
+                        .contentShape(Rectangle())
                         .gesture(panGesture)
-                        .onTapGesture { state.selectedID = nil }
                     edgesLayer(graph)
                         .allowsHitTesting(false)
                     ForEach(graph.nodes) { node in
-                        nodeChip(node, graph: graph)
+                        nodeChip(node)
+                    }
+                    if let id = state.selectedID, let node = graph.nodes.first(where: { $0.id == id }) {
+                        selectionBadge(node)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            .padding(NordicTheme.Spacing.m)
                     }
                     if let id = hoveredID ?? state.selectedID, let node = graph.nodes.first(where: { $0.id == id }) {
                         hoverCard(node, graph: graph, viewport: geo.size)
@@ -90,6 +129,10 @@ public struct NodeGraphView: View {
                 .clipped()
                 .contentShape(Rectangle())
                 .gesture(zoomGesture)
+                // Esc clears the selection.
+                .focusable()
+                .focusEffectDisabled()
+                .onExitCommand { state.selectedID = nil }
                 .onAppear {
                     viewport = geo.size
                     relayoutIfNeeded(graph, force: state.positions.isEmpty)
@@ -216,63 +259,47 @@ public struct NodeGraphView: View {
         }
     }
 
-    private func nodeChip(_ node: ResourceGraph.Node, graph: ResourceGraph) -> some View {
-        let position = screen(state.positions[node.id] ?? .zero)
+    private func nodeChip(_ node: ResourceGraph.Node) -> some View {
         let focus = focusID
-        let related = focus == nil || focus == node.id || graph.neighbors(of: focus!).contains(node.id)
-        let selected = state.selectedID == node.id
-        let color = Self.color(for: node.kind)
-        return HStack(spacing: 8) {
-            ZStack {
-                Circle().fill(color.opacity(0.18))
-                LadaIcon(Self.icon(for: node.kind), size: 14)
-                    .foregroundStyle(color)
+        let related = focus == nil || focus == node.id || (state.adjacency[focus!]?.contains(node.id) ?? false)
+        return NodeChipView(
+            node: node,
+            position: screen(state.positions[node.id] ?? .zero),
+            scale: min(1.15, max(0.55, state.zoom)),
+            isSelected: state.selectedID == node.id,
+            isHovered: hoveredID == node.id,
+            isDimmed: !related,
+            onHover: { inside in hoveredID = inside ? node.id : (hoveredID == node.id ? nil : hoveredID) },
+            onDrag: { translation in
+                if dragOrigin == nil { dragOrigin = state.positions[node.id] }
+                guard let origin = dragOrigin else { return }
+                state.positions[node.id] = CGPoint(x: origin.x + translation.width / state.zoom,
+                                                   y: origin.y + translation.height / state.zoom)
+                state.pinned.insert(node.id)
+            },
+            onDragEnded: { dragOrigin = nil },
+            onTap: { state.selectedID = state.selectedID == node.id ? nil : node.id },
+            onOpen: { if let destination = node.destination { appState.open(destination) } }
+        )
+        .equatable()
+    }
+
+    private func selectionBadge(_ node: ResourceGraph.Node) -> some View {
+        HStack(spacing: 6) {
+            LadaIcon(Self.icon(for: node.kind), size: 12).foregroundStyle(Self.color(for: node.kind))
+            Text(node.title).font(.system(size: 11.5, weight: .semibold)).lineLimit(1)
+            Button {
+                state.selectedID = nil
+            } label: {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(NordicTheme.secondaryText)
             }
-            .frame(width: 26, height: 26)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(node.title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(NordicTheme.primaryText)
-                    .lineLimit(1)
-                Text(node.subtitle.isEmpty ? node.kind.rawValue : "\(node.kind.rawValue) · \(node.subtitle)")
-                    .font(.system(size: 10))
-                    .foregroundStyle(NordicTheme.secondaryText)
-                    .lineLimit(1)
-            }
+            .buttonStyle(.plain)
+            .help("Clear selection (Esc, or click empty space)")
         }
-        .padding(.leading, 6)
-        .padding(.trailing, 10)
+        .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .frame(maxWidth: 190)
-        .fixedSize()
-        .nordicSurface(cornerRadius: 13)
-        .overlay(
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .strokeBorder(selected ? color : (hoveredID == node.id ? color.opacity(0.6) : .clear), lineWidth: 1.5)
-        )
-        .opacity((related ? 1 : 0.28) * (node.isActive ? 1 : 0.7))
-        .scaleEffect(min(1.15, max(0.55, state.zoom)))
-        .position(position)
-        .onHover { inside in hoveredID = inside ? node.id : (hoveredID == node.id ? nil : hoveredID) }
-        .gesture(
-            DragGesture(minimumDistance: 2)
-                .onChanged { value in
-                    if dragOrigin == nil { dragOrigin = state.positions[node.id] }
-                    guard let origin = dragOrigin else { return }
-                    state.positions[node.id] = CGPoint(x: origin.x + value.translation.width / state.zoom,
-                                                       y: origin.y + value.translation.height / state.zoom)
-                    state.pinned.insert(node.id)
-                }
-                .onEnded { _ in dragOrigin = nil }
-        )
-        .onTapGesture(count: 2) {
-            if let destination = node.destination { appState.open(destination) }
-        }
-        .onTapGesture { state.selectedID = state.selectedID == node.id ? nil : node.id }
-        .help(node.destination == nil ? node.title : "Double-click to open \(node.title)")
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(node.kind.rawValue) \(node.title)")
-        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+        .nordicSurface(cornerRadius: 12)
+        .accessibilityIdentifier("lada.nodeGraph.selection")
     }
 
     private func hoverCard(_ node: ResourceGraph.Node, graph: ResourceGraph, viewport: CGSize) -> some View {
@@ -373,13 +400,19 @@ public struct NodeGraphView: View {
 
     // MARK: - Gestures & layout
 
+    /// Dragging the background pans; a click on it (barely any movement) clears the selection.
     private var panGesture: some Gesture {
-        DragGesture(minimumDistance: 1)
+        DragGesture(minimumDistance: 0)
             .onChanged { value in
                 if panOrigin == nil { panOrigin = state.pan }
                 state.pan = CGSize(width: panOrigin!.width + value.translation.width, height: panOrigin!.height + value.translation.height)
             }
-            .onEnded { _ in panOrigin = nil }
+            .onEnded { value in
+                if hypot(value.translation.width, value.translation.height) < 4 {
+                    state.selectedID = nil
+                }
+                panOrigin = nil
+            }
     }
 
     private var zoomGesture: some Gesture {
@@ -468,5 +501,73 @@ public struct NodeGraphView: View {
         case .pulledFrom: return color(for: .registry)
         case .similar: return NordicTheme.secondaryText
         }
+    }
+}
+
+
+/// One node on the canvas. Equatable, so moving or hovering one node redraws only the chips whose
+/// inputs changed. Drawn with a light translucent fill instead of a blur material and shadow per
+/// chip, which got slow with many overlapping nodes.
+private struct NodeChipView: View, Equatable {
+    let node: ResourceGraph.Node
+    let position: CGPoint
+    let scale: CGFloat
+    let isSelected: Bool
+    let isHovered: Bool
+    let isDimmed: Bool
+    let onHover: (Bool) -> Void
+    let onDrag: (CGSize) -> Void
+    let onDragEnded: () -> Void
+    let onTap: () -> Void
+    let onOpen: () -> Void
+
+    nonisolated static func == (a: NodeChipView, b: NodeChipView) -> Bool {
+        a.node == b.node && a.position == b.position && a.scale == b.scale && a.isSelected == b.isSelected
+            && a.isHovered == b.isHovered && a.isDimmed == b.isDimmed
+    }
+
+    var body: some View {
+        let color = NodeGraphView.color(for: node.kind)
+        let shape = RoundedRectangle(cornerRadius: 13, style: .continuous)
+        HStack(spacing: 8) {
+            ZStack {
+                Circle().fill(color.opacity(0.18))
+                LadaIcon(NodeGraphView.icon(for: node.kind), size: 14).foregroundStyle(color)
+            }
+            .frame(width: 26, height: 26)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(node.title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(NordicTheme.primaryText)
+                    .lineLimit(1)
+                Text(node.subtitle.isEmpty ? node.kind.rawValue : "\(node.kind.rawValue) · \(node.subtitle)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(NordicTheme.secondaryText)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.leading, 6)
+        .padding(.trailing, 10)
+        .padding(.vertical, 5)
+        .frame(maxWidth: 190)
+        .fixedSize()
+        .background(shape.fill(Color(nsColor: .windowBackgroundColor).opacity(0.78)))
+        .overlay(shape.strokeBorder(isSelected ? color : (isHovered ? color.opacity(0.6) : NordicTheme.borderSubtle), lineWidth: isSelected ? 1.8 : 1))
+        .opacity((isDimmed ? 0.28 : 1) * (node.isActive ? 1 : 0.7))
+        .scaleEffect(scale)
+        .position(position)
+        .onHover(perform: onHover)
+        .gesture(
+            DragGesture(minimumDistance: 3)
+                .onChanged { onDrag($0.translation) }
+                .onEnded { _ in onDragEnded() }
+        )
+        // Single and double click without the double-click delay on single clicks.
+        .simultaneousGesture(TapGesture(count: 2).onEnded(onOpen))
+        .simultaneousGesture(TapGesture(count: 1).onEnded(onTap))
+        .help(node.destination == nil ? node.title : "Double-click to open \(node.title)")
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(node.kind.rawValue) \(node.title)")
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }

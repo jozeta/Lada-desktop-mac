@@ -65,6 +65,17 @@ public struct ResourceGraph: Equatable, Sendable {
         edges.filter { $0.from == id || $0.to == id }.count
     }
 
+    /// Neighbours of every node, built in one pass (layouts use this instead of scanning edges
+    /// per node).
+    public func adjacencyMap() -> [String: Set<String>] {
+        var adj: [String: Set<String>] = [:]
+        for e in edges {
+            adj[e.from, default: []].insert(e.to)
+            adj[e.to, default: []].insert(e.from)
+        }
+        return adj
+    }
+
     /// Only nodes of `kinds`, and edges between them.
     public func filtered(to kinds: Set<Kind>) -> ResourceGraph {
         let kept = nodes.filter { kinds.contains($0.kind) }
@@ -311,22 +322,31 @@ public enum GraphLayout: String, CaseIterable, Identifiable, Sendable {
         let w = nodeFootprint.width, h = nodeFootprint.height
         for _ in 0..<iterations {
             var moved = false
+            // Only chips in the same or a neighbouring cell can overlap: a grid of chip-sized cells
+            // keeps each pass close to linear instead of comparing every pair.
+            var grid: [GridKey: [Int]] = [:]
+            for (i, p) in pos.enumerated() { grid[GridKey(Int((p.x / w).rounded(.down)), Int((p.y / h).rounded(.down))), default: []].append(i) }
             for i in 0..<pos.count {
-                for j in (i + 1)..<max(i + 1, pos.count) {
-                    let dx = pos[j].x - pos[i].x, dy = pos[j].y - pos[i].y
-                    let overlapX = w - abs(dx), overlapY = h - abs(dy)
-                    guard overlapX > 0, overlapY > 0 else { continue }
-                    if isFixed[i] && isFixed[j] { continue }
-                    moved = true
-                    // A fixed node doesn't move; the other one takes the whole push.
-                    let shareI: CGFloat = isFixed[i] ? 0 : (isFixed[j] ? 1 : 0.5)
-                    let shareJ: CGFloat = 1 - shareI
-                    if overlapX / w < overlapY / h {
-                        let push = overlapX * (dx >= 0 ? 1 : -1)
-                        pos[i].x -= push * shareI; pos[j].x += push * shareJ
-                    } else {
-                        let push = overlapY * (dy >= 0 ? 1 : -1)
-                        pos[i].y -= push * shareI; pos[j].y += push * shareJ
+                let cx = Int((pos[i].x / w).rounded(.down)), cy = Int((pos[i].y / h).rounded(.down))
+                for gx in (cx - 1)...(cx + 1) {
+                    for gy in (cy - 1)...(cy + 1) {
+                        for j in grid[GridKey(gx, gy)] ?? [] where j > i {
+                            let dx = pos[j].x - pos[i].x, dy = pos[j].y - pos[i].y
+                            let overlapX = w - abs(dx), overlapY = h - abs(dy)
+                            guard overlapX > 0, overlapY > 0 else { continue }
+                            if isFixed[i] && isFixed[j] { continue }
+                            moved = true
+                            // A fixed node doesn't move; the other one takes the whole push.
+                            let shareI: CGFloat = isFixed[i] ? 0 : (isFixed[j] ? 1 : 0.5)
+                            let shareJ: CGFloat = 1 - shareI
+                            if overlapX / w < overlapY / h {
+                                let push = overlapX * (dx >= 0 ? 1 : -1)
+                                pos[i].x -= push * shareI; pos[j].x += push * shareJ
+                            } else {
+                                let push = overlapY * (dy >= 0 ? 1 : -1)
+                                pos[i].y -= push * shareI; pos[j].y += push * shareJ
+                            }
+                        }
                     }
                 }
             }
@@ -338,6 +358,11 @@ public enum GraphLayout: String, CaseIterable, Identifiable, Sendable {
         return Dictionary(uniqueKeysWithValues: ids.enumerated().map { i, id in
             (id, isFixed[i] ? pos[i] : CGPoint(x: min(maxX, max(minX, pos[i].x)), y: min(maxY, max(minY, pos[i].y))))
         })
+    }
+
+    struct GridKey: Hashable {
+        let x: Int, y: Int
+        init(_ x: Int, _ y: Int) { self.x = x; self.y = y }
     }
 
     static let margin: CGFloat = 90
@@ -374,18 +399,21 @@ public enum GraphLayout: String, CaseIterable, Identifiable, Sendable {
 
     /// The selected node, or the most connected one.
     static func radialRoot(_ g: ResourceGraph, focus: String?) -> String? {
-        focus.flatMap { f in g.nodes.contains { $0.id == f } ? f : nil }
-            ?? g.nodes.max { g.degree(of: $0.id) < g.degree(of: $1.id) }?.id
+        if let f = focus, g.nodes.contains(where: { $0.id == f }) { return f }
+        let adj = g.adjacencyMap()
+        return g.nodes.max { (adj[$0.id]?.count ?? 0, $1.id) < (adj[$1.id]?.count ?? 0, $0.id) }?.id
     }
 
     static func radial(_ g: ResourceGraph, _ size: CGSize, focus: String?) -> [String: CGPoint] {
         guard let root = radialRoot(g, focus: focus) else { return [:] }
         // Breadth-first rings; unreachable nodes go on an outer ring.
+        let adj = g.adjacencyMap()
         var depth: [String: Int] = [root: 0]
         var queue = [root]
-        while !queue.isEmpty {
-            let current = queue.removeFirst()
-            for n in g.neighbors(of: current) where depth[n] == nil {
+        var head = 0
+        while head < queue.count {
+            let current = queue[head]; head += 1
+            for n in (adj[current] ?? []).sorted() where depth[n] == nil {
                 depth[n] = depth[current]! + 1
                 queue.append(n)
             }
@@ -422,7 +450,8 @@ public enum GraphLayout: String, CaseIterable, Identifiable, Sendable {
     }
 
     static func layered(_ g: ResourceGraph, _ size: CGSize) -> [String: CGPoint] {
-        var layers = Dictionary(grouping: g.nodes.map(\.id), by: { id in layer(of: g.nodes.first { $0.id == id }!.kind) })
+        let adj = g.adjacencyMap()
+        var layers = Dictionary(grouping: g.nodes, by: { layer(of: $0.kind) }).mapValues { $0.map(\.id) }
         let keys = layers.keys.sorted()
         for k in keys { layers[k]!.sort() }
         // Barycenter ordering: two down and up sweeps reduce edge crossings.
@@ -431,7 +460,7 @@ public enum GraphLayout: String, CaseIterable, Identifiable, Sendable {
             for (i, id) in reference.enumerated() { index[id] = Double(i) }
             var scored: [(id: String, score: Double)] = []
             for id in layer {
-                let positions: [Double] = g.neighbors(of: id).compactMap { index[$0] }
+                let positions: [Double] = (adj[id] ?? []).compactMap { index[$0] }
                 let score: Double = positions.isEmpty ? .greatestFiniteMagnitude : positions.reduce(0, +) / Double(positions.count)
                 scored.append((id, score))
             }
@@ -456,7 +485,9 @@ public enum GraphLayout: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// Fruchterman–Reingold, started from the circular layout so the result is deterministic.
-    static func force(_ g: ResourceGraph, _ size: CGSize, iterations: Int = 300) -> [String: CGPoint] {
+    static func force(_ g: ResourceGraph, _ size: CGSize, iterations requested: Int? = nil) -> [String: CGPoint] {
+        // Large graphs settle in fewer rounds; small ones get the full schedule.
+        let iterations = requested ?? (g.nodes.count > 150 ? 160 : 300)
         let ids = g.nodes.map(\.id)
         let index = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0) })
         let start = circular(g, size)
@@ -471,14 +502,25 @@ public enum GraphLayout: String, CaseIterable, Identifiable, Sendable {
         var temperature = Double(min(size.width, size.height)) / 8
         for _ in 0..<iterations {
             var disp = Array(repeating: CGVector.zero, count: ids.count)
+            // Repulsion only within 2k, found through a grid of 2k cells: the grid variant from
+            // Fruchterman & Reingold's paper, near-linear instead of every pair.
+            let cell = 2 * k
+            var grid: [GridKey: [Int]] = [:]
+            for (i, p) in pos.enumerated() { grid[GridKey(Int(Double(p.x) / cell), Int(Double(p.y) / cell)), default: []].append(i) }
             for i in 0..<ids.count {
-                for j in (i + 1)..<max(i + 1, ids.count) {
-                    var dx = Double(pos[i].x - pos[j].x), dy = Double(pos[i].y - pos[j].y)
-                    var dist = sqrt(dx * dx + dy * dy)
-                    if dist < 0.01 { dx = 0.1 * Double(i - j); dy = 0.1; dist = 0.15 }
-                    let force = k * k / dist
-                    disp[i].dx += dx / dist * force; disp[i].dy += dy / dist * force
-                    disp[j].dx -= dx / dist * force; disp[j].dy -= dy / dist * force
+                let cx = Int(Double(pos[i].x) / cell), cy = Int(Double(pos[i].y) / cell)
+                for gx in (cx - 1)...(cx + 1) {
+                    for gy in (cy - 1)...(cy + 1) {
+                        for j in grid[GridKey(gx, gy)] ?? [] where j > i {
+                            var dx = Double(pos[i].x - pos[j].x), dy = Double(pos[i].y - pos[j].y)
+                            var dist = sqrt(dx * dx + dy * dy)
+                            if dist > cell { continue }
+                            if dist < 0.01 { dx = 0.1 * Double(i - j); dy = 0.1; dist = 0.15 }
+                            let force = k * k / dist
+                            disp[i].dx += dx / dist * force; disp[i].dy += dy / dist * force
+                            disp[j].dx -= dx / dist * force; disp[j].dy -= dy / dist * force
+                        }
+                    }
                 }
             }
             for (a, b) in links {
