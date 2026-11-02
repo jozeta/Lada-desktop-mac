@@ -931,3 +931,44 @@ public struct ContainerCreateRequest: Codable, Sendable, Equatable {
         return args
     }
 }
+
+// MARK: - File Transfer (`container copy <src> <dst>`)
+
+/// Deterministic argument builder for `container copy` (alias `cp`), which copies files or folders
+/// between the host and a container without going through a shell or the exec argument list.
+///
+/// One side is written `containerID:/absolute/path`. Host paths must be absolute and must not
+/// contain `:` so they can never be read as a container reference; callers stage files in a
+/// temporary directory they control (see `ContainerFileOperations`).
+public enum ContainerCopyArguments {
+    public static func copyFromContainer(containerID: String, containerPath: String, hostPath: String) throws -> [String] {
+        try validate(containerID: containerID, containerPath: containerPath, hostPath: hostPath)
+        return ["copy", "\(containerID):\(containerPath)", hostPath]
+    }
+
+    public static func copyToContainer(hostPath: String, containerID: String, containerPath: String) throws -> [String] {
+        try validate(containerID: containerID, containerPath: containerPath, hostPath: hostPath)
+        return ["copy", hostPath, "\(containerID):\(containerPath)"]
+    }
+
+    static func validate(containerID: String, containerPath: String, hostPath: String) throws {
+        guard ValidationUtils.isValidContainerName(containerID) else {
+            throw invalid("Invalid container ID '\(containerID)'.")
+        }
+        guard ValidationUtils.isValidAbsoluteContainerPath(containerPath) else {
+            throw invalid("Container path must be absolute and must not contain control characters: '\(containerPath)'.")
+        }
+        guard hostPath.hasPrefix("/"), !hostPath.contains(":"), !hostPath.contains("\0") else {
+            throw invalid("Host path must be absolute and must not contain ':' — '\(hostPath)'.")
+        }
+    }
+
+    private static func invalid(_ explanation: String) -> LadaError {
+        LadaError(
+            category: .invalidConfiguration,
+            explanation: explanation,
+            suggestedRemediation: "Choose a different file or path.",
+            isRetryable: false
+        )
+    }
+}

@@ -55,4 +55,40 @@ final class CommandRunnerTests: XCTestCase {
             // expected
         }
     }
+
+    func testAccumulatorKeepsMultibyteCharacterSplitAcrossChunks() {
+        let bytes = Array("Låda ✓\n".utf8)
+        // Split inside "å" (0xC3 0xA5): the first chunk ends with half a character.
+        let splitIndex = 2
+        let acc = StreamAccumulator()
+        XCTAssertEqual(acc.appendStdout(Data(bytes[..<splitIndex])), [])
+        XCTAssertEqual(acc.appendStdout(Data(bytes[splitIndex...])), ["Låda ✓"])
+        XCTAssertEqual(acc.snapshot().0, "Låda ✓\n")
+    }
+
+    func testAccumulatorJoinsLineSplitAcrossChunksAndFlushesTail() {
+        let acc = StreamAccumulator()
+        XCTAssertEqual(acc.appendStderr(Data("#1 [inter".utf8)), [])
+        XCTAssertEqual(acc.appendStderr(Data("nal] load\n#2 DO".utf8)), ["#1 [internal] load"])
+        XCTAssertEqual(acc.flushPartialLines().1, ["#2 DO"])
+    }
+
+    func testStreamDeliversWholeLines() async throws {
+        let lines = LineCollector()
+        let result = try await CommandRunner().stream(
+            executablePath: "/usr/bin/printf",
+            arguments: ["a1\\nbå2\\nc3"],
+            onStdoutLine: { lines.add($0) },
+            onStderrLine: { _ in }
+        )
+        XCTAssertTrue(result.isSuccess)
+        XCTAssertEqual(lines.all, ["a1", "bå2", "c3"])
+    }
+}
+
+private final class LineCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var lines: [String] = []
+    func add(_ line: String) { lock.lock(); lines.append(line); lock.unlock() }
+    var all: [String] { lock.lock(); defer { lock.unlock() }; return lines }
 }

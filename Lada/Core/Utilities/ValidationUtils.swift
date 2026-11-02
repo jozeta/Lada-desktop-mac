@@ -37,6 +37,20 @@ public enum ValidationUtils {
         return trimmed.range(of: pattern, options: .regularExpression) != nil
     }
 
+    /// An absolute path inside a container: starts with `/` (so it can never be read as a command
+    /// option when passed to `ls`, `rm`, etc.) and has no control characters such as NUL or newline.
+    public static func isValidAbsoluteContainerPath(_ path: String) -> Bool {
+        guard path.hasPrefix("/"), path.count <= 4096 else { return false }
+        return !path.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) }
+    }
+
+    /// A single path component typed by the user (new folder name, upload name): not empty, not
+    /// `.` or `..`, no `/`, and no control characters.
+    public static func isValidFileName(_ name: String) -> Bool {
+        guard !name.isEmpty, name.utf8.count <= 255, name != ".", name != "..", !name.contains("/") else { return false }
+        return !name.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) }
+    }
+
     public static func isValidIPv4CIDR(_ cidr: String) -> Bool {
         let parts = cidr.trimmingCharacters(in: .whitespaces).split(separator: "/")
         guard parts.count == 2,

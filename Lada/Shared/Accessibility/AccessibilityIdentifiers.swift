@@ -15,4 +15,5 @@ public enum AccessibilityID {
     public static let volumeTable = "lada.volumes.table"
     public static let machineTable = "lada.machines.table"
     public static let registryTable = "lada.registries.table"
+    public static let filesEditorNotice = "lada.files.editorNotice"
 }

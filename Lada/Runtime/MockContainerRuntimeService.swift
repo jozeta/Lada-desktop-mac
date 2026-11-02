@@ -16,6 +16,8 @@ public final class MockContainerRuntimeService: ContainerRuntimeService, @unchec
     public var simulatedBuilderStatus: BuilderStatusModel
     public var simulatedProperties: SystemProperties
     public var simulatedDNSDomains: [String]
+    /// In-memory container filesystems for the Files tab: container ID → absolute path → node.
+    public var simulatedFileSystems: [String: [String: MockFileNode]] = [:]
     public var recordedOperations: [String] = []
     public var forcedError: LadaError?
 
@@ -590,14 +592,116 @@ public final class MockContainerRuntimeService: ContainerRuntimeService, @unchec
 
     public func execCommand(containerID: String, command: [String], user: String?, workdir: String?, env: [String]) async throws -> CommandExecutionResult {
         try record("execCommand:\(containerID):\(command.joined(separator: " "))")
-        return CommandExecutionResult(
-            executablePath: "/usr/local/bin/container",
-            redactedCommand: "container exec \(containerID) \(command.joined(separator: " "))",
-            exitStatus: 0,
-            stdout: "Linux \(containerID) 6.18.35-kata #1 SMP PREEMPT_DYNAMIC aarch64 Linux\n",
-            stderr: "",
-            durationMs: 18
-        )
+        func result(_ status: Int32, _ out: String = "", _ err: String = "") -> CommandExecutionResult {
+            CommandExecutionResult(
+                executablePath: "/usr/local/bin/container",
+                redactedCommand: "container exec \(containerID) \(command.joined(separator: " "))",
+                exitStatus: status,
+                stdout: out,
+                stderr: err,
+                durationMs: 18
+            )
+        }
+        guard let tool = command.first, let target = command.last, ["ls", "stat", "mkdir", "rm", "chmod", "chown"].contains(tool) else {
+            return result(0, "Linux \(containerID) 6.18.35-kata #1 SMP PREEMPT_DYNAMIC aarch64 Linux\n")
+        }
+        return lock.withLock {
+            var fs = simulatedFileSystems[containerID] ?? Self.defaultFileSystem()
+            defer { simulatedFileSystems[containerID] = fs }
+            switch tool {
+            case "ls":
+                guard let dir = fs[target], dir.isDirectory else {
+                    return result(1, "", "ls: \(target): No such file or directory\n")
+                }
+                var lines = ["total 0", dir.lsLine(name: "."), dir.lsLine(name: "..")]
+                for (path, node) in fs.sorted(by: { $0.key < $1.key }) where Self.parent(of: path) == target && path != target {
+                    lines.append(node.lsLine(name: (path as NSString).lastPathComponent))
+                }
+                return result(0, lines.joined(separator: "\n") + "\n")
+            case "stat":
+                guard let node = fs[target] else { return result(1, "", "stat: can't stat '\(target)': No such file or directory\n") }
+                return result(0, "\(node.mode) \(node.uid) \(node.gid)\n")
+            case "mkdir":
+                var path = target
+                while path != "/" && !path.isEmpty {
+                    if fs[path] == nil { fs[path] = MockFileNode(isDirectory: true, mode: "755") }
+                    path = Self.parent(of: path)
+                }
+                return result(0)
+            case "rm":
+                for key in fs.keys where key == target || key.hasPrefix(target.hasSuffix("/") ? target : target + "/") {
+                    fs[key] = nil
+                }
+                return result(0)
+            case "chmod":
+                guard command.count == 3, fs[target] != nil else { return result(1, "", "chmod: \(target): No such file or directory\n") }
+                fs[target]?.mode = command[1]
+                return result(0)
+            default: // chown uid:gid path
+                guard command.count == 3, fs[target] != nil else { return result(1, "", "chown: \(target): No such file or directory\n") }
+                let ids = command[1].split(separator: ":").compactMap { Int($0) }
+                if ids.count == 2 { fs[target]?.uid = ids[0]; fs[target]?.gid = ids[1] }
+                return result(0)
+            }
+        }
+    }
+
+    public func copyFromContainer(id: String, containerPath: String, toHostPath hostPath: String) async throws {
+        let args = try ContainerCopyArguments.copyFromContainer(containerID: id, containerPath: containerPath, hostPath: hostPath)
+        try record(args.joined(separator: " "))
+        let data: Data? = lock.withLock {
+            let fs = simulatedFileSystems[id] ?? Self.defaultFileSystem()
+            guard let node = fs[containerPath], !node.isDirectory else { return nil }
+            return node.contents
+        }
+        guard let data else {
+            throw LadaError(
+                category: .containerLifecycleFailure,
+                explanation: "copy: path not found '\(containerPath)'",
+                suggestedRemediation: "Refresh the folder listing.",
+                isRetryable: false
+            )
+        }
+        try data.write(to: URL(fileURLWithPath: hostPath))
+    }
+
+    public func copyToContainer(id: String, fromHostPath hostPath: String, containerPath: String) async throws {
+        let args = try ContainerCopyArguments.copyToContainer(hostPath: hostPath, containerID: id, containerPath: containerPath)
+        try record(args.joined(separator: " "))
+        let data = try Data(contentsOf: URL(fileURLWithPath: hostPath))
+        lock.withLock {
+            var fs = simulatedFileSystems[id] ?? Self.defaultFileSystem()
+            var dest = containerPath
+            if fs[dest]?.isDirectory == true {
+                dest = (dest as NSString).appendingPathComponent((hostPath as NSString).lastPathComponent)
+            }
+            var dir = Self.parent(of: dest)
+            while dir != "/" && fs[dir] == nil {
+                fs[dir] = MockFileNode(isDirectory: true, mode: "755")
+                dir = Self.parent(of: dir)
+            }
+            // Like the real CLI: the copy is owned by root with mode 0644.
+            fs[dest] = MockFileNode(isDirectory: false, mode: "644", contents: data)
+            simulatedFileSystems[id] = fs
+        }
+    }
+
+    private static func parent(of path: String) -> String {
+        let p = (path as NSString).deletingLastPathComponent
+        return p.isEmpty ? "/" : p
+    }
+
+    static func defaultFileSystem() -> [String: MockFileNode] {
+        [
+            "/": MockFileNode(isDirectory: true, mode: "755"),
+            "/etc": MockFileNode(isDirectory: true, mode: "755"),
+            "/etc/hostname": MockFileNode(isDirectory: false, mode: "644", contents: Data("lada-mock\n".utf8)),
+            "/etc/nginx": MockFileNode(isDirectory: true, mode: "755"),
+            "/etc/nginx/nginx.conf": MockFileNode(isDirectory: false, mode: "644", contents: Data("worker_processes auto;\n".utf8)),
+            "/app": MockFileNode(isDirectory: true, mode: "755"),
+            "/app/start.sh": MockFileNode(isDirectory: false, mode: "755", uid: 1000, gid: 1000, contents: Data("#!/bin/sh\necho start\n".utf8)),
+            "/tmp": MockFileNode(isDirectory: true, mode: "1777"),
+        ]
     }
 
     // MARK: - Images
@@ -985,5 +1089,29 @@ public final class MockContainerRuntimeService: ContainerRuntimeService, @unchec
         lock.withLock {
             simulatedRegistries.removeAll { $0.hostname == server }
         }
+    }
+}
+
+/// A file or folder in `MockContainerRuntimeService`'s simulated container filesystem.
+public struct MockFileNode: Sendable, Equatable {
+    public var isDirectory: Bool
+    public var mode: String
+    public var uid: Int
+    public var gid: Int
+    public var contents: Data
+
+    public init(isDirectory: Bool, mode: String, uid: Int = 0, gid: Int = 0, contents: Data = Data()) {
+        self.isDirectory = isDirectory
+        self.mode = mode
+        self.uid = uid
+        self.gid = gid
+        self.contents = contents
+    }
+
+    /// A BusyBox-style `ls -la` line.
+    func lsLine(name: String) -> String {
+        let perms = (isDirectory ? "d" : "-") + (isDirectory ? "rwxr-xr-x" : (mode.hasSuffix("755") ? "rwxr-xr-x" : "rw-r--r--"))
+        let size = isDirectory ? 4096 : contents.count
+        return "\(perms)    1 \(uid == 0 ? "root" : "\(uid)")     \(gid == 0 ? "root" : "\(gid)")    \(String(repeating: " ", count: max(0, 10 - String(size).count)))\(size) Nov  2 17:12 \(name)"
     }
 }

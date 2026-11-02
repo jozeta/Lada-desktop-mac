@@ -239,6 +239,16 @@ public final class ContainerCLIClient: ContainerRuntimeService, @unchecked Senda
         _ = try await runCLI(args, timeoutSeconds: 30)
     }
 
+    public func copyFromContainer(id: String, containerPath: String, toHostPath hostPath: String) async throws {
+        let args = try ContainerCopyArguments.copyFromContainer(containerID: id, containerPath: containerPath, hostPath: hostPath)
+        _ = try await runCLI(args, timeoutSeconds: 600)
+    }
+
+    public func copyToContainer(id: String, fromHostPath hostPath: String, containerPath: String) async throws {
+        let args = try ContainerCopyArguments.copyToContainer(hostPath: hostPath, containerID: id, containerPath: containerPath)
+        _ = try await runCLI(args, timeoutSeconds: 600)
+    }
+
     public func cleanContainer(id: String) async throws {
         _ = try await runCLI(["clean", id], timeoutSeconds: 30)
     }

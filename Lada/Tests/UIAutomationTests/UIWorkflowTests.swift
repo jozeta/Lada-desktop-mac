@@ -290,7 +290,7 @@ final class UIWorkflowTests: XCTestCase {
         XCTAssertTrue(diags.contains(where: { $0.id == "postgres-pgdata" }))
         XCTAssertTrue(diags.contains(where: { $0.id == "missing-expose" }))
 
-        // 3. ContainerFileBrowserView ls -la output parser
+        // 3. Files tab ls -la output parser
         let sampleLs = """
         total 24
         drwxr-xr-x    1 root     root          4096 Oct 16 12:00 .
@@ -299,7 +299,7 @@ final class UIWorkflowTests: XCTestCase {
         -rw-r--r--    1 root     root          1024 Oct 16 12:02 nginx.conf
         lrwxrwxrwx    1 root     root            11 Oct 16 12:03 access.log -> /dev/stdout
         """
-        let parsedEntries = ContainerFileBrowserView.parseLsOutput(sampleLs, basePath: "/etc/nginx")
+        let parsedEntries = ContainerFileOperations.parseLsOutput(sampleLs, basePath: "/etc/nginx")
         XCTAssertEqual(parsedEntries.count, 3)
         XCTAssertEqual(parsedEntries.first?.name, "conf.d")
         XCTAssertTrue(parsedEntries.first?.isDirectory == true)

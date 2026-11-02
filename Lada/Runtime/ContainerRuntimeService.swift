@@ -30,6 +30,11 @@ public protocol ContainerRuntimeService: Sendable {
     func exportContainer(id: String, outputPath: String) async throws
     func fetchContainerLogs(id: String, bootLogs: Bool, tailLines: Int?) async throws -> String
     func execCommand(containerID: String, command: [String], user: String?, workdir: String?, env: [String]) async throws -> CommandExecutionResult
+    /// `container copy <id>:<containerPath> <hostPath>` — copies a file or folder out of a container.
+    func copyFromContainer(id: String, containerPath: String, toHostPath hostPath: String) async throws
+    /// `container copy <hostPath> <id>:<containerPath>` — copies a file or folder into a container.
+    /// Missing parent folders in the container are created; the copy is owned by root with mode 0644.
+    func copyToContainer(id: String, fromHostPath hostPath: String, containerPath: String) async throws
 
     // Images
     func listImages() async throws -> [ImageModel]

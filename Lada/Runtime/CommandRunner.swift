@@ -147,20 +147,14 @@ public actor CommandRunner: CommandExecuting {
 
         stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
-            guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
-            accumulator.appendStdout(chunk)
-            for line in chunk.components(separatedBy: .newlines) where !line.isEmpty {
-                onStdoutLine(line)
-            }
+            guard !data.isEmpty else { return }
+            accumulator.appendStdout(data).forEach(onStdoutLine)
         }
 
         stderrPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
-            guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
-            accumulator.appendStderr(chunk)
-            for line in chunk.components(separatedBy: .newlines) where !line.isEmpty {
-                onStderrLine(line)
-            }
+            guard !data.isEmpty else { return }
+            accumulator.appendStderr(data).forEach(onStderrLine)
         }
 
         return try await withTaskCancellationHandler {
@@ -168,14 +162,11 @@ public actor CommandRunner: CommandExecuting {
                 process.terminationHandler = { proc in
                     stdoutPipe.fileHandleForReading.readabilityHandler = nil
                     stderrPipe.fileHandleForReading.readabilityHandler = nil
-                    let remOut = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-                    if let s = String(data: remOut, encoding: .utf8), !s.isEmpty {
-                        accumulator.appendStdout(s)
-                    }
-                    let remErr = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                    if let s = String(data: remErr, encoding: .utf8), !s.isEmpty {
-                        accumulator.appendStderr(s)
-                    }
+                    accumulator.appendStdout(stdoutPipe.fileHandleForReading.readDataToEndOfFile()).forEach(onStdoutLine)
+                    accumulator.appendStderr(stderrPipe.fileHandleForReading.readDataToEndOfFile()).forEach(onStderrLine)
+                    let (lastOut, lastErr) = accumulator.flushPartialLines()
+                    lastOut.forEach(onStdoutLine)
+                    lastErr.forEach(onStderrLine)
                     let durationMs = Int(Date().timeIntervalSince(start) * 1000)
                     let (outStr, errStr) = accumulator.snapshot()
                     let result = CommandExecutionResult(
@@ -249,15 +240,11 @@ public actor CommandRunner: CommandExecuting {
         let accumulator = StreamAccumulator()
         stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
-            if !data.isEmpty, let chunk = String(data: data, encoding: .utf8) {
-                accumulator.appendStdout(chunk)
-            }
+            if !data.isEmpty { _ = accumulator.appendStdout(data) }
         }
         stderrPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
-            if !data.isEmpty, let chunk = String(data: data, encoding: .utf8) {
-                accumulator.appendStderr(chunk)
-            }
+            if !data.isEmpty { _ = accumulator.appendStderr(data) }
         }
 
         let timeoutBox = TimeoutFlagBox()
@@ -284,14 +271,8 @@ public actor CommandRunner: CommandExecuting {
                     stdoutPipe.fileHandleForReading.readabilityHandler = nil
                     stderrPipe.fileHandleForReading.readabilityHandler = nil
 
-                    let remOut = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-                    if let s = String(data: remOut, encoding: .utf8), !s.isEmpty {
-                        accumulator.appendStdout(s)
-                    }
-                    let remErr = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                    if let s = String(data: remErr, encoding: .utf8), !s.isEmpty {
-                        accumulator.appendStderr(s)
-                    }
+                    _ = accumulator.appendStdout(stdoutPipe.fileHandleForReading.readDataToEndOfFile())
+                    _ = accumulator.appendStderr(stderrPipe.fileHandleForReading.readDataToEndOfFile())
 
                     let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
                     let (outStr, errStr) = accumulator.snapshot()
@@ -352,27 +333,65 @@ public actor CommandRunner: CommandExecuting {
     }
 }
 
-private final class StreamAccumulator: @unchecked Sendable {
+/// Collects raw output bytes and splits them into lines.
+///
+/// Pipe reads arrive in arbitrary chunks, so a multi-byte UTF-8 character (å, ä, ö, emoji) or a
+/// line can be split between two reads. Decoding each chunk on its own drops the whole chunk when
+/// a character is split, so bytes are kept as `Data` and only complete lines (split on `\n`,
+/// which never occurs inside a multi-byte sequence) or the final full buffer are decoded.
+final class StreamAccumulator: @unchecked Sendable {
     private let lock = NSLock()
-    private var stdout = ""
-    private var stderr = ""
+    private var stdout = Data()
+    private var stderr = Data()
+    private var pendingStdout = Data()
+    private var pendingStderr = Data()
 
-    func appendStdout(_ chunk: String) {
+    /// Appends a chunk and returns any lines it completed (non-empty, without line terminators).
+    func appendStdout(_ chunk: Data) -> [String] {
         lock.lock()
+        defer { lock.unlock() }
         stdout.append(chunk)
-        lock.unlock()
+        return Self.extractLines(from: &pendingStdout, appending: chunk)
     }
 
-    func appendStderr(_ chunk: String) {
+    func appendStderr(_ chunk: Data) -> [String] {
         lock.lock()
+        defer { lock.unlock() }
         stderr.append(chunk)
-        lock.unlock()
+        return Self.extractLines(from: &pendingStderr, appending: chunk)
+    }
+
+    /// Returns the trailing text that had no final newline, for stdout and stderr.
+    func flushPartialLines() -> ([String], [String]) {
+        lock.lock()
+        defer { lock.unlock() }
+        let out = Self.lines(in: pendingStdout)
+        let err = Self.lines(in: pendingStderr)
+        pendingStdout.removeAll()
+        pendingStderr.removeAll()
+        return (out, err)
     }
 
     func snapshot() -> (String, String) {
         lock.lock()
         defer { lock.unlock() }
-        return (stdout, stderr)
+        return (String(decoding: stdout, as: UTF8.self), String(decoding: stderr, as: UTF8.self))
+    }
+
+    private static func extractLines(from pending: inout Data, appending chunk: Data) -> [String] {
+        pending.append(chunk)
+        guard let lastNewline = pending.lastIndex(of: 0x0A) else { return [] }
+        let complete = pending[pending.startIndex...lastNewline]
+        let lines = lines(in: Data(complete))
+        pending = Data(pending[pending.index(after: lastNewline)...])
+        return lines
+    }
+
+    private static func lines(in data: Data) -> [String] {
+        guard !data.isEmpty else { return [] }
+        return String(decoding: data, as: UTF8.self)
+            .components(separatedBy: .newlines)
+            .filter { !$0.isEmpty }
     }
 }
 

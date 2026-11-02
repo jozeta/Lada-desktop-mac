@@ -33,6 +33,8 @@ public struct ContainerFileBrowserView: View {
     // File Editor / Preview state
     @State private var previewingEntry: ContainerFileEntry? = nil
     @State private var fileEditorText: String = ""
+    /// Set when the selected file can't be edited (too large or binary); the editor is hidden.
+    @State private var editorNotice: String? = nil
     @State private var isSavingFile: Bool = false
     @State private var fileStatusBanner: String? = nil
     @State private var isFileDropTargeted: Bool = false
@@ -344,7 +346,7 @@ public struct ContainerFileBrowserView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .disabled(isSavingFile)
+                    .disabled(isSavingFile || editorNotice != nil)
                     .fixedSize(horizontal: true, vertical: false)
                 }
                 .padding(.horizontal, 12)
@@ -354,11 +356,21 @@ public struct ContainerFileBrowserView: View {
                     Divider().overlay(NordicTheme.borderSubtle)
                 }
 
-                TextEditor(text: $fileEditorText)
-                    .font(NordicTheme.monoFontRegular)
-                    .scrollContentBackground(.hidden)
-                    .padding(8)
-                    .background(NordicTheme.codeSurface)
+                if let editorNotice {
+                    Text(editorNotice)
+                        .font(.system(size: 12))
+                        .foregroundStyle(NordicTheme.secondaryText)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(16)
+                        .background(NordicTheme.codeSurface)
+                        .accessibilityIdentifier(AccessibilityID.filesEditorNotice)
+                } else {
+                    TextEditor(text: $fileEditorText)
+                        .font(NordicTheme.monoFontRegular)
+                        .scrollContentBackground(.hidden)
+                        .padding(8)
+                        .background(NordicTheme.codeSurface)
+                }
             } else {
                 NordicEmptyState(
                     icon: .dockerfileEditor,
@@ -416,128 +428,98 @@ public struct ContainerFileBrowserView: View {
         }
     }
 
+    private var fileOps: ContainerFileOperations {
+        ContainerFileOperations(runtime: appState.runtimeService, containerID: container.id)
+    }
+
     private func loadDirectory(path: String) async {
         isLoadingDirectory = true
         directoryError = nil
         defer { isLoadingDirectory = false }
 
         let normalizedPath = path.isEmpty ? "/" : path
-        let escapedPath = normalizedPath.replacingOccurrences(of: "'", with: "'\\''")
         do {
-            let res = try await appState.runtimeService.execCommand(
-                containerID: container.id,
-                command: ["/bin/sh", "-c", "ls -la '\(escapedPath)'"],
-                user: nil,
-                workdir: nil,
-                env: []
-            )
-            if res.isSuccess {
-                currentPath = normalizedPath
-                entries = Self.parseLsOutput(res.stdout, basePath: normalizedPath)
-            } else {
-                directoryError = res.stderr.isEmpty ? "Unable to list directory '\(normalizedPath)'." : res.stderr
-            }
+            entries = try await fileOps.listDirectory(normalizedPath)
+            currentPath = normalizedPath
         } catch {
-            directoryError = error.localizedDescription
+            directoryError = Self.message(for: error)
         }
     }
 
     private func loadFileContent(for entry: ContainerFileEntry) async {
-        let escaped = entry.fullPath.replacingOccurrences(of: "'", with: "'\\''")
         do {
-            let res = try await appState.runtimeService.execCommand(
-                containerID: container.id,
-                command: ["/bin/sh", "-c", "head -c 131072 '\(escaped)'"],
-                user: nil,
-                workdir: nil,
-                env: []
-            )
+            switch try await fileOps.loadText(entry) {
+            case .text(let text):
+                editorNotice = nil
+                fileEditorText = text
+            case .tooLarge(let bytes):
+                editorNotice = "\(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)) is too large to edit here (limit \(ByteCountFormatter.string(fromByteCount: ContainerFileOperations.maxEditableBytes, countStyle: .file))). Use Download… instead."
+                fileEditorText = ""
+            case .binary:
+                editorNotice = "This looks like a binary file, so it can't be edited as text. Use Download… instead."
+                fileEditorText = ""
+            }
             previewingEntry = entry
-            fileEditorText = res.stdout
         } catch {
-            fileStatusBanner = "Failed to read \(entry.name)"
+            showBanner("Failed to read \(entry.name): \(Self.message(for: error))")
         }
     }
 
     private func saveEditedFileContent(for entry: ContainerFileEntry) async {
+        guard editorNotice == nil else { return }
         isSavingFile = true
         defer { isSavingFile = false }
-
-        let data = Data(fileEditorText.utf8)
-        let b64 = data.base64EncodedString()
-        let escapedPath = entry.fullPath.replacingOccurrences(of: "'", with: "'\\''")
         do {
-            let res = try await appState.runtimeService.execCommand(
-                containerID: container.id,
-                command: ["/bin/sh", "-c", "printf '%s' '\(b64)' | base64 -d > '\(escapedPath)'"],
-                user: nil,
-                workdir: nil,
-                env: []
-            )
-            if res.isSuccess {
-                showBanner("Saved \(entry.name)")
-                await loadDirectory(path: currentPath)
-            } else {
-                showBanner("Save failed: \(res.stderr)")
-            }
+            try await fileOps.saveText(fileEditorText, to: entry.fullPath)
+            showBanner("Saved \(entry.name)")
+            await loadDirectory(path: currentPath)
         } catch {
-            showBanner("Save failed: \(error.localizedDescription)")
+            showBanner("Save failed: \(Self.message(for: error))")
         }
     }
 
     private func downloadFileToMac(entry: ContainerFileEntry) async {
-        let escapedPath = entry.fullPath.replacingOccurrences(of: "'", with: "'\\''")
-        guard let res = try? await appState.runtimeService.execCommand(
-            containerID: container.id,
-            command: ["/bin/sh", "-c", "base64 '\(escapedPath)'"],
-            user: nil,
-            workdir: nil,
-            env: []
-        ), res.isSuccess else {
-            showBanner("Failed to read file for download")
-            return
-        }
-
-        let cleanedB64 = res.stdout.components(separatedBy: .whitespacesAndNewlines).joined()
-        let fileData = Data(base64Encoded: cleanedB64) ?? Data(res.stdout.utf8)
-
         let panel = NSSavePanel()
         panel.title = "Save '\(entry.name)' to Mac"
         panel.nameFieldStringValue = entry.name
-        if panel.runModal() == .OK, let destURL = panel.url {
-            try? fileData.write(to: destURL)
+        guard panel.runModal() == .OK, let destURL = panel.url else { return }
+        do {
+            try await fileOps.download(entry.fullPath, to: destURL)
             showBanner("Downloaded \(entry.name)")
+        } catch {
+            showBanner("Download failed: \(Self.message(for: error))")
         }
     }
 
     private func createNewDirectory(named folderName: String) async {
-        let target = currentPath == "/" ? "/\(folderName)" : "\(currentPath)/\(folderName)"
-        let escaped = target.replacingOccurrences(of: "'", with: "'\\''")
-        _ = try? await appState.runtimeService.execCommand(
-            containerID: container.id,
-            command: ["/bin/sh", "-c", "mkdir -p '\(escaped)'"],
-            user: nil,
-            workdir: nil,
-            env: []
-        )
-        showBanner("Created folder \(folderName)")
+        do {
+            try await fileOps.makeDirectory(named: folderName, in: currentPath)
+            showBanner("Created folder \(folderName)")
+        } catch {
+            showBanner("Create folder failed: \(Self.message(for: error))")
+        }
         await loadDirectory(path: currentPath)
     }
 
     private func deleteEntry(_ entry: ContainerFileEntry) async {
-        let escaped = entry.fullPath.replacingOccurrences(of: "'", with: "'\\''")
-        _ = try? await appState.runtimeService.execCommand(
-            containerID: container.id,
-            command: ["/bin/sh", "-c", "rm -rf '\(escaped)'"],
-            user: nil,
-            workdir: nil,
-            env: []
-        )
-        if previewingEntry?.id == entry.id {
-            previewingEntry = nil
+        do {
+            try await fileOps.remove(entry.fullPath)
+            if previewingEntry?.id == entry.id {
+                previewingEntry = nil
+            }
+            showBanner("Deleted \(entry.name)")
+        } catch {
+            showBanner("Delete failed: \(Self.message(for: error))")
         }
-        showBanner("Deleted \(entry.name)")
         await loadDirectory(path: currentPath)
+    }
+
+    private static func message(for error: Error) -> String {
+        if let lada = error as? LadaError {
+            let detail = lada.diagnosticOutput?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return detail.isEmpty ? lada.explanation : "\(lada.explanation) \(detail)"
+        }
+        return error.localizedDescription
     }
 
     private func uploadFileViaOpenPanel() {
@@ -574,21 +556,11 @@ public struct ContainerFileBrowserView: View {
     }
 
     private func uploadHostFile(url: URL) async {
-        guard let data = try? Data(contentsOf: url), data.count <= 2_000_000 else {
-            showBanner("File too large or unreadable (max 2 MB for exec transfer)")
-            return
-        }
-        let b64 = data.base64EncodedString()
-        let destPath = currentPath == "/" ? "/\(url.lastPathComponent)" : "\(currentPath)/\(url.lastPathComponent)"
-        let escaped = destPath.replacingOccurrences(of: "'", with: "'\\''")
-        if let res = try? await appState.runtimeService.execCommand(
-            containerID: container.id,
-            command: ["/bin/sh", "-c", "printf '%s' '\(b64)' | base64 -d > '\(escaped)'"],
-            user: nil,
-            workdir: nil,
-            env: []
-        ), res.isSuccess {
+        do {
+            try await fileOps.upload(url, into: currentPath)
             showBanner("Uploaded \(url.lastPathComponent)")
+        } catch {
+            showBanner("Upload of \(url.lastPathComponent) failed: \(Self.message(for: error))")
         }
     }
 
@@ -599,55 +571,6 @@ public struct ContainerFileBrowserView: View {
             if self.fileStatusBanner == text {
                 self.fileStatusBanner = nil
             }
-        }
-    }
-
-    public static func parseLsOutput(_ output: String, basePath: String) -> [ContainerFileEntry] {
-        var list: [ContainerFileEntry] = []
-        for line in output.components(separatedBy: .newlines) {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty || trimmed.hasPrefix("total ") { continue }
-
-            let parts = trimmed.split(separator: " ", maxSplits: 8, omittingEmptySubsequences: true).map(String.init)
-            guard parts.count >= 9 else { continue }
-
-            let perms = parts[0]
-            let owner = parts[2]
-            let size = Int64(parts[4]) ?? 0
-            let modDate = "\(parts[5]) \(parts[6]) \(parts[7])"
-            var rawName = parts[8]
-            var symlinkTarget: String? = nil
-
-            let isDir = perms.hasPrefix("d")
-            let isLink = perms.hasPrefix("l")
-            if isLink, let arrowRange = rawName.range(of: " -> ") {
-                symlinkTarget = String(rawName[arrowRange.upperBound...])
-                rawName = String(rawName[..<arrowRange.lowerBound])
-            }
-
-            if rawName == "." || rawName == ".." { continue }
-            let full = basePath == "/" ? "/\(rawName)" : "\(basePath)/\(rawName)"
-
-            list.append(
-                ContainerFileEntry(
-                    name: rawName,
-                    fullPath: full,
-                    permissions: perms,
-                    owner: owner,
-                    sizeBytes: size,
-                    modifiedText: modDate,
-                    isDirectory: isDir,
-                    isSymlink: isLink,
-                    symlinkTarget: symlinkTarget
-                )
-            )
-        }
-
-        return list.sorted { a, b in
-            if a.isDirectory != b.isDirectory {
-                return a.isDirectory && !b.isDirectory
-            }
-            return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
         }
     }
 }
