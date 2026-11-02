@@ -57,6 +57,8 @@ Xcode project) for a release. `Scripts/generate-app-icon.swift` regenerates `App
 - Never pass `-i` to a detached `container run -d`: Låda has no terminal, and 1.6.1 fails with
   "Operation not supported by device". Detached shell images get `-t` only.
 - Show measured or reported values only: no invented defaults, estimates or seed data.
+- `Lada.xcodeproj` syncs the whole `Lada/` folder into the app target: add every new file under
+  `Lada/Tests/` to the target's `membershipExceptions` in `project.pbxproj`, or the Xcode build fails.
 
 ## Opt-in live checks
 

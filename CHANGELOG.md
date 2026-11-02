@@ -6,6 +6,8 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Fix: the Xcode build compiled the new test files into the app target; all test files are now
+  excluded from it
 - Fix: with the inspector open, the Containers filter overlapped "Prune Stopped…" and the
   inspector title was truncated (e.g. "ng…ss"). The filter falls back to a menu, the header
   actions to icon-only buttons with tooltips, and "Unknown" is only offered when relevant

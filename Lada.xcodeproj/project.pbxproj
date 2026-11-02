@@ -16,12 +16,21 @@
 			membershipExceptions = (
 				Resources/Info.plist,
 				Resources/Lada.entitlements,
+				Tests/IntegrationTests/LiveFileOperationsTests.swift,
+				Tests/IntegrationTests/LiveImageLibraryPresetTests.swift,
 				Tests/IntegrationTests/RuntimeServiceIntegrationTests.swift,
 				Tests/UIAutomationTests/UIWorkflowTests.swift,
+				Tests/UIAutomationTests/ViewSnapshotTests.swift,
 				Tests/UnitTests/CLIArgumentBuilderTests.swift,
+				Tests/UnitTests/CommandRunnerTests.swift,
+				Tests/UnitTests/ContainerFileOperationsTests.swift,
+				Tests/UnitTests/DNSAliasTests.swift,
+				Tests/UnitTests/ImageReferenceSuggesterTests.swift,
 				Tests/UnitTests/LadaSmokeTests.swift,
 				Tests/UnitTests/OutputParserTests.swift,
+				Tests/UnitTests/RealOutputParserTests.swift,
 				Tests/UnitTests/RuntimeCapabilitiesAndHealthTests.swift,
+				Tests/UnitTests/TelemetryTests.swift,
 				Tests/UnitTests/ValidationAndRedactionTests.swift,
 			);
 			target = A10000020000000000000001 /* Lada */;
