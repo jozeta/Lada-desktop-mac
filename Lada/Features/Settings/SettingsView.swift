@@ -115,9 +115,10 @@ public struct SettingsView: View {
     @State private var systemLogsText = ""
     @State private var diagnosticSummaryCopied = false
 
-    public init(appState: AppState) {
+    public init(appState: AppState, initialTab: String = "runtime") {
         self.appState = appState
         self.prefs = appState.preferences
+        _selectedTab = State(initialValue: initialTab)
     }
 
     public var body: some View {

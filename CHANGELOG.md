@@ -6,6 +6,16 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Image Library: 17 new presets (httpd, MariaDB, ClickHouse, Memcached, Valkey, NATS, PHP, Ruby,
+  Eclipse Temurin, Bun, a local OCI registry, Vault dev mode, Gitea, Mailpit, Adminer, BusyBox,
+  Fedora). All 35 presets were launched against container 1.6.1 and stay running
+- Image Library: tags refreshed to current releases that have arm64 builds (several were years
+  old; `grafana/grafana:oss` no longer exists), and stars, pulls and update dates are a real Docker
+  Hub snapshot (2026-11-02) instead of invented numbers and "now minus N hours"
+- Fix: the Grafana preset failed because it cannot write its root-owned named volume; it now runs
+  as root
+- Opt-in live tests: `LADA_LIVE_PRESETS` (launch presets) and `LADA_SNAPSHOT_DIR` (render views
+  to PNG in light and dark mode)
 - Fix: every Image Library launch used `run -d -i -t`, which container 1.6.1 rejects from a
   non-terminal with "Operation not supported by device". Detached runs no longer get `-i`;
   shell images (alpine, ubuntu, …) get `-t` so they keep running, and services get no terminal
