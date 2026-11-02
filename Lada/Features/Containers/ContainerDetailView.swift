@@ -5,7 +5,6 @@ public struct ContainerDetailView: View {
     @ObservedObject var appState: AppState
     public let container: ContainerModel
 
-    @State private var selectedTab: DetailTab = .overview
     @State private var logText: String = ""
     @State private var showBootLogs: Bool = false
     @State private var logSearchText: String = ""
@@ -128,7 +127,7 @@ public struct ContainerDetailView: View {
             }
 
             // Segmented Tab Bar
-            Picker("", selection: $selectedTab) {
+            Picker("", selection: $appState.containerInspectorTab) {
                 ForEach(DetailTab.allCases) { tab in
                     Text(tab.rawValue).tag(tab)
                 }
@@ -145,7 +144,7 @@ public struct ContainerDetailView: View {
 
             // Tab Content
             Group {
-                switch selectedTab {
+                switch appState.containerInspectorTab {
                 case .overview:
                     overviewTab
                 case .logs:
@@ -170,6 +169,9 @@ public struct ContainerDetailView: View {
                     environmentTab
                 }
             }
+            // A new identity per container: the Terminal, Files and other tabs rebuild (and the
+            // terminal reconnects) when another container is selected, while the tab stays.
+            .id(container.id)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .confirmationDialog(
@@ -199,6 +201,8 @@ public struct ContainerDetailView: View {
             Text("Deleting '\(container.id)' permanently removes its writable root filesystem image. Named volumes and host bind-mounted directories are preserved.")
         }
         .task(id: container.id) {
+            // Never show the previous container's logs while this one's load.
+            logText = ""
             await loadLogs()
             await appState.sampleContainerTelemetry(for: container.id)
             while !Task.isCancelled {
@@ -206,6 +210,10 @@ public struct ContainerDetailView: View {
                 guard !Task.isCancelled else { break }
                 if container.state == .running {
                     await appState.sampleContainerTelemetry(for: container.id)
+                    // Live tail while the Logs tab is open, unless paused.
+                    if appState.containerInspectorTab == .logs && !isLogPaused {
+                        await loadLogs()
+                    }
                 }
             }
         }
@@ -709,12 +717,15 @@ public struct ContainerDetailView: View {
     }
 
     private func loadLogs() async {
-        if let fetched = try? await appState.runtimeService.fetchContainerLogs(
-            id: container.id,
-            bootLogs: showBootLogs,
-            tailLines: 500
-        ) {
+        let id = container.id
+        do {
+            let fetched = try await appState.runtimeService.fetchContainerLogs(id: id, bootLogs: showBootLogs, tailLines: 500)
+            guard id == container.id else { return }
             logText = fetched
+        } catch {
+            guard id == container.id else { return }
+            let message = (error as? LadaError)?.explanation ?? error.localizedDescription
+            logText = "Could not load logs for \(id): \(message)"
         }
     }
 

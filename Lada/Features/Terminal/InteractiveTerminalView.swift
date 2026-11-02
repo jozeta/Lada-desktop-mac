@@ -17,7 +17,7 @@ public final class PTYTerminalSession: ObservableObject {
     private var process: Process?
     private var masterFD: Int32 = -1
     private var readSource: DispatchSourceRead?
-    private var rawANSIStream: String = ""
+    private var screen = TerminalScreen(columns: 100, rows: 28)
 
     public init() {}
 
@@ -144,7 +144,9 @@ public final class PTYTerminalSession: ObservableObject {
 
         proc.terminationHandler = { @Sendable [weak self] terminated in
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                // Only the current process may end the session: a replaced session's process
+                // exits after its successor has started, and must not tear the new one down.
+                guard let self, self.process === terminated else { return }
                 self.isRunning = false
                 let code = terminated.terminationStatus
                 if code == 0 {
@@ -152,7 +154,7 @@ public final class PTYTerminalSession: ObservableObject {
                 } else {
                     self.statusMessage = "Session terminated with exit code \(code)"
                 }
-                self.ingestPTYChunk("\n[Process exited with status \(code)]\n")
+                self.ingestLocal("\n[Process exited with status \(code)]\n")
                 self.cleanupDescriptors()
             }
         }
@@ -168,29 +170,33 @@ public final class PTYTerminalSession: ObservableObject {
         }
     }
 
+    /// Clears the screen and shows a message written by Låda itself (not by the shell).
     private func setBuffer(_ initial: String) {
-        rawANSIStream = ""
-        outputBuffer = ""
-        ingestPTYChunk(initial)
+        screen.reset()
+        ingestLocal(initial)
     }
 
+    /// Låda's own messages use bare `\n`; a terminal needs `\r\n` to return to column 0.
+    private func ingestLocal(_ text: String) {
+        ingestPTYChunk(text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\n", with: "\r\n"))
+    }
+
+    /// Feeds raw PTY output into the screen model (incrementally, not re-parsing history).
     private func ingestPTYChunk(_ chunk: String) {
-        // Handle clear screen escape `\u{1B}[2J` or `\u{1B}[H\u{1B}[2J`
-        if chunk.contains("\u{001B}[2J") {
-            rawANSIStream = ""
+        screen.feed(chunk)
+        // Answer queries such as "where is the cursor?" (ESC[6n) like a real terminal.
+        for reply in screen.takeReplies() where masterFD >= 0 {
+            let bytes = Array(reply.utf8)
+            _ = bytes.withUnsafeBytes { write(masterFD, $0.baseAddress, $0.count) }
         }
-        rawANSIStream.append(chunk)
-        if rawANSIStream.count > 100_000 {
-            rawANSIStream.removeFirst(rawANSIStream.count - 80_000)
-        }
-        let processed = Self.processTerminalStream(rawANSIStream)
-        self.outputBuffer = processed.plain
-        self.attributedOutput = processed.attributed
+        outputBuffer = screen.text
+        attributedOutput = TerminalScreenRenderer.render(screen, showCursor: isRunning || masterFD >= 0)
     }
 
     public func resizeTerminal(columns: UInt16, rows: UInt16) {
         self.columns = max(20, columns)
         self.rows = max(8, rows)
+        screen.resize(columns: Int(self.columns), rows: Int(self.rows))
         guard masterFD >= 0 else { return }
         var ws = winsize(ws_row: self.rows, ws_col: self.columns, ws_xpixel: 0, ws_ypixel: 0)
         _ = ioctl(masterFD, TIOCSWINSZ, &ws)
@@ -211,27 +217,27 @@ public final class PTYTerminalSession: ObservableObject {
         } else {
             // Sandbox interactive shell fallback
             let cmd = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            ingestPTYChunk("\(cmd)\n")
+            ingestLocal("\(cmd)\n")
             switch cmd {
             case "uname -a":
-                ingestPTYChunk("Linux container-vm 6.18.35-kata #1 SMP PREEMPT_DYNAMIC aarch64 Linux\n/ # ")
+                ingestLocal("Linux container-vm 6.18.35-kata #1 SMP PREEMPT_DYNAMIC aarch64 Linux\n/ # ")
             case "whoami", "id":
-                ingestPTYChunk("uid=0(root) gid=0(root) groups=0(root)\n/ # ")
+                ingestLocal("uid=0(root) gid=0(root) groups=0(root)\n/ # ")
             case "pwd":
-                ingestPTYChunk("/\n/ # ")
+                ingestLocal("/\n/ # ")
             case "ps", "ps aux":
-                ingestPTYChunk("PID   USER     TIME  COMMAND\n    1 root      0:00 /sbin/vminitd\n   12 root      0:00 \(selectedShell)\n/ # ")
+                ingestLocal("PID   USER     TIME  COMMAND\n    1 root      0:00 /sbin/vminitd\n   12 root      0:00 \(selectedShell)\n/ # ")
             case "clear":
                 setBuffer("/ # ")
             case "exit":
-                ingestPTYChunk("logout\n")
+                ingestLocal("logout\n")
                 isRunning = false
                 statusMessage = "Session exited (0)"
             default:
                 if !cmd.isEmpty {
-                    ingestPTYChunk("\(selectedShell): executed '\(cmd)'\n/ # ")
+                    ingestLocal("\(selectedShell): executed '\(cmd)'\n/ # ")
                 } else {
-                    ingestPTYChunk("/ # ")
+                    ingestLocal("/ # ")
                 }
             }
         }
@@ -268,116 +274,13 @@ public final class PTYTerminalSession: ObservableObject {
         masterFD = -1
     }
 
-    // MARK: - ANSI Escape & Backspace Stream Renderer
-
-    private static func processTerminalStream(_ raw: String) -> (plain: String, attributed: NSAttributedString) {
-        // 1. Normalize CRLF and apply backspaces (`\u{08}`)
-        let normalized = raw.replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "")
-        var chars: [Character] = []
-        chars.reserveCapacity(normalized.count)
-        for ch in normalized {
-            if ch == "\u{08}" || ch == "\u{7F}" {
-                if let last = chars.last, last != "\n" {
-                    chars.removeLast()
-                }
-            } else {
-                chars.append(ch)
-            }
-        }
-        let backspaceResolved = String(chars)
-
-        // 2. Strip OSC sequences (`\u{1B}]...\u{07}`) and non-SGR CSI sequences
-        let nonSGRPattern = #"\u001B\][^\u0007]*\u0007|\u001B\[[0-9;?]*[A-LN-Za-ln-z]"#
-        var sgrOnly = backspaceResolved
-        if let regex = try? NSRegularExpression(pattern: nonSGRPattern) {
-            sgrOnly = regex.stringByReplacingMatches(
-                in: sgrOnly,
-                range: NSRange(sgrOnly.startIndex..., in: sgrOnly),
-                withTemplate: ""
-            )
-        }
-
-        // 3. Parse SGR color codes (`\u{1B}[...m`) into NSAttributedString
-        let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        let boldFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .bold)
-        let defaultColor = NSColor.labelColor
-        var currentColor = defaultColor
-        var isBold = false
-
-        let resultAttr = NSMutableAttributedString()
-        var plainBuilder = ""
-
-        let sgrPattern = #"\u001B\[([0-9;]*)m"#
-        guard let sgrRegex = try? NSRegularExpression(pattern: sgrPattern) else {
-            let attr = NSAttributedString(string: sgrOnly, attributes: [.font: font, .foregroundColor: defaultColor])
-            return (sgrOnly, attr)
-        }
-
-        let nsString = sgrOnly as NSString
-        var lastIndex = 0
-        let matches = sgrRegex.matches(in: sgrOnly, range: NSRange(location: 0, length: nsString.length))
-
-        for match in matches {
-            if match.range.location > lastIndex {
-                let textSegment = nsString.substring(with: NSRange(location: lastIndex, length: match.range.location - lastIndex))
-                plainBuilder.append(textSegment)
-                resultAttr.append(
-                    NSAttributedString(
-                        string: textSegment,
-                        attributes: [
-                            .font: isBold ? boldFont : font,
-                            .foregroundColor: currentColor
-                        ]
-                    )
-                )
-            }
-            let codesString = nsString.substring(with: match.range(at: 1))
-            let codes = codesString.isEmpty ? [0] : codesString.split(separator: ";").compactMap { Int($0) }
-            for code in codes {
-                switch code {
-                case 0:
-                    currentColor = defaultColor
-                    isBold = false
-                case 1:
-                    isBold = true
-                case 22:
-                    isBold = false
-                case 30, 90: currentColor = NSColor.systemGray
-                case 31, 91: currentColor = NSColor.systemRed
-                case 32, 92: currentColor = NSColor.systemGreen
-                case 33, 93: currentColor = NSColor.systemYellow
-                case 34, 94: currentColor = NSColor.systemBlue
-                case 35, 95: currentColor = NSColor.systemPurple
-                case 36, 96: currentColor = NSColor.systemTeal
-                case 37, 97, 39: currentColor = defaultColor
-                default: break
-                }
-            }
-            lastIndex = match.range.location + match.range.length
-        }
-
-        if lastIndex < nsString.length {
-            let tail = nsString.substring(from: lastIndex)
-            plainBuilder.append(tail)
-            resultAttr.append(
-                NSAttributedString(
-                    string: tail,
-                    attributes: [
-                        .font: isBold ? boldFont : font,
-                        .foregroundColor: currentColor
-                    ]
-                )
-            )
-        }
-
-        return (plainBuilder, resultAttr)
-    }
 }
 
 // MARK: - Direct Interactive PTY Canvas (NSViewRepresentable)
 
-private struct InteractivePTYCanvasRepresentable: NSViewRepresentable {
+struct InteractivePTYCanvasRepresentable: NSViewRepresentable {
+    static let inset: CGFloat = 10
+
     var attributedOutput: NSAttributedString
     var isRunning: Bool
     var onKeystroke: (String) -> Void
@@ -387,18 +290,24 @@ private struct InteractivePTYCanvasRepresentable: NSViewRepresentable {
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
+        scrollView.scrollerStyle = .overlay
         scrollView.drawsBackground = true
-        scrollView.backgroundColor = NSColor.textBackgroundColor
+        scrollView.backgroundColor = TerminalScreenRenderer.background
 
         let textView = PTYKeyCapturingTextView()
         textView.isEditable = false
         textView.isSelectable = true
         textView.isRichText = true
         textView.drawsBackground = true
-        textView.backgroundColor = NSColor.textBackgroundColor
-        textView.textContainerInset = NSSize(width: 10, height: 10)
+        textView.backgroundColor = TerminalScreenRenderer.background
+        textView.insertionPointColor = .clear
+        textView.selectedTextAttributes = [.backgroundColor: NSColor(white: 1, alpha: 0.22)]
+        textView.textContainerInset = NSSize(width: Self.inset, height: Self.inset)
+        textView.textContainer?.lineFragmentPadding = 0
         textView.autoresizingMask = [.width]
         textView.onKeystroke = onKeystroke
+        textView.font = TerminalScreenRenderer.font
+        textView.setAccessibilityLabel("Terminal")
 
         scrollView.documentView = textView
         return scrollView
@@ -409,14 +318,23 @@ private struct InteractivePTYCanvasRepresentable: NSViewRepresentable {
         textView.onKeystroke = onKeystroke
         textView.isSessionRunning = isRunning
         if textView.attributedString() != attributedOutput {
+            // Follow the output only when already at the bottom, so reading scrollback works.
+            let visible = scrollView.contentView.bounds
+            let atBottom = visible.maxY >= textView.bounds.height - 24
             textView.textStorage?.setAttributedString(attributedOutput)
-            textView.scrollToEndOfDocument(nil)
+            if atBottom { textView.scrollToEndOfDocument(nil) }
+        }
+        // Typing goes straight to the shell: focus the terminal when the session is live.
+        if isRunning, !textView.didAutoFocus, let window = textView.window {
+            textView.didAutoFocus = true
+            DispatchQueue.main.async { window.makeFirstResponder(textView) }
         }
     }
 
     final class PTYKeyCapturingTextView: NSTextView {
         var onKeystroke: ((String) -> Void)?
         var isSessionRunning: Bool = false
+        var didAutoFocus = false
 
         override var acceptsFirstResponder: Bool { true }
 
@@ -426,53 +344,50 @@ private struct InteractivePTYCanvasRepresentable: NSViewRepresentable {
         }
 
         override func keyDown(with event: NSEvent) {
-            guard isSessionRunning, let onKeystroke else {
+            guard isSessionRunning, let onKeystroke, let sequence = Self.sequence(for: event) else {
                 super.keyDown(with: event)
                 return
             }
+            onKeystroke(sequence)
+        }
 
-            if event.modifierFlags.contains(.command) {
-                if event.charactersIgnoringModifiers == "v",
-                   let pasted = NSPasteboard.general.string(forType: .string) {
-                    onKeystroke(pasted)
-                    return
-                }
-                super.keyDown(with: event)
-                return
+        /// ⌘V pastes into the shell; other ⌘ shortcuts (copy, select all) stay with the view.
+        override func performKeyEquivalent(with event: NSEvent) -> Bool {
+            if isSessionRunning, event.modifierFlags.contains(.command), event.charactersIgnoringModifiers == "v",
+               window?.firstResponder === self, let pasted = NSPasteboard.general.string(forType: .string) {
+                onKeystroke?(pasted)
+                return true
             }
+            return super.performKeyEquivalent(with: event)
+        }
 
-            if event.modifierFlags.contains(.control),
-               let chars = event.charactersIgnoringModifiers?.lowercased(),
-               let first = chars.first {
-                switch first {
-                case "c": onKeystroke("\u{03}"); return
-                case "d": onKeystroke("\u{04}"); return
-                case "l": onKeystroke("\u{0C}"); return
-                case "z": onKeystroke("\u{1A}"); return
-                default: break
-                }
-            }
-
+        /// The bytes a VT100/xterm terminal sends for a key press, or nil to let AppKit handle it.
+        static func sequence(for event: NSEvent) -> String? {
+            let flags = event.modifierFlags
+            if flags.contains(.command) { return nil }
             switch event.keyCode {
-            case 36, 76: // Return / Enter
-                onKeystroke("\n")
-            case 51: // Backspace / Delete
-                onKeystroke("\u{7F}")
-            case 48: // Tab (auto-completion)
-                onKeystroke("\t")
-            case 126: // Up Arrow
-                onKeystroke("\u{1B}[A")
-            case 125: // Down Arrow
-                onKeystroke("\u{1B}[B")
-            case 124: // Right Arrow
-                onKeystroke("\u{1B}[C")
-            case 123: // Left Arrow
-                onKeystroke("\u{1B}[D")
-            default:
-                if let chars = event.characters, !chars.isEmpty {
-                    onKeystroke(chars)
-                }
+            case 36, 76: return "\r"                 // Return / Enter
+            case 51: return "\u{7F}"                 // Delete (backspace)
+            case 117: return "\u{1B}[3~"             // Forward delete
+            case 48: return flags.contains(.shift) ? "\u{1B}[Z" : "\t"
+            case 53: return "\u{1B}"                 // Escape
+            case 126: return "\u{1B}[A"
+            case 125: return "\u{1B}[B"
+            case 124: return "\u{1B}[C"
+            case 123: return "\u{1B}[D"
+            case 115: return "\u{1B}[H"              // Home
+            case 119: return "\u{1B}[F"              // End
+            case 116: return "\u{1B}[5~"             // Page Up
+            case 121: return "\u{1B}[6~"             // Page Down
+            default: break
             }
+            if flags.contains(.control), let ch = event.charactersIgnoringModifiers?.lowercased().unicodeScalars.first {
+                // Ctrl-A … Ctrl-Z → 0x01 … 0x1A; Ctrl-[ \ ] → ESC, FS, GS.
+                if ch.value >= 0x61 && ch.value <= 0x7A { return String(UnicodeScalar(ch.value - 0x60)!) }
+                switch ch { case "[": return "\u{1B}"; case "\\": return "\u{1C}"; case "]": return "\u{1D}"; default: return nil }
+            }
+            if let chars = event.characters, !chars.isEmpty { return chars }
+            return nil
         }
     }
 }
@@ -484,8 +399,6 @@ public struct InteractiveTerminalView: View {
     public let executablePath: String?
     public var onOpenExternalTerminal: ((String) -> Void)? = nil
     @StateObject private var session = PTYTerminalSession()
-    @State private var commandLineInput: String = ""
-    @FocusState private var inputFocused: Bool
 
     public init(
         container: ContainerModel,
@@ -499,197 +412,122 @@ public struct InteractiveTerminalView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            // Terminal Control Bar
-            HStack(spacing: 8) {
-                NordicStatusBadge(
-                    label: session.isRunning ? "PTY Active" : "Disconnected",
-                    tone: session.isRunning ? .positive : .neutral
-                )
-
-                Text(session.statusMessage)
-                    .font(NordicTheme.monoFontSmall)
-                    .foregroundStyle(NordicTheme.secondaryText)
-                    .lineLimit(1)
-
-                Spacer()
-
-                if let onOpenExternalTerminal {
-                    Button {
-                        onOpenExternalTerminal(session.selectedShell)
-                    } label: {
-                        Label("Open in Terminal.app", systemImage: "apple.terminal")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .disabled(container.state != .running)
-                    .fixedSize(horizontal: true, vertical: false)
-                }
-
-                Picker("Shell", selection: $session.selectedShell) {
-                    Text("/bin/sh").tag("/bin/sh")
-                    Text("/bin/bash").tag("/bin/bash")
-                    Text("/bin/ash").tag("/bin/ash")
-                    Text("/bin/zsh").tag("/bin/zsh")
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .frame(width: 105)
-                .controlSize(.small)
-
-                if session.isRunning {
-                    Button("Ctrl-C") {
-                        session.sendInterruptSignal()
-                    }
-                    .controlSize(.small)
-                    .fixedSize(horizontal: true, vertical: false)
-
-                    Button("Terminate") {
-                        session.terminateSession()
-                    }
-                    .controlSize(.small)
-                    .fixedSize(horizontal: true, vertical: false)
-                } else {
-                    Button("Connect Shell") {
-                        session.startContainerSession(executablePath: executablePath, container: container)
-                        inputFocused = true
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(container.state != .running)
-                    .fixedSize(horizontal: true, vertical: false)
-                }
-
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(session.outputBuffer, forType: .string)
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                }
-                .controlSize(.small)
-                .help("Copy Terminal Output")
-
-                Button("Clear") {
-                    session.clearBuffer()
-                }
-                .controlSize(.small)
-                .fixedSize(horizontal: true, vertical: false)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(NordicTheme.elevatedSurface)
-            .overlay(alignment: .bottom) {
-                Divider().overlay(NordicTheme.borderSubtle)
-            }
-
+            toolbar
             if container.state != .running {
                 NordicEmptyState(
                     icon: .machines,
                     title: "Container Is Not Running",
-                    description: "Start '\(container.id)' to open an interactive PTY terminal session (`container exec -it \(container.id) \(session.selectedShell)`)."
+                    description: "Start '\(container.id)' to open a shell in it."
                 )
             } else {
                 GeometryReader { geo in
-                    VStack(spacing: 0) {
-                        // Quick Snippet Bar
-                        HStack(spacing: 6) {
-                            Text("Quick Commands:")
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(NordicTheme.secondaryText)
-                            ForEach(["ls -la", "ps aux", "env", "df -h", "ip addr", "uname -a"], id: \.self) { snippet in
-                                Button(snippet) {
-                                    session.sendInput(snippet + "\n")
-                                }
-                                .controlSize(.mini)
-                                .buttonStyle(.bordered)
-                                .disabled(!session.isRunning)
-                            }
-                            Spacer()
-                            Text("Click canvas for direct keystrokes (Tab, ↑/↓, Ctrl-C)")
-                                .font(.system(size: 10))
-                                .foregroundStyle(NordicTheme.secondaryText)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
-                        .background(NordicTheme.surfaceBackground)
-                        .overlay(alignment: .bottom) {
-                            Divider().overlay(NordicTheme.borderSubtle)
-                        }
-
-                        // Interactive ANSI PTY Canvas
-                        InteractivePTYCanvasRepresentable(
-                            attributedOutput: session.attributedOutput,
-                            isRunning: session.isRunning,
-                            onKeystroke: { keystroke in
-                                session.sendInput(keystroke)
-                            }
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                        // Command Input Bar
-                        HStack(spacing: 8) {
-                            Text("$")
-                                .font(NordicTheme.monoFontMedium)
-                                .foregroundStyle(NordicTheme.accent())
-
-                            TextField("Enter command or type directly in the terminal canvas above…", text: $commandLineInput)
-                                .textFieldStyle(.plain)
-                                .font(NordicTheme.monoFontRegular)
-                                .focused($inputFocused)
-                                .disabled(!session.isRunning)
-                                .onSubmit {
-                                    let cmd = commandLineInput
-                                    commandLineInput = ""
-                                    session.sendInput(cmd + "\n")
-                                }
-
-                            Button("Tab ⇥") {
-                                session.sendInput("\t")
-                            }
-                            .controlSize(.small)
-                            .disabled(!session.isRunning)
-                            .help("Send Tab for shell completion")
-
-                            Button("Paste") {
-                                if let pasted = NSPasteboard.general.string(forType: .string) {
-                                    commandLineInput.append(pasted)
-                                }
-                            }
-                            .controlSize(.small)
-                            .disabled(!session.isRunning)
-
-                            Button("Send") {
-                                let cmd = commandLineInput
-                                commandLineInput = ""
-                                session.sendInput(cmd + "\n")
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
-                            .disabled(!session.isRunning)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(NordicTheme.elevatedSurface)
-                        .overlay(alignment: .top) {
-                            Divider().overlay(NordicTheme.borderSubtle)
-                        }
-                    }
-                    .onChange(of: geo.size) { _, newSize in
-                        let approxCols = UInt16(max(40, Int(newSize.width / 7.4)))
-                        let approxRows = UInt16(max(10, Int((newSize.height - 65) / 16.0)))
-                        session.resizeTerminal(columns: approxCols, rows: approxRows)
-                    }
+                    InteractivePTYCanvasRepresentable(
+                        attributedOutput: session.attributedOutput,
+                        isRunning: session.isRunning,
+                        onKeystroke: { keystroke in session.sendInput(keystroke) }
+                    )
+                    .onAppear { resize(to: geo.size) }
+                    .onChange(of: geo.size) { _, newSize in resize(to: newSize) }
                 }
+                .background(Color(nsColor: TerminalScreenRenderer.background))
             }
         }
         .onAppear {
             if container.state == .running && !session.isRunning {
                 session.startContainerSession(executablePath: executablePath, container: container)
-                inputFocused = true
+            }
+        }
+        .onChange(of: container.state) { _, newState in
+            // Connect when the container is started while this tab is open.
+            if newState == .running && !session.isRunning {
+                session.startContainerSession(executablePath: executablePath, container: container)
             }
         }
         .onDisappear {
             session.terminateSession()
         }
+    }
+
+    private var toolbar: some View {
+        HStack(spacing: NordicTheme.Spacing.s) {
+            Circle()
+                .fill(session.isRunning ? NordicTheme.statusGreen : NordicTheme.secondaryText.opacity(0.5))
+                .frame(width: 7, height: 7)
+            Text(session.isRunning ? "\(session.selectedShell) in \(container.id)" : "Disconnected")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(NordicTheme.primaryText)
+                .lineLimit(1)
+            Text(session.isRunning ? "\(session.columns)×\(session.rows)" : "")
+                .font(.system(size: 11).monospacedDigit())
+                .foregroundStyle(NordicTheme.secondaryText)
+
+            Spacer()
+
+            Picker("Shell", selection: $session.selectedShell) {
+                Text("sh").tag("/bin/sh")
+                Text("bash").tag("/bin/bash")
+                Text("ash").tag("/bin/ash")
+                Text("zsh").tag("/bin/zsh")
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .fixedSize()
+            .controlSize(.small)
+            .help("Shell to start (reconnect to apply)")
+
+            if session.isRunning {
+                Button("Disconnect") { session.terminateSession() }
+                    .controlSize(.small)
+            } else {
+                Button("Connect") {
+                    session.startContainerSession(executablePath: executablePath, container: container)
+                }
+                .controlSize(.small)
+                .disabled(container.state != .running)
+            }
+
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(session.outputBuffer, forType: .string)
+            } label: {
+                Image(systemName: "doc.on.doc")
+            }
+            .controlSize(.small)
+            .help("Copy all terminal text")
+
+            Button {
+                session.clearBuffer()
+            } label: {
+                Image(systemName: "eraser")
+            }
+            .controlSize(.small)
+            .help("Clear (Ctrl-L)")
+
+            if let onOpenExternalTerminal {
+                Button {
+                    onOpenExternalTerminal(session.selectedShell)
+                } label: {
+                    Image(systemName: "macwindow.on.rectangle")
+                }
+                .controlSize(.small)
+                .disabled(container.state != .running)
+                .help("Open in Terminal.app")
+            }
+        }
+        .padding(.horizontal, NordicTheme.Spacing.m)
+        .padding(.vertical, 7)
+        .background(NordicTheme.elevatedSurface)
+        .overlay(alignment: .bottom) { Divider().overlay(NordicTheme.borderSubtle) }
+    }
+
+    /// Columns and rows from the real font metrics and the canvas insets.
+    private func resize(to size: CGSize) {
+        let font = TerminalScreenRenderer.font
+        let cellWidth = max(1, ("M" as NSString).size(withAttributes: [.font: font]).width)
+        let lineHeight = max(1, (font.ascender - font.descender + font.leading) * 1.08)
+        let usableWidth = size.width - 2 * InteractivePTYCanvasRepresentable.inset - 16 // scroller
+        let usableHeight = size.height - 2 * InteractivePTYCanvasRepresentable.inset
+        session.resizeTerminal(columns: UInt16(max(20, Int(usableWidth / cellWidth))), rows: UInt16(max(8, Int(usableHeight / lineHeight))))
     }
 }
 

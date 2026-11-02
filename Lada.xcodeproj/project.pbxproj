@@ -19,6 +19,7 @@
 				Tests/IntegrationTests/LiveFileOperationsTests.swift,
 				Tests/IntegrationTests/LiveImageLibraryPresetTests.swift,
 				Tests/IntegrationTests/RuntimeServiceIntegrationTests.swift,
+				Tests/UIAutomationTests/ContainerInspectorTests.swift,
 				Tests/UIAutomationTests/UIWorkflowTests.swift,
 				Tests/UIAutomationTests/ViewSnapshotTests.swift,
 				Tests/UnitTests/CLIArgumentBuilderTests.swift,
@@ -33,6 +34,7 @@
 				Tests/UnitTests/RuntimeCapabilitiesAndHealthTests.swift,
 				Tests/UnitTests/SecretHandlingTests.swift,
 				Tests/UnitTests/TelemetryTests.swift,
+				Tests/UnitTests/TerminalScreenTests.swift,
 				Tests/UnitTests/ValidationAndRedactionTests.swift,
 			);
 			target = A10000020000000000000001 /* Lada */;

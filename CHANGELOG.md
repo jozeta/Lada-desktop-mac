@@ -6,6 +6,21 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Terminal tab works like a traditional terminal: a VT100/xterm screen model (cursor movement,
+  carriage-return rewrites, erase/insert/delete, scroll regions, alternate screen for `vi`/`top`,
+  16/256/true colour, OSC titles ignored, cursor position reports) on a dark background with a
+  block cursor and real font metrics. You type directly into it (it focuses itself); Return sends
+  `\r`, Ctrl-letter, Delete, Home/End, Page Up/Down and Esc are encoded like xterm, ⌘V pastes. The
+  separate command bar and quick-command chips are gone, and output is no longer re-parsed from the
+  start on every chunk
+- Fix: the terminal stayed connected to the previous container after selecting another one, and
+  typed commands were silently dropped after switching tabs or containers (a replaced session's
+  exit handler shut down the new session). The inspector rebuilds per container, keeps the
+  selected tab, and connects when a container starts while its Terminal tab is open
+- Fix: the Logs tab showed the previous container's logs after switching, kept stale text when
+  loading failed, and never refreshed; it now clears on switch, shows load errors, and tails every
+  2 s while open (the Pause control now works)
+- Charts draw smooth monotone curves that never overshoot the measured values
 - Redesign, step 2 (Containers): a flat list without striped filler rows, short image names
   (`nginx:1.27-alpine`), compact port mappings, and columns that fit beside the inspector;
   inspector sections are "Details", "Performance" and "Maintenance" with plain labels; chart cards

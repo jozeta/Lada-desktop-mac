@@ -990,13 +990,8 @@ public struct NordicPerformanceChartCard: View {
     }
 
     private func seriesLinePath(values: [Double], in size: CGSize, maxY: Double) -> Path {
-        let pts = seriesPoints(values: values, in: size, maxY: maxY)
         var path = Path()
-        guard let first = pts.first else { return path }
-        path.move(to: first)
-        for pt in pts.dropFirst() {
-            path.addLine(to: pt)
-        }
+        Self.addSmoothCurve(through: seriesPoints(values: values, in: size, maxY: maxY), to: &path, moveToStart: true)
         return path
     }
 
@@ -1005,12 +1000,55 @@ public struct NordicPerformanceChartCard: View {
         var path = Path()
         guard let first = pts.first, let last = pts.last else { return path }
         path.move(to: CGPoint(x: first.x, y: size.height))
-        for pt in pts {
-            path.addLine(to: pt)
-        }
+        path.addLine(to: first)
+        Self.addSmoothCurve(through: pts, to: &path, moveToStart: false)
         path.addLine(to: CGPoint(x: last.x, y: size.height))
         path.closeSubpath()
         return path
+    }
+
+    /// Monotone cubic interpolation (Fritsch–Carlson): smooth curves that never overshoot the
+    /// samples, so a rate never appears to dip below zero or peak above what was measured.
+    static func addSmoothCurve(through pts: [CGPoint], to path: inout Path, moveToStart: Bool) {
+        guard let first = pts.first else { return }
+        if moveToStart { path.move(to: first) }
+        guard pts.count > 2 else {
+            if pts.count == 2 { path.addLine(to: pts[1]) }
+            return
+        }
+        let n = pts.count
+        var slopes = [CGFloat](repeating: 0, count: n - 1)
+        for i in 0..<(n - 1) {
+            let dx = pts[i + 1].x - pts[i].x
+            slopes[i] = dx == 0 ? 0 : (pts[i + 1].y - pts[i].y) / dx
+        }
+        var tangents = [CGFloat](repeating: 0, count: n)
+        tangents[0] = slopes[0]
+        tangents[n - 1] = slopes[n - 2]
+        for i in 1..<(n - 1) {
+            tangents[i] = slopes[i - 1] * slopes[i] <= 0 ? 0 : (slopes[i - 1] + slopes[i]) / 2
+        }
+        for i in 0..<(n - 1) where slopes[i] == 0 {
+            tangents[i] = 0
+            tangents[i + 1] = 0
+        }
+        for i in 0..<(n - 1) where slopes[i] != 0 {
+            let a = tangents[i] / slopes[i], b = tangents[i + 1] / slopes[i]
+            let h = a * a + b * b
+            if h > 9 {
+                let t = 3 / h.squareRoot()
+                tangents[i] = t * a * slopes[i]
+                tangents[i + 1] = t * b * slopes[i]
+            }
+        }
+        for i in 0..<(n - 1) {
+            let dx = (pts[i + 1].x - pts[i].x) / 3
+            path.addCurve(
+                to: pts[i + 1],
+                control1: CGPoint(x: pts[i].x + dx, y: pts[i].y + tangents[i] * dx),
+                control2: CGPoint(x: pts[i + 1].x - dx, y: pts[i + 1].y - tangents[i + 1] * dx)
+            )
+        }
     }
 }
 

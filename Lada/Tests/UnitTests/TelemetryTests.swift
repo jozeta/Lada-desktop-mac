@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 @testable import Lada
 
 @MainActor
@@ -56,4 +57,17 @@ final class TelemetryTests: XCTestCase {
         XCTAssertEqual(rates.cpuCoresUsed, 0.70, accuracy: 0.01)
         XCTAssertEqual(rates.cpuPercent, 17.5, accuracy: 0.2)
     }
+
+    func testSmoothCurveNeverOvershootsTheSamples() {
+        // A spiky series: a straight cubic spline would dip below 0 and rise above 100 here.
+        let ys: [CGFloat] = [100, 100, 0, 100, 0, 0, 100, 100]
+        let pts = ys.enumerated().map { CGPoint(x: CGFloat($0.offset) * 10, y: $0.element) }
+        var path = Path()
+        NordicPerformanceChartCard.addSmoothCurve(through: pts, to: &path, moveToStart: true)
+        let bounds = path.boundingRect
+        XCTAssertGreaterThanOrEqual(bounds.minY, -0.001)
+        XCTAssertLessThanOrEqual(bounds.maxY, 100.001)
+        XCTAssertEqual(bounds.width, 70, accuracy: 0.001)
+    }
 }
+

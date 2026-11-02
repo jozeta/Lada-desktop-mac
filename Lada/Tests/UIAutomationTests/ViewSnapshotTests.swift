@@ -26,8 +26,10 @@ final class ViewSnapshotTests: XCTestCase {
         preferences.hasCompletedFirstLaunchSetup = true
         let state = AppState(preferences: preferences, injectedService: MockContainerRuntimeService())
         await state.refreshAll(isUserInitiated: false)
-        try? await Task.sleep(for: .milliseconds(50))
-        await state.sampleAllRunningContainersTelemetry()
+        for _ in 0..<12 {
+            try? await Task.sleep(for: .milliseconds(40))
+            await state.sampleAllRunningContainersTelemetry()
+        }
         return state
     }
 
