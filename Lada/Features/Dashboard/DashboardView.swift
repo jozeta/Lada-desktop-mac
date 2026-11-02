@@ -99,7 +99,7 @@ public struct DashboardView: View {
             }
             .padding(20)
         }
-        .background(NordicTheme.contentSurface)
+        .background(Color.clear)
         .task {
             await appState.sampleAllRunningContainersTelemetry()
             while !Task.isCancelled {

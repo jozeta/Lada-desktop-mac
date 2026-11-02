@@ -517,7 +517,7 @@ public struct InteractiveTerminalView: View {
         }
         .padding(.horizontal, NordicTheme.Spacing.m)
         .padding(.vertical, 7)
-        .background(NordicTheme.elevatedSurface)
+        .nordicBar()
         .overlay(alignment: .bottom) { Divider().overlay(NordicTheme.borderSubtle) }
     }
 

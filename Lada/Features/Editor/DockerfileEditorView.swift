@@ -383,7 +383,7 @@ public struct DockerfileEditorView: View {
                     .frame(minWidth: 330, idealWidth: 365, maxWidth: 430)
             }
         }
-        .background(NordicTheme.windowBackground)
+        .nordicPageBackground()
         .onChange(of: currentWordPrefix) { _, newPrefix in
             updateCompletions(for: newPrefix)
         }
@@ -491,7 +491,7 @@ public struct DockerfileEditorView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(NordicTheme.elevatedSurface)
+        .nordicBar()
     }
 
     // MARK: - Code Completion Strip
@@ -564,7 +564,7 @@ public struct DockerfileEditorView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(NordicTheme.elevatedSurface)
+        .nordicBar()
         .overlay(alignment: .top) {
             Divider().overlay(NordicTheme.borderSubtle)
         }
@@ -926,7 +926,7 @@ public struct DockerfileEditorView: View {
             }
             .padding(14)
         }
-        .background(NordicTheme.contentSurface)
+        .background(Color.clear)
     }
 
     private func inspectorRow(label: String, value: String) -> some View {
@@ -957,7 +957,7 @@ public struct DockerfileEditorView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
-            .background(NordicTheme.elevatedSurface)
+            .nordicBar()
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {

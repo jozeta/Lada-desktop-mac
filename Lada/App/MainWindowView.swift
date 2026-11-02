@@ -38,6 +38,8 @@ public struct MainWindowView: View {
                     contentDetailView
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                // One backdrop behind every section, so glass panels frost the same tint everywhere.
+                .nordicPageBackground()
                 .onDrop(of: [.fileURL, .utf8PlainText], isTargeted: $isDockerfileDropTargeted) { providers in
                     handleWindowDrop(providers: providers)
                 }
@@ -213,7 +215,7 @@ public struct MainWindowView: View {
 
             sidebarFooter
         }
-        .background(NordicTheme.sidebarBackground)
+        .background(NordicSidebarMaterial().ignoresSafeArea())
     }
 
     /// Running / total, the number that matters at a glance.

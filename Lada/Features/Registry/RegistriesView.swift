@@ -28,7 +28,7 @@ public struct RegistriesView: View {
                 registryTable
             }
         }
-        .background(NordicTheme.windowBackground)
+        .nordicPageBackground()
         .sheet(isPresented: $showLoginSheet) {
             loginSheet
         }
@@ -55,7 +55,7 @@ public struct RegistriesView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(NordicTheme.elevatedSurface)
+        .nordicBar()
         .overlay(alignment: .bottom) {
             Divider().overlay(NordicTheme.borderSubtle)
         }
@@ -72,7 +72,7 @@ public struct RegistriesView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(NordicTheme.contentSurface)
+        .background(Color.clear)
         .overlay(alignment: .bottom) {
             Divider().overlay(NordicTheme.borderSubtle)
         }

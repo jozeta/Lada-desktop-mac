@@ -79,7 +79,7 @@ public struct StacksView: View {
             }
             .padding(.horizontal, NordicTheme.Spacing.l)
             .padding(.vertical, NordicTheme.Spacing.s)
-            .background(NordicTheme.elevatedSurface)
+            .nordicBar()
             .overlay(alignment: .bottom) { Divider().overlay(NordicTheme.borderSubtle) }
 
             switch work.tab {
@@ -91,7 +91,7 @@ public struct StacksView: View {
                 unifiedLogsPane
             }
         }
-        .background(NordicTheme.windowBackground)
+        .nordicPageBackground()
         .onAppear {
             if let draftYAML = appState.editorDraftComposeYAML, !draftYAML.isEmpty {
                 work.yamlText = draftYAML
@@ -235,7 +235,7 @@ public struct StacksView: View {
         }
         .padding(.horizontal, NordicTheme.Spacing.l)
         .padding(.vertical, NordicTheme.Spacing.m)
-        .background(NordicTheme.elevatedSurface)
+        .nordicBar()
     }
 
     /// Services with live state, plus a short guide while nothing has been started and the
@@ -336,7 +336,7 @@ public struct StacksView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(NordicTheme.surfaceBackground)
+            .background(Color.clear)
             .overlay(alignment: .bottom) {
                 Divider().overlay(NordicTheme.borderSubtle)
             }
@@ -526,7 +526,7 @@ public struct StacksView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
-            .background(NordicTheme.elevatedSurface)
+            .nordicBar()
 
             ScrollView {
                 Text(verbatim: work.consoleLines.joined(separator: "\n"))

@@ -6,6 +6,10 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Frosted-glass look: one calm Nordic backdrop (a soft fjord-to-sand gradient) behind every
+  section, panels and cards in frosted material with a fine light edge and soft shadow, toolbars
+  and headers in bar material, and a translucent sidebar. Terminal, code editors and logs stay solid
+  for contrast; with Reduce Transparency the system makes the materials opaque
 - Stacks is a stack builder: Add Service (and Edit/Remove on each service) opens a form for name,
   image (autocomplete or an Image Library preset with generated secrets), ports, settings, storage,
   start order and command, with a preview; saving writes only that service's block into the compose

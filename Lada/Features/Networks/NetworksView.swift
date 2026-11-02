@@ -52,10 +52,10 @@ public struct NetworksView: View {
                     description: "Choose a network from the list to inspect its IPv4/IPv6 CIDR subnets, gateway, plugin, and attached containers."
                 )
                 .frame(minWidth: 400, idealWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
-                .background(NordicTheme.contentSurface)
+                .background(Color.clear)
             }
         }
-        .background(NordicTheme.windowBackground)
+        .nordicPageBackground()
         .onAppear {
             if appState.selectedNetworkID == nil || !appState.networks.contains(where: { $0.id == appState.selectedNetworkID }) {
                 appState.selectedNetworkID = appState.networks.first?.id
@@ -157,7 +157,7 @@ public struct NetworksView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(NordicTheme.elevatedSurface)
+        .nordicBar()
         .overlay(alignment: .bottom) {
             Divider().overlay(NordicTheme.borderSubtle)
         }
@@ -289,7 +289,7 @@ public struct NetworksView: View {
                 .padding(16)
             }
         }
-        .background(NordicTheme.contentSurface)
+        .background(Color.clear)
     }
 
     private var createNetworkSheet: some View {

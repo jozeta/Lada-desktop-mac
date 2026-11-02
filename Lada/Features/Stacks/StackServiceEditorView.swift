@@ -136,7 +136,7 @@ struct StackServiceEditorView: View {
             .padding(NordicTheme.Spacing.l)
         }
         .frame(width: 620, height: 680)
-        .background(NordicTheme.windowBackground)
+        .nordicPageBackground()
     }
 
     private var normalized: ComposeServiceSpec {

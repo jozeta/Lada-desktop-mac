@@ -81,7 +81,7 @@ public struct ContainerFileBrowserView: View {
                 }
             }
         }
-        .background(NordicTheme.windowBackground)
+        .nordicPageBackground()
         .onDrop(of: [.fileURL], isTargeted: $isFileDropTargeted) { providers in
             handleDroppedHostFiles(providers: providers)
         }
@@ -210,7 +210,7 @@ public struct ContainerFileBrowserView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(NordicTheme.elevatedSurface)
+        .nordicBar()
     }
 
     // MARK: - Directory List Pane
@@ -349,7 +349,7 @@ public struct ContainerFileBrowserView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(NordicTheme.elevatedSurface)
+                .nordicBar()
                 .overlay(alignment: .bottom) {
                     Divider().overlay(NordicTheme.borderSubtle)
                 }
@@ -377,7 +377,7 @@ public struct ContainerFileBrowserView: View {
                 )
             }
         }
-        .background(NordicTheme.surfaceBackground)
+        .background(Color.clear)
     }
 
     private var newFolderSheetView: some View {

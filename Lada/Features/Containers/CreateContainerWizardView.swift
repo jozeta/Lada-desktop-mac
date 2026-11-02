@@ -110,7 +110,7 @@ public struct CreateContainerWizardView: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
-            .background(NordicTheme.elevatedSurface)
+            .nordicBar()
             .overlay(alignment: .bottom) {
                 Divider().overlay(NordicTheme.borderSubtle)
             }
@@ -126,7 +126,7 @@ public struct CreateContainerWizardView: View {
                 .labelsHidden()
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
-                .background(NordicTheme.windowBackground)
+                .nordicPageBackground()
             }
 
             // Validation Banner
@@ -189,7 +189,7 @@ public struct CreateContainerWizardView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 8)
-                .background(NordicTheme.elevatedSurface)
+                .nordicBar()
             }
 
             // Form Body
@@ -222,7 +222,7 @@ public struct CreateContainerWizardView: View {
                 }
                 .padding(20)
             }
-            .background(NordicTheme.contentSurface)
+            .background(Color.clear)
 
             // Redacted Command Preview Strip
             VStack(alignment: .leading, spacing: 4) {
@@ -285,7 +285,7 @@ public struct CreateContainerWizardView: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
-            .background(NordicTheme.elevatedSurface)
+            .nordicBar()
             .overlay(alignment: .top) {
                 Divider().overlay(NordicTheme.borderSubtle)
             }

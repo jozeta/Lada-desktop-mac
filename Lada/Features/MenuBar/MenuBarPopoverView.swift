@@ -39,7 +39,7 @@ public struct MenuBarPopoverView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(NordicTheme.elevatedSurface)
+            .nordicBar()
 
             Divider().overlay(NordicTheme.borderSubtle)
 
@@ -72,7 +72,7 @@ public struct MenuBarPopoverView: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 6)
-                .background(NordicTheme.surfaceBackground)
+                .background(Color.clear)
 
                 Divider().overlay(NordicTheme.borderSubtle)
             }
@@ -140,10 +140,10 @@ public struct MenuBarPopoverView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(NordicTheme.elevatedSurface)
+            .nordicBar()
         }
         .frame(width: 360)
-        .background(NordicTheme.windowBackground)
+        .nordicPageBackground()
     }
 
     private var sortedContainers: [ContainerModel] {

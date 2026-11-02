@@ -166,34 +166,29 @@ public extension NordicTheme {
 // MARK: - Panels
 
 public extension View {
-    /// The standard Låda panel: elevated surface, continuous 10 pt corners and a hairline border.
+    /// The standard Låda panel: frosted glass with continuous 10 pt corners, a fine light edge and
+    /// a soft shadow (solid when Reduce Transparency is on).
     func nordicPanel(padding: CGFloat = NordicTheme.Spacing.l) -> some View {
         self
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: NordicTheme.Radius.card, style: .continuous)
-                    .fill(NordicTheme.elevatedSurface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: NordicTheme.Radius.card, style: .continuous)
-                    .strokeBorder(NordicTheme.borderSubtle, lineWidth: 1)
-            )
+            .nordicSurface()
     }
 
     /// The panel look (surface, continuous corners, hairline border) without padding or sizing,
     /// for views that lay out their own insets.
     func nordicSurface(cornerRadius: CGFloat = NordicTheme.Radius.card) -> some View {
-        self
-            .background(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(NordicTheme.elevatedSurface)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(NordicTheme.borderSubtle, lineWidth: 1)
-            )
+        modifier(NordicGlassSurface(cornerRadius: cornerRadius))
+    }
+
+    /// Page and sheet background: the calm Nordic backdrop the glass panels frost.
+    func nordicPageBackground() -> some View {
+        background(NordicBackdrop().ignoresSafeArea())
+    }
+
+    /// Toolbars and section headers: a thin bar material, so content scrolls under frosted glass.
+    func nordicBar() -> some View {
+        background(.bar)
     }
 
     /// Hover feedback for clickable cards: the border picks up the accent and the card lifts a
@@ -254,5 +249,78 @@ public enum NordicFormat {
         f.allowsNonnumericFormatting = false
         return f.string(fromByteCount: count)
     }
+}
+
+// MARK: - Glass
+
+/// Frosted glass for panels: system material (which turns solid with Reduce Transparency), a fine
+/// highlight on the edge and a soft shadow that lifts the panel off the backdrop.
+private struct NordicGlassSurface: ViewModifier {
+    let cornerRadius: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        content
+            .background(.regularMaterial, in: shape)
+            .clipShape(shape)
+            .overlay(
+                shape.strokeBorder(
+                    LinearGradient(
+                        colors: colorScheme == .dark
+                            ? [Color.white.opacity(0.14), Color.white.opacity(0.04)]
+                            : [Color.white.opacity(0.85), Color.black.opacity(0.06)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+            )
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.28 : 0.07), radius: 10, y: 4)
+    }
+}
+
+/// A calm, softly tinted backdrop: a fjord-to-sand gradient with two faint glows. Glass panels
+/// above it pick up the tint; with Reduce Transparency the panels are solid anyway.
+public struct NordicBackdrop: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    public init() {}
+
+    public var body: some View {
+        let dark = colorScheme == .dark
+        ZStack {
+            LinearGradient(
+                colors: dark
+                    ? [Color(red: 0.067, green: 0.082, blue: 0.106), Color(red: 0.094, green: 0.106, blue: 0.129)]
+                    : [Color(red: 0.925, green: 0.945, blue: 0.961), Color(red: 0.965, green: 0.957, blue: 0.937)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            RadialGradient(
+                colors: [Color(red: 0.36, green: 0.58, blue: 0.77).opacity(dark ? 0.22 : 0.18), .clear],
+                center: .topLeading, startRadius: 0, endRadius: 700
+            )
+            RadialGradient(
+                colors: [Color(red: 0.53, green: 0.75, blue: 0.82).opacity(dark ? 0.12 : 0.14), .clear],
+                center: .bottomTrailing, startRadius: 0, endRadius: 600
+            )
+        }
+    }
+}
+
+/// Behind-window vibrancy (the translucent sidebar of Finder or Mail).
+public struct NordicSidebarMaterial: NSViewRepresentable {
+    public init() {}
+
+    public func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .sidebar
+        view.blendingMode = .behindWindow
+        view.state = .followsWindowActiveState
+        return view
+    }
+
+    public func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
 

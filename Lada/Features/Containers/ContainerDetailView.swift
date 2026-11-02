@@ -145,7 +145,7 @@ public struct ContainerDetailView: View {
             .controlSize(.small)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background(NordicTheme.windowBackground)
+            .nordicPageBackground()
             .overlay(alignment: .bottom) {
                 Divider().overlay(NordicTheme.borderSubtle)
             }
@@ -453,7 +453,7 @@ public struct ContainerDetailView: View {
             }
             .padding(16)
         }
-        .background(NordicTheme.contentSurface)
+        .background(Color.clear)
     }
 
     private func formatRate(_ bytesPerSec: Double) -> String {
@@ -484,7 +484,7 @@ public struct ContainerDetailView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(NordicTheme.windowBackground)
+            .nordicPageBackground()
 
             NordicLogViewer(
                 rawLogText: logs.text,
@@ -529,7 +529,7 @@ public struct ContainerDetailView: View {
             }
             .padding(16)
         }
-        .background(NordicTheme.contentSurface)
+        .background(Color.clear)
     }
 
     // MARK: - Networking Tab
@@ -617,7 +617,7 @@ public struct ContainerDetailView: View {
             }
             .padding(16)
         }
-        .background(NordicTheme.contentSurface)
+        .background(Color.clear)
     }
 
     private func portHealthColor(probe: PortProbeResult?, isRunning: Bool) -> Color {
@@ -670,7 +670,7 @@ public struct ContainerDetailView: View {
             }
             .padding(16)
         }
-        .background(NordicTheme.contentSurface)
+        .background(Color.clear)
     }
 
     // MARK: - Environment Tab
@@ -721,7 +721,7 @@ public struct ContainerDetailView: View {
                             }
                         }
                         .padding(8)
-                        .background(NordicTheme.elevatedSurface)
+                        .nordicBar()
                         .clipShape(RoundedRectangle(cornerRadius: 4))
                         .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
                     }
@@ -729,7 +729,7 @@ public struct ContainerDetailView: View {
             }
             .padding(16)
         }
-        .background(NordicTheme.contentSurface)
+        .background(Color.clear)
     }
 
     private func loadLogs() async {

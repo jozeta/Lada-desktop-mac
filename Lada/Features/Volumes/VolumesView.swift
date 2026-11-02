@@ -53,10 +53,10 @@ public struct VolumesView: View {
                     description: "Choose a volume from the list to inspect its ext4 block image path, sparse allocation size, mount options, and attached containers."
                 )
                 .frame(minWidth: 400, idealWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
-                .background(NordicTheme.contentSurface)
+                .background(Color.clear)
             }
         }
-        .background(NordicTheme.windowBackground)
+        .nordicPageBackground()
         .onAppear {
             if appState.selectedVolumeID == nil || !appState.volumes.contains(where: { $0.id == appState.selectedVolumeID }) {
                 appState.selectedVolumeID = appState.volumes.first?.id
@@ -152,7 +152,7 @@ public struct VolumesView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(NordicTheme.elevatedSurface)
+        .nordicBar()
         .overlay(alignment: .bottom) {
             Divider().overlay(NordicTheme.borderSubtle)
         }
@@ -177,7 +177,7 @@ public struct VolumesView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(NordicTheme.contentSurface)
+        .background(Color.clear)
         .overlay(alignment: .bottom) {
             Divider().overlay(NordicTheme.borderSubtle)
         }
@@ -321,7 +321,7 @@ public struct VolumesView: View {
                 .padding(16)
             }
         }
-        .background(NordicTheme.contentSurface)
+        .background(Color.clear)
     }
 
     private var createVolumeSheet: some View {

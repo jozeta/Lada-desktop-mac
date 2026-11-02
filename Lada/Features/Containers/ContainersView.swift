@@ -198,7 +198,7 @@ public struct ContainersView: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(NordicTheme.elevatedSurface)
+                .nordicBar()
                 .overlay(alignment: .bottom) {
                     Divider().overlay(NordicTheme.borderSubtle)
                 }
@@ -375,7 +375,7 @@ public struct ContainersView: View {
                     // No striped filler rows below the last container: a calmer, flat list.
                     .alternatingRowBackgrounds(.disabled)
                     .scrollContentBackground(.hidden)
-                    .background(NordicTheme.contentSurface)
+                    .background(Color.clear)
                     .accessibilityIdentifier(AccessibilityID.containerTable)
                 }
             }
@@ -396,7 +396,7 @@ public struct ContainersView: View {
                     description: "Pick a container to see its details, logs, terminal, files and network."
                 )
                 .frame(minWidth: 440, idealWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
-                .background(NordicTheme.contentSurface)
+                .background(Color.clear)
             }
         }
         .onAppear {

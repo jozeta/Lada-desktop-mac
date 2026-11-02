@@ -165,7 +165,7 @@ public struct NordicDetailHeader<Actions: View>: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(NordicTheme.elevatedSurface)
+        .nordicBar()
         .overlay(alignment: .bottom) {
             Divider().overlay(NordicTheme.borderSubtle)
         }
@@ -552,7 +552,7 @@ public struct NordicLogViewer: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .frame(minWidth: 110, maxWidth: 190)
-                .background(NordicTheme.windowBackground)
+                .nordicPageBackground()
                 .clipShape(RoundedRectangle(cornerRadius: 4))
                 .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
 
@@ -615,7 +615,7 @@ public struct NordicLogViewer: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(NordicTheme.elevatedSurface)
+            .nordicBar()
             .overlay(alignment: .bottom) {
                 Divider().overlay(NordicTheme.borderSubtle)
             }

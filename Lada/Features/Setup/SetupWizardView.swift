@@ -48,7 +48,7 @@ public struct SetupWizardView: View {
                 )
             }
             .padding(20)
-            .background(NordicTheme.elevatedSurface)
+            .nordicBar()
             .overlay(alignment: .bottom) {
                 Divider().overlay(NordicTheme.borderSubtle)
             }
@@ -92,7 +92,7 @@ public struct SetupWizardView: View {
                 }
                 .padding(20)
             }
-            .background(NordicTheme.contentSurface)
+            .background(Color.clear)
 
             // Footer
             HStack(spacing: 12) {
@@ -133,7 +133,7 @@ public struct SetupWizardView: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
-            .background(NordicTheme.elevatedSurface)
+            .nordicBar()
             .overlay(alignment: .top) {
                 Divider().overlay(NordicTheme.borderSubtle)
             }
@@ -220,7 +220,7 @@ public struct SetupWizardView: View {
                         }
                     }
                     .padding(8)
-                    .background(NordicTheme.windowBackground)
+                    .nordicPageBackground()
                     .clipShape(RoundedRectangle(cornerRadius: 4))
                 }
 
@@ -345,7 +345,7 @@ public struct PrerequisiteRowView: View {
                         .foregroundStyle(NordicTheme.secondaryText)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
-                        .background(NordicTheme.windowBackground)
+                        .nordicPageBackground()
                         .clipShape(RoundedRectangle(cornerRadius: 3))
                 }
 
@@ -380,6 +380,6 @@ public struct PrerequisiteRowView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(NordicTheme.elevatedSurface)
+        .nordicBar()
     }
 }

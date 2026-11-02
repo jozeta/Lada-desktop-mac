@@ -60,10 +60,10 @@ public struct MachinesView: View {
                     description: "Choose a persistent Linux virtual machine from the list to reconfigure its CPU/RAM/home-mount settings, run commands, or inspect boot logs."
                 )
                 .frame(minWidth: 400, idealWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
-                .background(NordicTheme.contentSurface)
+                .background(Color.clear)
             }
         }
-        .background(NordicTheme.windowBackground)
+        .nordicPageBackground()
         .onAppear {
             if appState.selectedMachineID == nil || !appState.machines.contains(where: { $0.id == appState.selectedMachineID }) {
                 appState.selectedMachineID = appState.machines.first?.id
@@ -144,7 +144,7 @@ public struct MachinesView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(NordicTheme.elevatedSurface)
+        .nordicBar()
         .overlay(alignment: .bottom) {
             Divider().overlay(NordicTheme.borderSubtle)
         }
@@ -161,7 +161,7 @@ public struct MachinesView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(NordicTheme.contentSurface)
+        .background(Color.clear)
         .overlay(alignment: .bottom) {
             Divider().overlay(NordicTheme.borderSubtle)
         }
@@ -316,7 +316,7 @@ public struct MachinesView: View {
                 .padding(16)
             }
         }
-        .background(NordicTheme.contentSurface)
+        .background(Color.clear)
     }
 
     private func machineConfigurationEditor(for machine: MachineModel) -> some View {

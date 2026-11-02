@@ -130,7 +130,7 @@ struct StackGroupSummaryView: View {
                 .padding(NordicTheme.Spacing.l)
             }
         }
-        .background(NordicTheme.contentSurface)
+        .background(Color.clear)
     }
 
     static func startAll(_ group: ContainerStackGroup, appState: AppState) async {

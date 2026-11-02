@@ -68,10 +68,10 @@ public struct ImagesView: View {
                     description: "Choose an image from the list to inspect its OCI manifest, architecture variants, default entrypoint, environment, and layer history."
                 )
                 .frame(minWidth: 420, idealWidth: 480, maxWidth: .infinity, maxHeight: .infinity)
-                .background(NordicTheme.contentSurface)
+                .background(Color.clear)
             }
         }
-        .background(NordicTheme.windowBackground)
+        .nordicPageBackground()
         .onAppear {
             if appState.selectedImageID == nil || !filteredImages.contains(where: { $0.id == appState.selectedImageID }) {
                 appState.selectedImageID = filteredImages.first?.id
@@ -180,7 +180,7 @@ public struct ImagesView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(NordicTheme.elevatedSurface)
+        .nordicBar()
         .overlay(alignment: .bottom) {
             Divider().overlay(NordicTheme.borderSubtle)
         }
@@ -425,7 +425,7 @@ public struct ImagesView: View {
                 .padding(16)
             }
         }
-        .background(NordicTheme.contentSurface)
+        .background(Color.clear)
     }
 
     private var pullImageSheet: some View {

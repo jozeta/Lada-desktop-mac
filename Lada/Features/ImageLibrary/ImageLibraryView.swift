@@ -76,7 +76,7 @@ public struct ImageLibraryView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .background(NordicTheme.elevatedSurface)
+                .nordicBar()
                 Divider().overlay(NordicTheme.borderSubtle)
             }
 
@@ -107,7 +107,7 @@ public struct ImageLibraryView: View {
                     }
                     .padding(18)
                 }
-                .background(NordicTheme.windowBackground)
+                .nordicPageBackground()
             }
         }
         .task(id: searchQuery) {
@@ -174,7 +174,7 @@ public struct ImageLibraryView: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
-        .background(NordicTheme.elevatedSurface)
+        .nordicBar()
     }
 
     private var filterAndSortStrip: some View {
@@ -230,7 +230,7 @@ public struct ImageLibraryView: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 8)
-        .background(NordicTheme.contentSurface)
+        .background(Color.clear)
     }
 
     private func repositoryCard(for item: DockerHubRepositoryItem) -> some View {

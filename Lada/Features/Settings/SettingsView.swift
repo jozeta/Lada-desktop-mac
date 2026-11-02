@@ -44,7 +44,7 @@ public struct ActivityView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .background(NordicTheme.elevatedSurface)
+            .nordicBar()
             .overlay(alignment: .bottom) {
                 Divider().overlay(NordicTheme.borderSubtle)
             }
@@ -104,7 +104,7 @@ public struct ActivityView: View {
                 .listStyle(.inset)
             }
         }
-        .background(NordicTheme.windowBackground)
+        .nordicPageBackground()
     }
 }
 
@@ -186,7 +186,7 @@ public struct SettingsView: View {
             }
             .padding(10)
             .frame(minWidth: 190, idealWidth: 210, maxWidth: 230, maxHeight: .infinity, alignment: .top)
-            .background(NordicTheme.sidebarBackground)
+            .background(NordicSidebarMaterial().ignoresSafeArea())
             .overlay(alignment: .trailing) { Rectangle().fill(NordicTheme.borderSubtle).frame(width: 1) }
 
             ScrollView {
@@ -217,7 +217,7 @@ public struct SettingsView: View {
             }
             .frame(minWidth: 540, maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(NordicTheme.windowBackground)
+        .nordicPageBackground()
     }
 
     private var generalSection: some View {
