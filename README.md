@@ -4,7 +4,7 @@
 [![Platform: macOS](https://img.shields.io/badge/Platform-macOS%20Apple%20Silicon-black.svg)](#prerequisites)
 [![Swift: 6.0+](https://img.shields.io/badge/Swift-6.0%2B-F05138.svg)](#building-testing-and-packaging)
 
-**Låda** (Swedish for *"box"* or *"crate"*) is a native macOS desktop application written in Swift and SwiftUI for managing Apple's official [`container`](https://github.com/apple/container) runtime (`v1.5.0+`).
+**Låda** (Swedish for *"box"* or *"crate"*) is a native macOS desktop application written in Swift and SwiftUI for managing Apple's official [`container`](https://github.com/apple/container) runtime (`v1.5.0+`; tested against `v1.6.1`).
 
 Designed with a **Technical Nordic** visual identity, Låda exposes Apple's lightweight Linux VM-per-container architecture (`Virtualization.framework`, `vmnet`, `virtiofs`, and `container-apiserver`) with real-time telemetry, multi-container Compose stacks, an in-container file browser & editor, an interactive ANSI PTY terminal, a Docker Hub Image Library, and a live Dockerfile Studio — without modifying or replacing Apple's upstream binaries or data directories.
 
@@ -45,14 +45,14 @@ Designed with a **Technical Nordic** visual identity, Låda exposes Apple's ligh
 ![Multi-Container Compose Stacks](docs/screenshots/compose-stacks.png)
 
 - **Compose Stack Orchestration**: Parse and run multi-container `docker-compose.yml` / `compose.yaml` workflows natively on Apple's `container` runtime.
-- **Topological Dependency Plan**: Automatically resolves `depends_on` service ordering, provisions isolated `vmnet` stack networks and named volumes, and injects peer service discovery environment variables and `--add-host` entries.
+- **Topological Dependency Plan**: Automatically resolves `depends_on` service ordering, creates named volumes, and gives each service its name (plus any Compose `aliases:`) as a DNS alias on the `default` network so peers can reach it as e.g. `db`. Single-label names such as `db` need a default DNS domain (`container system dns create test`, then `container system property set dns.domain test`); without one the stack console says which aliases were skipped.
 - **Built-in Stack Templates**: Includes ready-to-run templates for **WordPress + MariaDB**, **Node.js API + Redis + Postgres**, and **Prometheus + Grafana**.
 
 ### 6. Docker Hub Image Library & Curated Presets
 ![Docker Hub Image Library](docs/screenshots/image-library.png)
 
 - **Live Docker Hub Search & Curated Catalog**: Search official and community OCI images or browse curated presets across Web Servers, Databases, Caching & Queues, Dev Runtimes, Base OS, and DevOps tools.
-- **Apple `container` VM Compatibility Tuning**: Automatically configures `PGDATA`, `MYSQL_DATADIR`, or subdirectory mounts for database images (`postgres`, `mysql`, `mariadb`, `mongo`) so ext4 volume root `lost+found` directories never block database initialization, and automatically detaches TTY allocation (`-i`/`-t`) for background servers like `caddy` where required.
+- **Apple `container` VM Compatibility Tuning**: Automatically configures `PGDATA`, `MYSQL_DATADIR`, or subdirectory mounts for database images (`postgres`, `mysql`, `mariadb`, `mongo`) so ext4 volume root `lost+found` directories never block database initialization, starts presets detached without `-i` (which `container run -d -i -t` rejects from a non-terminal), gives shell images such as `alpine` a TTY so they keep running, and starts runtimes without a long-running default (Bun, Temurin) idle for use from the Terminal tab. Every preset tag has an arm64 build, and all presets were verified to start on `container` 1.6.1.
 
 ### 7. Dockerfile & Containerfile Studio + Live Linter
 ![Dockerfile Studio & Live Linter](docs/screenshots/dockerfile-studio.png)
@@ -67,24 +67,28 @@ Designed with a **Technical Nordic** visual identity, Låda exposes Apple's ligh
 
 ---
 
-## Upstream Runtime Compatibility (`apple/container` v1.5.0)
+## Upstream Runtime Compatibility (`apple/container` v1.6.1)
 
-| Capability | Upstream `container` 1.5.0 CLI / Service | Låda Support Status |
+| Capability | Upstream `container` 1.6.1 CLI / Service | Låda Support Status |
 |---|---|---|
 | **Host Baseline** | Apple silicon (`arm64`) + macOS 26+ | **Supported** — Verified by `RuntimeDiscoveryService` & `RuntimeHealthService` |
 | **System Lifecycle** | `container system start \| stop \| status \| version \| df \| logs \| property \| dns \| kernel` | **Supported** — Dashboard, Setup Wizard, Menu Bar Popover, and Settings → System & Runtime |
-| **Container Lifecycle** | `container run \| create \| start \| stop \| restart \| kill \| delete \| prune \| ls \| inspect \| logs \| stats \| exec \| export` | **Supported** — Full table/grid, 5-step creation wizard, 7-tab inspector, live command preview |
-| **In-Container File Browser** | `container exec` streaming POSIX file operations | **Supported** — Native directory browser, in-place text editor, and host import/export |
-| **Multi-Container Stacks** | `docker-compose.yml` / `compose.yaml` orchestration | **Supported** — Topological service ordering, shared `vmnet` stack network, peer host injection |
+| **Container Lifecycle** | `container run \| create \| start \| stop \| kill \| delete \| clean \| prune \| ls \| inspect \| logs \| stats \| exec \| export` (Låda's Restart is `stop` + `start`; upstream has no `restart`) | **Supported** — Full table/grid, 5-step creation wizard, 7-tab inspector, live command preview |
+| **In-Container File Browser** | `container copy` for transfers; `container exec` (no shell) for `ls`, `mkdir`, `rm`, `stat` | **Supported** — Directory browser, editor for text files up to 1 MiB (keeps mode and owner on save), byte-exact upload and download |
+| **Multi-Container Stacks** | `docker-compose.yml` / `compose.yaml` orchestration | **Supported** — Topological service ordering, named volumes, service names as DNS aliases on the `default` network (needs a default DNS domain for single-label names) |
+| **DNS Aliases** | `--network <name>,alias=<name>` (1.6.0+) | **Supported** — Create Container wizard (validated against upstream rules), Networking tab, Compose `aliases:` |
 | **Interactive Terminal** | `container exec -i -t <id> <shell>` | **Supported** — Native POSIX pseudo-terminal (`openpty`) + ANSI PTY canvas & macOS `Terminal.app` launcher |
 | **OCI Images & Docker Hub** | `container image list \| inspect \| pull \| push \| tag \| delete \| prune \| save \| load` | **Supported** — Multi-platform variant inspection, layer history, tar archive save/load, Docker Hub catalog |
 | **Image Builds & Studio** | `container build` + `container builder status \| start \| stop \| delete` | **Supported** — Live streaming BuildKit output, Dockerfile Studio with live linter, Builder VM controls |
 | **Virtual Networks (`vmnet`)** | `container network list \| create \| inspect \| delete \| prune` | **Supported** — Isolated NAT networks, IPv4/IPv6 CIDR validation, attached container topology |
 | **Named Volumes & VirtioFS** | `container volume list \| create \| inspect \| delete \| prune` | **Supported** — Ext4 sparse volume sizing (`-s`), journal mode (`ordered`, `writeback`, `journal`), Finder reveal |
-| **Container Machines** | `container machine list \| create \| inspect \| start \| stop \| delete \| set \| default \| logs \| run \| ssh` | **Supported** — Full lifecycle, CPU/RAM/Home-Mount (`rw`/`ro`/`none`) reconfiguration, console logs |
+| **Container Machines** | `container machine list \| create \| inspect \| stop \| delete \| set \| set-default \| logs \| run` (start = `machine run … true`); `machine.*` defaults from `system property list` | **Supported** — Full lifecycle, CPU/RAM/Home-Mount (`rw`/`ro`/`none`) reconfiguration, console logs |
 | **OCI Registries** | `container registry login --password-stdin \| logout \| list` | **Supported** — macOS Keychain (`Security.framework`) credential storage + stdin piping (never passed in CLI argv) |
 | **Nested Virtualization** | `--virtualization` (`CONFIG_KVM=y` on Apple silicon M3+) | **Supported (Hardware-Gated)** — Automatically enabled on M3/M4/M5 chips; explained when unavailable |
-| **Path Masking** | `--masked-path`, `--read-only-path` | **Experimental** — Clearly badged as experimental in `container` 1.5.0 |
+| **Path Masking** | `--masked-path`, `--read-only-path` | **Experimental** — Clearly badged as experimental in `container` 1.6.1 |
+| **Runtime Health** | `container system status`, `system version` | **Supported** — Flags a CLI/API-server version mismatch (e.g. after upgrading without restarting services) with a Restart Services action, and runtimes older than 1.6.0 for GHSA-vgrw-36j7-r93w and GHSA-fqxg-rrf3-358v |
+| **Kubernetes Clusters** | `container cluster create \| list \| delete \| load-image \| write-config` (experimental, 1.6.1) | **Not yet supported** |
+| **Commit** | `container commit <id> <reference>` (1.6.0+) | **Not yet supported** |
 | **Restart Policies** | `--restart` | **Unsupported by Upstream** — Explicitly flagged in UI and blocked by `ValidationUtils` so policies are never silently ignored |
 
 ---

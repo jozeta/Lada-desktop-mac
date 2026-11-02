@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 Låda (`Lada`) is a native macOS SwiftUI app for managing Apple's official
-[`container`](https://github.com/apple/container) runtime (v1.5.0+): containers, images, Docker Hub
+[`container`](https://github.com/apple/container) runtime (v1.5.0+, tested on 1.6.1): containers, images, Docker Hub
 library, Compose stacks, Dockerfile studio with linter, builds, networks, volumes, machines,
 registries, an in-container file browser, a PTY terminal and a menu-bar popover.
 
@@ -54,3 +54,16 @@ Xcode project) for a release. `Scripts/generate-app-icon.swift` regenerates `App
 - Keep upstream compatibility notes (README "Upstream Runtime Compatibility") in sync when
   targeting a new `container` version.
 - New UI controls get an identifier in `AccessibilityIdentifiers` for the UI automation tests.
+- Never pass `-i` to a detached `container run -d`: Låda has no terminal, and 1.6.1 fails with
+  "Operation not supported by device". Detached shell images get `-t` only.
+- Show measured or reported values only: no invented defaults, estimates or seed data.
+
+## Opt-in live checks
+
+These need the real runtime and are skipped by default:
+
+```sh
+LADA_LIVE_CONTAINER=<running-id> swift test --filter LiveFileOperationsTests   # Files tab via container copy
+LADA_LIVE_PRESETS=all swift test --filter LiveImageLibraryPresetTests        # every Image Library preset starts
+LADA_SNAPSHOT_DIR=/tmp/lada-shots swift test --filter ViewSnapshotTests      # PNGs of every section, light + dark
+```
