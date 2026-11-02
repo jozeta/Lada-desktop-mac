@@ -21,7 +21,7 @@ let package = Package(
                 "Resources/AppIcon.icns"
             ],
             swiftSettings: [
-                .swiftLanguageMode(.v5)
+                .swiftLanguageMode(.v6)
             ]
         ),
         .testTarget(
@@ -29,7 +29,7 @@ let package = Package(
             dependencies: ["Lada"],
             path: "Lada/Tests",
             swiftSettings: [
-                .swiftLanguageMode(.v5)
+                .swiftLanguageMode(.v6)
             ]
         )
     ]

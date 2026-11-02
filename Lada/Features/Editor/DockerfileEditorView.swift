@@ -259,7 +259,7 @@ public enum DockerfileLinter {
 
 // MARK: - Code Completion Item
 
-public struct DockerfileCompletionItem: Identifiable, Equatable {
+public struct DockerfileCompletionItem: Identifiable, Equatable, Sendable {
     public var id: String { insertText }
     public let label: String
     public let insertText: String

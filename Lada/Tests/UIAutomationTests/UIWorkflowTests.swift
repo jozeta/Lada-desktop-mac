@@ -183,14 +183,14 @@ final class UIWorkflowTests: XCTestCase {
         }
         deployRequest.name = "dropped-nginx-app"
 
-        var completed = false
+        let completed = CompletionFlag()
         await appState.buildAndDeployContainer(
             request: deployRequest,
             onProgressLine: { _ in },
-            onComplete: { completed = true }
+            onComplete: { completed.set() }
         )
 
-        XCTAssertTrue(completed)
+        XCTAssertTrue(completed.isSet)
         XCTAssertTrue(appState.containers.contains(where: { $0.id == "dropped-nginx-app" }))
         XCTAssertTrue(appState.images.contains(where: { $0.fullReference == deployRequest.imageReference }))
     }
@@ -308,4 +308,20 @@ final class UIWorkflowTests: XCTestCase {
     }
 }
 
+/// Thread-safe flag for @Sendable completion callbacks (Swift 6 forbids mutating a captured var).
+private final class CompletionFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
 
+    func set() {
+        lock.lock()
+        value = true
+        lock.unlock()
+    }
+
+    var isSet: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+}

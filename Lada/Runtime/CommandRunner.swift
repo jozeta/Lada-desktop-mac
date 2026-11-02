@@ -261,16 +261,18 @@ public actor CommandRunner: CommandExecuting {
         }
 
         let timeoutBox = TimeoutFlagBox()
-        let timeoutWorkItem: DispatchWorkItem?
+        // A Task (Sendable) rather than a DispatchWorkItem, so it can be cancelled from the
+        // @Sendable termination and cancellation handlers under Swift 6 strict concurrency.
+        let timeoutWorkItem: Task<Void, Never>?
         if let timeoutSeconds, timeoutSeconds > 0 {
-            let item = DispatchWorkItem {
+            timeoutWorkItem = Task.detached {
+                try? await Task.sleep(for: .seconds(timeoutSeconds))
+                guard !Task.isCancelled else { return }
                 if process.isRunning {
                     timeoutBox.markTimedOut()
                     process.terminate()
                 }
             }
-            timeoutWorkItem = item
-            DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds, execute: item)
         } else {
             timeoutWorkItem = nil
         }

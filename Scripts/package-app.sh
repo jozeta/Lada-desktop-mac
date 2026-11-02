@@ -5,9 +5,13 @@ SCRIPT_DIR="${0:A:h}"
 PROJECT_ROOT="${SCRIPT_DIR:h}"
 BUILD_DIR="${PROJECT_ROOT}/build"
 APP_BUNDLE="${BUILD_DIR}/Lada.app"
-DMG_PATH="${BUILD_DIR}/Lada-1.5.0.dmg"
-ZIP_PATH="${BUILD_DIR}/Lada-1.5.0-macOS-arm64.zip"
+# The app version comes from Info.plist (CFBundleShortVersionString), so artifact names follow it.
+APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${PROJECT_ROOT}/Lada/Resources/Info.plist")"
+DMG_PATH="${BUILD_DIR}/Lada-${APP_VERSION}.dmg"
+ZIP_PATH="${BUILD_DIR}/Lada-${APP_VERSION}-macOS-arm64.zip"
 NOTARIZE_ZIP="${BUILD_DIR}/Lada-notarize.zip"
+# notarytool keychain profile. The default is the developer's shared profile (also used by MySpaces);
+# override with LADA_NOTARY_PROFILE.
 NOTARY_PROFILE="${LADA_NOTARY_PROFILE:-MySpacesNotary}"
 CONTENTS_DIR="${APP_BUNDLE}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
@@ -15,7 +19,7 @@ RESOURCES_DIR="${CONTENTS_DIR}/Resources"
 ICNS_PATH="${PROJECT_ROOT}/Lada/Resources/AppIcon.icns"
 
 # Clean up any legacy non-ASCII build outputs
-rm -rf "${BUILD_DIR}/Låda.app" "${BUILD_DIR}/Låda-1.5.0.dmg" "${BUILD_DIR}/Låda-1.5.0-macOS-arm64.zip"
+rm -rf "${BUILD_DIR}/Låda.app" "${BUILD_DIR}/Låda-${APP_VERSION}.dmg" "${BUILD_DIR}/Låda-${APP_VERSION}-macOS-arm64.zip"
 
 if [[ ! -f "${ICNS_PATH}" ]]; then
   echo "==> Generating Technical Nordic macOS AppIcon.icns..."

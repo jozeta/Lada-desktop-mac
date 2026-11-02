@@ -22,8 +22,11 @@ need macOS 26+ on Apple silicon and the `container` CLI in `/usr/local/bin` or
 `/opt/homebrew/bin`). Without the CLI, the app's Mock Sandbox mode uses
 `MockContainerRuntimeService`.
 
-The README mentions `Scripts/package-app.sh` for building `Lada.app` / `.dmg`, but that script
-is **not in the repo**; packaging is currently done through Xcode.
+`Scripts/package-app.sh` builds a release `Lada.app`, a `.dmg` and a distribution zip in `build/`
+(gitignored), and notarizes and staples them with `xcrun notarytool` (keychain profile from
+`LADA_NOTARY_PROFILE`, default `MySpacesNotary`). Artifact names take the version from
+`Lada/Resources/Info.plist`, so bump `CFBundleShortVersionString` (and `MARKETING_VERSION` in the
+Xcode project) for a release. `Scripts/generate-app-icon.swift` regenerates `AppIcon.icns`.
 
 ## Architecture (`Lada/`)
 
