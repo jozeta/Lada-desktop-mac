@@ -6,6 +6,9 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Fix: with the inspector open, the Containers filter overlapped "Prune Stopped…" and the
+  inspector title was truncated (e.g. "ng…ss"). The filter falls back to a menu, the header
+  actions to icon-only buttons with tooltips, and "Unknown" is only offered when relevant
 - Fix: pushing or saving a pulled image failed ("content with digest … not found") because only
   the host's platform is present locally; push and save now pass that platform. Verified with a
   local registry: tag, push, save and load round-trip

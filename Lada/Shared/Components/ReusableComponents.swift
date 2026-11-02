@@ -155,13 +155,18 @@ public struct NordicDetailHeader<Actions: View>: View {
                         .textSelection(.enabled)
                 }
             }
-            .frame(minWidth: 110, alignment: .leading)
-            Spacer(minLength: 8)
-            HStack(spacing: 6) {
-                actions()
-            }
-            .fixedSize(horizontal: true, vertical: false)
+            .frame(minWidth: 180, alignment: .leading)
             .layoutPriority(1)
+            Spacer(minLength: 8)
+            // Full labels when there is room, icon-only buttons (titles stay as tooltips and
+            // accessibility labels) when the inspector is narrow, so the title is never squeezed.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) { actions() }
+                    .fixedSize(horizontal: true, vertical: false)
+                HStack(spacing: 6) { actions() }
+                    .labelStyle(.iconOnly)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

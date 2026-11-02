@@ -20,6 +20,11 @@ public struct ContainersView: View {
         public var id: String { rawValue }
     }
 
+    /// "Unknown" is only offered while some container is actually in that state.
+    private var visibleFilters: [StateFilter] {
+        StateFilter.allCases.filter { $0 != .unknown || stateFilter == .unknown || appState.containers.contains { $0.state == .unknown } }
+    }
+
     public init(appState: AppState) {
         self.appState = appState
     }
@@ -56,14 +61,27 @@ public struct ContainersView: View {
             VStack(spacing: 0) {
                 // Filter & Action Bar
                 HStack(spacing: 10) {
-                    Picker("Filter", selection: $stateFilter) {
-                        ForEach(StateFilter.allCases) { f in
-                            Text(f.rawValue).tag(f)
+                    // Segmented when it fits, a compact menu when the inspector narrows the table.
+                    ViewThatFits(in: .horizontal) {
+                        Picker("Filter", selection: $stateFilter) {
+                            ForEach(visibleFilters) { f in
+                                Text(f.rawValue).tag(f)
+                            }
                         }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
+
+                        Picker("Filter", selection: $stateFilter) {
+                            ForEach(visibleFilters) { f in
+                                Text(f.rawValue).tag(f)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .fixedSize()
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(maxWidth: 380)
+                    .layoutPriority(-1)
 
                     Spacer()
 
@@ -71,6 +89,7 @@ public struct ContainersView: View {
                         confirmPruneStopped = true
                     }
                     .controlSize(.small)
+                    .fixedSize()
                     .disabled(!appState.containers.contains { $0.state != .running })
 
                     Button {

@@ -62,6 +62,14 @@ final class ViewSnapshotTests: XCTestCase {
     func testMainWindowSnapshots() async throws {
         _ = try outputDirectory()
         let state = await makeAppState()
-        try snapshot(MainWindowView(appState: state), name: "main-dashboard", size: CGSize(width: 1400, height: 900))
+        for section in NavigationSection.allCases {
+            state.selectedSection = section
+            let slug = section.rawValue.lowercased().replacingOccurrences(of: " ", with: "-")
+            try snapshot(MainWindowView(appState: state), name: "main-\(slug)", size: CGSize(width: 1400, height: 900))
+        }
+        // Container inspector for the running mock container.
+        state.selectedSection = .containers
+        state.selectedContainerID = state.containers.first { $0.state == .running }?.id
+        try snapshot(MainWindowView(appState: state), name: "main-container-detail", size: CGSize(width: 1400, height: 900))
     }
 }
