@@ -356,6 +356,13 @@ public struct ContainerModel: Identifiable, Codable, Sendable, Equatable {
         self.rawInspectJSON = rawInspectJSON
     }
 
+    /// The stack (Compose project) this container belongs to, from the label Låda sets when it
+    /// starts a stack.
+    public var composeProject: String? {
+        let name = configuration.labels["com.lada.compose.project"]?.trimmingCharacters(in: .whitespaces) ?? ""
+        return name.isEmpty ? nil : name
+    }
+
     /// Containers the runtime creates for its own use (the BuildKit builder, machine VMs), marked
     /// with `com.apple.container.resource.role` or a builder/machine plugin label.
     public var isRuntimeManaged: Bool {

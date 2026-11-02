@@ -6,6 +6,22 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Stacks is a stack builder: Add Service (and Edit/Remove on each service) opens a form for name,
+  image (autocomplete or an Image Library preset with generated secrets), ports, settings, storage,
+  start order and command, with a preview; saving writes only that service's block into the compose
+  file (other text and comments are kept), and services typed in the Compose File tab appear under
+  Services. Starting a stack keeps running if you leave the screen
+- Containers groups each started stack under one collapsible row named after the stack (members by
+  service name, "2/3 running", start/stop all); selecting it shows a stack summary. Collapsed groups
+  are remembered
+- Stack templates: added PostgreSQL + Adminer, Gitea + PostgreSQL, NATS + Valkey, Mailpit + private
+  registry and Vault (dev mode); updated tags; passwords are generated each time a template is used
+  (shared ones stay consistent). Templates & Files has New Empty Stack, Open Recent, Save and Save As
+  and opens any `.yml`/`.yaml` compose file
+- Fix: the WordPress template ran nginx instead of WordPress and pointed at the database by
+  container name; it now runs `wordpress:php8.4-apache` against the `mysql` service
+- Removed the Builds page; build images in the Dockerfile Editor (the toolbar's Build Image and the
+  dashboard action open it)
 - Stacks redesigned for clarity: a one-line explanation, the stack's state in words ("2 of 3
   services running"), Start / Stop / Remove next to it, and Services, Compose File and Logs tabs.
   Services is the default, with a three-step "How it works" guide until the stack is started

@@ -193,7 +193,6 @@ public struct MainWindowView: View {
                     sidebarRow(for: .images, icon: .images, badge: appState.images.isEmpty ? nil : "\(appState.images.count)")
                     sidebarRow(for: .imageLibrary, icon: .imageLibrary, badge: nil)
                     sidebarRow(for: .dockerfileEditor, icon: .dockerfileEditor, badge: nil)
-                    sidebarRow(for: .builds, icon: .builds, badge: nil)
 
                     sidebarGroup("Infrastructure")
                     sidebarRow(for: .networks, icon: .networks, badge: appState.networks.isEmpty ? nil : "\(appState.networks.count)")
@@ -305,8 +304,6 @@ public struct MainWindowView: View {
             ImageLibraryView(appState: appState)
         case .dockerfileEditor:
             DockerfileEditorView(appState: appState)
-        case .builds:
-            BuildsView(appState: appState)
         case .networks:
             NetworksView(appState: appState)
         case .volumes:
@@ -371,11 +368,11 @@ public struct MainWindowView: View {
             .accessibilityIdentifier(AccessibilityID.pullImageButton)
 
             Button {
-                appState.selectedSection = .builds
+                appState.selectedSection = .dockerfileEditor
             } label: {
                 Label("Build Image", systemImage: "hammer")
             }
-            .help("Open Build Studio")
+            .help("Build an image in the Dockerfile Editor")
             .accessibilityIdentifier(AccessibilityID.buildImageButton)
 
             Button {

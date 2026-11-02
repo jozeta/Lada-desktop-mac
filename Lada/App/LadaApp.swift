@@ -52,8 +52,6 @@ public struct LadaApp: App {
                     .keyboardShortcut("l", modifiers: [.command, .shift])
                 Button("Dockerfile Editor") { appState.selectedSection = .dockerfileEditor }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
-                Button("Builds") { appState.selectedSection = .builds }
-                    .keyboardShortcut("4", modifiers: [.command])
                 Button("Networks") { appState.selectedSection = .networks }
                     .keyboardShortcut("5", modifiers: [.command])
                 Button("Volumes") { appState.selectedSection = .volumes }

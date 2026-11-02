@@ -4,11 +4,68 @@ public struct ContainersView: View {
     @ObservedObject var appState: AppState
 
     @State private var stateFilter: StateFilter = .all
-    @State private var sortOrder: [KeyPathComparator<ContainerModel>] = [
-        .init(\.id, order: .forward)
+    @State private var sortOrder: [KeyPathComparator<ContainerListRow>] = [
+        .init(\.sortName, order: .forward)
     ]
     @State private var containerPendingDeletion: ContainerModel? = nil
     @State private var confirmPruneStopped: Bool = false
+
+    // MARK: - Stack group cells
+
+    private func stackNameCell(_ stack: ContainerStackGroup) -> some View {
+        HStack(spacing: 7) {
+            LadaIcon(.stacks, size: 14)
+                .foregroundStyle(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
+            Text(stack.name)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(NordicTheme.primaryText)
+                .help("Stack \(stack.name)")
+        }
+    }
+
+    private func stackStatusCell(_ stack: ContainerStackGroup) -> some View {
+        NordicStatusBadge(
+            label: "\(stack.runningCount)/\(stack.members.count) running",
+            tone: stack.runningCount == stack.members.count ? .positive : (stack.runningCount > 0 ? .warning : .neutral)
+        )
+    }
+
+    private func stackImageCell(_ stack: ContainerStackGroup) -> some View {
+        Text("\(stack.members.count) container\(stack.members.count == 1 ? "" : "s")")
+            .font(.system(size: 12))
+            .foregroundStyle(NordicTheme.secondaryText)
+    }
+
+    private func stackPortsCell(_ stack: ContainerStackGroup) -> some View {
+        let ports = stack.members.flatMap { $0.configuration.publishedPorts.map { "\($0.hostPort)" } }
+        return Text(ports.isEmpty ? "—" : ports.joined(separator: ", "))
+            .font(.system(size: 12).monospacedDigit())
+            .foregroundStyle(NordicTheme.secondaryText)
+            .lineLimit(1)
+    }
+
+    private func stackActionsCell(_ stack: ContainerStackGroup) -> some View {
+        HStack(spacing: 6) {
+            if stack.runningCount > 0 {
+                Button {
+                    Task { await StackGroupSummaryView.stopAll(stack, appState: appState) }
+                } label: {
+                    Image(systemName: "stop.fill")
+                }
+                .buttonStyle(.borderless)
+                .help("Stop every container in this stack")
+            }
+            if stack.runningCount < stack.members.count {
+                Button {
+                    Task { await StackGroupSummaryView.startAll(stack, appState: appState) }
+                } label: {
+                    Image(systemName: "play.fill").foregroundStyle(NordicTheme.statusGreen)
+                }
+                .buttonStyle(.borderless)
+                .help("Start every container in this stack")
+            }
+        }
+    }
 
     public enum StateFilter: String, CaseIterable, Identifiable {
         case all = "All"
@@ -47,7 +104,44 @@ public struct ContainersView: View {
                 }
                 return true
             }
-            .sorted(using: sortOrder)
+    }
+
+    /// Stack members grouped under their stack (by the `com.lada.compose.project` label Låda sets
+    /// when it starts a stack); everything else as single rows. Groups and members are sorted.
+    private var listRows: [ContainerListRow] {
+        var groups: [String: [ContainerModel]] = [:]
+        var singles: [ContainerListRow] = []
+        for c in filteredContainers {
+            if let stack = c.composeProject {
+                groups[stack, default: []].append(c)
+            } else {
+                singles.append(.container(c))
+            }
+        }
+        let stackRows = groups.map { name, members in
+            ContainerListRow.stack(ContainerStackGroup(
+                name: name,
+                members: members.map(ContainerListRow.container).sorted(using: sortOrder).compactMap(\.container)
+            ))
+        }
+        return (stackRows + singles).sorted(using: sortOrder)
+    }
+
+    private func isValidSelection(_ id: String?) -> Bool {
+        guard let id else { return false }
+        if id.hasPrefix(ContainerListRow.stackPrefix) {
+            return listRows.contains { $0.id == id }
+        }
+        return filteredContainers.contains { $0.id == id }
+    }
+
+    private func expandedBinding(for stack: String) -> Binding<Bool> {
+        Binding(
+            get: { !appState.collapsedContainerStacks.contains(stack) },
+            set: { expanded in
+                if expanded { appState.collapsedContainerStacks.remove(stack) } else { appState.collapsedContainerStacks.insert(stack) }
+            }
+        )
     }
 
     private var selectedContainer: ContainerModel? {
@@ -123,34 +217,54 @@ public struct ContainersView: View {
                         }
                     )
                 } else {
-                    Table(filteredContainers, selection: $appState.selectedContainerID, sortOrder: $sortOrder) {
-                        TableColumn("Name", value: \.id) { container in
+                    Table(of: ContainerListRow.self, selection: $appState.selectedContainerID, sortOrder: $sortOrder) {
+                        TableColumn("Name", value: \.sortName) { row in
+                            switch row {
+                            case .container(let container):
                             HStack(spacing: 7) {
                                 LadaIcon(.containers, size: 14)
                                     .foregroundStyle(container.state == .running ? NordicTheme.statusGreen : NordicTheme.secondaryText)
-                                Text(container.id)
+                                // Inside a stack group, the service name (db, web…) reads better than
+                                // the full container name, which stays in the tooltip.
+                                Text(container.composeProject != nil ? (container.configuration.labels["com.lada.compose.service"] ?? container.id) : container.id)
                                     .font(.system(size: 12, weight: .semibold))
                                     .foregroundStyle(NordicTheme.primaryText)
+                                    .help(container.id)
+                            }
+                            case .stack(let stack):
+                                stackNameCell(stack)
                             }
                         }
                         .width(min: 120, ideal: 150)
 
-                        TableColumn("Status", value: \.rawState) { container in
+                        TableColumn("Status", value: \.sortState) { row in
+                            switch row {
+                            case .container(let container):
                             NordicStatusBadge(containerState: container.state)
+                            case .stack(let stack):
+                                stackStatusCell(stack)
+                            }
                         }
                         .width(min: 90, ideal: 95)
 
-                        TableColumn("Image", value: \.imageReference) { container in
+                        TableColumn("Image", value: \.sortImage) { row in
+                            switch row {
+                            case .container(let container):
                             Text(container.shortImageReference)
                                 .font(.system(size: 12))
                                 .foregroundStyle(NordicTheme.secondaryText)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                                 .help(container.imageReference)
+                            case .stack(let stack):
+                                stackImageCell(stack)
+                            }
                         }
                         .width(min: 110, ideal: 150)
 
-                        TableColumn("Ports") { container in
+                        TableColumn("Ports") { row in
+                            switch row {
+                            case .container(let container):
                             HStack(spacing: 5) {
                                 if container.state == .running, let firstPort = container.configuration.publishedPorts.first {
                                     let probe = appState.portHealthMap[firstPort.hostPort]
@@ -169,10 +283,15 @@ public struct ContainersView: View {
                                     .lineLimit(1)
                                     .help(container.primaryIPv4.map { "IP \($0)" } ?? "")
                             }
+                            case .stack(let stack):
+                                stackPortsCell(stack)
+                            }
                         }
                         .width(min: 90, ideal: 110)
 
-                        TableColumn("Actions") { container in
+                        TableColumn("Actions") { row in
+                            switch row {
+                            case .container(let container):
                             HStack(spacing: 6) {
                                 Button {
                                     if container.state == .running {
@@ -235,8 +354,23 @@ public struct ContainersView: View {
                                 .buttonStyle(.borderless)
                                 .help("Delete Container")
                             }
+                            case .stack(let stack):
+                                stackActionsCell(stack)
+                            }
                         }
                         .width(88)
+                    } rows: {
+                        ForEach(listRows) { row in
+                            if case .stack(let stack) = row {
+                                DisclosureTableRow(row, isExpanded: expandedBinding(for: stack.name)) {
+                                    ForEach(stack.members) { member in
+                                        TableRow(ContainerListRow.container(member))
+                                    }
+                                }
+                            } else {
+                                TableRow(row)
+                            }
+                        }
                     }
                     // No striped filler rows below the last container: a calmer, flat list.
                     .alternatingRowBackgrounds(.disabled)
@@ -251,6 +385,10 @@ public struct ContainersView: View {
             if let selected = selectedContainer {
                 ContainerDetailView(appState: appState, container: selected)
                     .frame(minWidth: 460, idealWidth: 540, maxWidth: .infinity, maxHeight: .infinity)
+            } else if let id = appState.selectedContainerID, id.hasPrefix(ContainerListRow.stackPrefix),
+                      case .stack(let group)? = listRows.first(where: { $0.id == id }) {
+                StackGroupSummaryView(appState: appState, group: group)
+                    .frame(minWidth: 460, idealWidth: 540, maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 NordicEmptyState(
                     icon: .containers,
@@ -262,13 +400,13 @@ public struct ContainersView: View {
             }
         }
         .onAppear {
-            if appState.selectedContainerID == nil || !filteredContainers.contains(where: { $0.id == appState.selectedContainerID }) {
-                appState.selectedContainerID = filteredContainers.first?.id
+            if !isValidSelection(appState.selectedContainerID) {
+                appState.selectedContainerID = listRows.first?.id
             }
         }
         .onChange(of: appState.containers.count) { _, _ in
-            if appState.selectedContainerID == nil || !filteredContainers.contains(where: { $0.id == appState.selectedContainerID }) {
-                appState.selectedContainerID = filteredContainers.first?.id
+            if !isValidSelection(appState.selectedContainerID) {
+                appState.selectedContainerID = listRows.first?.id
             }
         }
         .confirmationDialog(

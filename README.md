@@ -44,9 +44,10 @@ Designed with a **Technical Nordic** visual identity, Låda exposes Apple's ligh
 ### 5. Multi-Container Compose Stacks (`docker-compose.yml`)
 ![Multi-Container Compose Stacks](docs/screenshots/compose-stacks.png)
 
-- **Compose Stack Orchestration**: Parse and run multi-container `docker-compose.yml` / `compose.yaml` workflows natively on Apple's `container` runtime.
+- **Stack Builder**: Build a stack with a form (Add Service: image with autocomplete or an Image Library preset, ports, settings, storage, start order) or by typing in the Compose File tab; both stay in sync, editing only the affected service so your other text and comments are kept. Start, stop and remove the whole stack from one place.
+- **Stacks in Containers**: Started stacks appear in the Containers list as one collapsible group named after the stack, with a summary (start/stop all) when the group is selected.
 - **Topological Dependency Plan**: Automatically resolves `depends_on` service ordering, creates named volumes, and gives each service its name (plus any Compose `aliases:`) as a DNS alias on the `default` network so peers can reach it as e.g. `db`. Single-label names such as `db` need a default DNS domain (`container system dns create test`, then `container system property set dns.domain test`); without one the stack console says which aliases were skipped.
-- **Built-in Stack Templates**: Includes ready-to-run templates for **WordPress + MariaDB**, **Node.js API + Redis + Postgres**, and **Prometheus + Grafana**.
+- **Stack Templates**: Website + PostgreSQL + Redis, WordPress + MySQL, PostgreSQL + Adminer, Gitea + PostgreSQL, Prometheus + Grafana, Python API + Redis, NATS + Valkey, Mailpit + private registry, and Vault (dev mode). Passwords are generated per use. Open and save any `.yml`/`.yaml` compose file, with recent files.
 
 ### 6. Docker Hub Image Library & Curated Presets
 ![Docker Hub Image Library](docs/screenshots/image-library.png)
@@ -79,7 +80,7 @@ Designed with a **Technical Nordic** visual identity, Låda exposes Apple's ligh
 | **DNS Aliases** | `--network <name>,alias=<name>` (1.6.0+) | **Supported** — Create Container wizard (validated against upstream rules), Networking tab, Compose `aliases:` |
 | **Interactive Terminal** | `container exec -i -t <id> <shell>` | **Supported** — Native POSIX pseudo-terminal (`openpty`) + ANSI PTY canvas & macOS `Terminal.app` launcher |
 | **OCI Images & Docker Hub** | `container image list \| inspect \| pull \| push \| tag \| delete \| prune \| save \| load` | **Supported** — Multi-platform variant inspection, layer history, tar archive save/load, Docker Hub catalog |
-| **Image Builds & Studio** | `container build` + `container builder status \| start \| stop \| delete` | **Supported** — Live streaming BuildKit output, Dockerfile Studio with live linter, Builder VM controls |
+| **Image Builds** | `container build`, `container builder status \| stop` | **Supported** — In the Dockerfile Editor: live BuildKit output, linter, build and run |
 | **Virtual Networks (`vmnet`)** | `container network list \| create \| inspect \| delete \| prune` | **Supported** — Isolated NAT networks, IPv4/IPv6 CIDR validation, attached container topology |
 | **Named Volumes & VirtioFS** | `container volume list \| create \| inspect \| delete \| prune` | **Supported** — Ext4 sparse volume sizing (`-s`), journal mode (`ordered`, `writeback`, `journal`), Finder reveal |
 | **Container Machines** | `container machine list \| create \| inspect \| stop \| delete \| set \| set-default \| logs \| run` (start = `machine run … true`); `machine.*` defaults from `system property list` | **Supported** — Full lifecycle, CPU/RAM/Home-Mount (`rw`/`ro`/`none`) reconfiguration, console logs |
@@ -134,12 +135,12 @@ Lada/
 │   │   ├── ContainerDetailView.swift      # 7-tab container inspector
 │   │   ├── ContainerFileBrowserView.swift # In-container file browser, viewer/editor & host import/export
 │   │   └── CreateContainerWizardView.swift
-│   ├── Stacks/StacksView.swift            # Multi-container Compose Stacks manager & YAML editor
+│   ├── Stacks/StacksView.swift            # Stack builder: services form, compose file, logs
+│   ├── Stacks/StackServiceEditorView.swift # Add/edit one service (writes the compose file)
 │   ├── Terminal/InteractiveTerminalView.swift # Native POSIX PTY + direct-keystroke ANSI terminal canvas
 │   ├── Images/ImagesView.swift            # Local OCI image manager & layer inspector
 │   ├── ImageLibrary/ImageLibraryView.swift # Docker Hub search & 1-click preset deployment
 │   ├── Editor/DockerfileEditorView.swift  # Dockerfile Studio, live linter & 1-click build/run
-│   ├── Builds/BuildsView.swift            # BuildKit job monitor & Builder VM controls
 │   ├── Networks/NetworksView.swift        # vmnet virtual network manager
 │   ├── Volumes/VolumesView.swift          # Ext4 sparse volume & VirtioFS manager
 │   ├── Machines/MachinesView.swift        # Linux container machine lifecycle & resource controls

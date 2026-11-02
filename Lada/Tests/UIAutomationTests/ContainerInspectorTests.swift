@@ -157,6 +157,48 @@ final class ContainerInspectorTests: XCTestCase {
         XCTAssertEqual(appState.stacks.tab, .file)
     }
 
+    func testStartedStackIsGroupedInContainers() async throws {
+        let preferences = AppPreferences()
+        preferences.hasCompletedFirstLaunchSetup = true
+        let appState = AppState(preferences: preferences, injectedService: MockContainerRuntimeService())
+        await appState.refreshAll(isUserInitiated: false)
+        let template = try XCTUnwrap(ComposeStackTemplate.allTemplates.first { $0.id == "postgres-adminer" })
+        appState.stacks.yamlText = template.instantiate()
+        await appState.stacks.start(appState: appState)
+
+        let members = appState.containers.filter { $0.composeProject == "pg-admin" }
+        XCTAssertEqual(Set(members.map(\.id)), ["pg-admin-db", "pg-admin-ui"])
+        XCTAssertEqual(appState.containers.first { $0.id == "pg-admin-db" }?.configuration.labels["com.lada.compose.service"], "db")
+
+        // The table groups them under one collapsible stack row.
+        appState.selectedSection = .containers
+        appState.selectedContainerID = "stack:pg-admin"
+        let win = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 1400, height: 880), styleMask: [.titled], backing: .buffered, defer: false)
+        win.contentView = NSHostingView(rootView: MainWindowView(appState: appState).frame(width: 1400, height: 880))
+        win.orderBack(nil)
+        window = win
+        try await Task.sleep(for: .milliseconds(500))
+        XCTAssertEqual(appState.selectedContainerID, "stack:pg-admin", "the stack row is a valid selection")
+
+        appState.collapsedContainerStacks.insert("pg-admin")
+        try await Task.sleep(for: .milliseconds(200))
+        appState.selectedSection = .networks
+        try await Task.sleep(for: .milliseconds(200))
+        appState.selectedSection = .containers
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertTrue(appState.collapsedContainerStacks.contains("pg-admin"), "collapse state is remembered")
+
+        if let dir = ProcessInfo.processInfo.environment["LADA_SNAPSHOT_DIR"], !dir.isEmpty {
+            appState.collapsedContainerStacks.remove("pg-admin")
+            try await Task.sleep(for: .milliseconds(300))
+            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+            if let host = win.contentView, let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                host.cacheDisplay(in: host.bounds, to: rep)
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent("containers-stack-group.png"))
+            }
+        }
+    }
+
     /// Opt-in: types into the real terminal view (synthesized key events, like a keyboard) against
     /// a running container and checks the shell answers. Skipped unless `LADA_LIVE_CONTAINER` is set;
     /// with `LADA_SNAPSHOT_DIR` it also saves a picture of the terminal.

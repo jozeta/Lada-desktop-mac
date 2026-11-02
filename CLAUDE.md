@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Låda (`Lada`) is a native macOS SwiftUI app for managing Apple's official
 [`container`](https://github.com/apple/container) runtime (v1.5.0+, tested on 1.6.1): containers, images, Docker Hub
-library, Compose stacks, Dockerfile studio with linter, builds, networks, volumes, machines,
+library, Compose stacks (a stack builder), Dockerfile studio with linter and builds, networks, volumes, machines,
 registries, an in-container file browser, a PTY terminal and a menu-bar popover.
 
 ## Commands

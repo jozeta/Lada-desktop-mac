@@ -63,7 +63,6 @@ public enum NavigationSection: String, Codable, CaseIterable, Identifiable, Send
     case images = "Images"
     case imageLibrary = "Image Library"
     case dockerfileEditor = "Dockerfile Editor"
-    case builds = "Builds"
     case networks = "Networks"
     case volumes = "Volumes"
     case machines = "Machines"

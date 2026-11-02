@@ -60,10 +60,10 @@ public final class AppState: ObservableObject {
     /// Per-container inspector state (tab, terminal session, files, logs) that survives switching
     /// containers and leaving the Containers section.
     public let workspaces = ContainerWorkspaceStore()
-    /// The Builds screen's form and running build (survives leaving the screen).
     /// The Stacks screen's compose file, activity and tab (survives leaving the screen).
     public let stacks = StackWorkspace()
-    public private(set) lazy var builds = BuildWorkspace(cpus: preferences.defaultBuildCPUs, memoryMB: preferences.defaultBuildMemoryMB)
+    /// Stack groups the user collapsed in the Containers list (expanded by default).
+    @Published public var collapsedContainerStacks: Set<String> = []
     @Published public var containerStats: [String: ContainerStatsModel] = [:]
     @Published public var containerTelemetryHistory: [String: [ContainerPerformanceSample]] = [:]
     @Published public var systemTelemetryHistory: [ContainerPerformanceSample] = []

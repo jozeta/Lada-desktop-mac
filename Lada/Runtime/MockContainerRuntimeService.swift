@@ -469,10 +469,12 @@ public final class MockContainerRuntimeService: ContainerRuntimeService, @unchec
                 sshForwarding: request.sshAgentForwarding,
                 capAdd: request.capAdd,
                 capDrop: request.capDrop,
+                labels: Dictionary(request.labels.filter { !$0.key.isEmpty }.map { ($0.key, $0.value) }, uniquingKeysWith: { _, last in last }),
                 mounts: request.mounts,
                 publishedPorts: request.publishedPorts,
                 publishedSockets: request.publishedSockets,
-                configuredNetworks: [request.networkName]
+                configuredNetworks: [request.networkName],
+                networkAliases: request.dnsAliases.isEmpty ? [:] : [request.networkName: request.dnsAliases]
             ),
             networks: request.startImmediately ? [
                 ContainerNetworkAttachment(

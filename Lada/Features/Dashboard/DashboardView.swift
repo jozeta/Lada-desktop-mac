@@ -329,9 +329,9 @@ public struct DashboardView: View {
                 .controlSize(.regular)
 
                 Button {
-                    appState.selectedSection = .builds
+                    appState.selectedSection = .dockerfileEditor
                 } label: {
-                    Label("Build Image from Context…", systemImage: "hammer")
+                    Label("Build an Image…", systemImage: "hammer")
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .controlSize(.regular)

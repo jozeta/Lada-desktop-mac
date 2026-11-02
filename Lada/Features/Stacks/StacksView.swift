@@ -7,15 +7,25 @@ public struct StacksView: View {
 
 
     @ObservedObject private var work: StackWorkspace
+    @State private var editTarget: ServiceEditTarget?
+
+    enum ServiceEditTarget: Identifiable {
+        case add
+        case edit(ComposeServiceSpec)
+        var id: String {
+            switch self {
+            case .add: return "add"
+            case .edit(let svc): return "edit-\(svc.serviceName)"
+            }
+        }
+    }
 
     public init(appState: AppState) {
         self.appState = appState
         self.work = appState.stacks
     }
 
-    private var parsedStack: ParsedComposeStack {
-        ComposeParser.parse(yaml: work.yamlText)
-    }
+    private var parsedStack: ParsedComposeStack { work.parsed }
 
     private var runningCountInStack: Int {
         parsedStack.services.filter { svc in
@@ -43,9 +53,19 @@ public struct StacksView: View {
                 .labelsHidden()
                 .fixedSize()
                 Spacer()
+                if work.tab == .services {
+                    Button {
+                        editTarget = .add
+                    } label: {
+                        Label("Add Service", systemImage: "plus")
+                    }
+                    .controlSize(.small)
+                    .accessibilityIdentifier("lada.stacks.addService")
+                    .help("Add a container to this stack with a form; the compose file is updated")
+                }
                 if work.tab == .logs {
                     Button {
-                        Task { await refreshUnifiedLogs() }
+                        Task { await work.refreshLogs(appState: appState) }
                     } label: {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
@@ -86,8 +106,16 @@ public struct StacksView: View {
                 appState.editorDraftComposeYAML = nil
             }
         }
+        .sheet(item: $editTarget) { target in
+            switch target {
+            case .add:
+                StackServiceEditorView(appState: appState, work: work, service: nil) { editTarget = nil }
+            case .edit(let svc):
+                StackServiceEditorView(appState: appState, work: work, service: svc) { editTarget = nil }
+            }
+        }
         .onChange(of: work.tab) { _, tab in
-            if tab == .logs { Task { await refreshUnifiedLogs() } }
+            if tab == .logs { Task { await work.refreshLogs(appState: appState) } }
         }
     }
 
@@ -132,18 +160,35 @@ public struct StacksView: View {
                 }
                 Spacer()
                 Menu {
-                    Section("Start from a template") {
+                    Button("New Empty Stack") {
+                        work.currentFileURL = nil
+                        work.yamlText = "name: my-stack\n\nservices:\n"
+                        work.tab = .services
+                    }
+                    Menu("Start from a Template") {
                         ForEach(ComposeStackTemplate.allTemplates) { template in
                             Button("\(template.title) — \(template.subtitle)") {
                                 work.currentFileURL = nil
-                                work.yamlText = template.yamlContent
+                                work.yamlText = template.instantiate()
                                 work.tab = .services
                             }
                         }
                     }
                     Divider()
-                    Button("Open docker-compose.yml…") { openComposeFileFromDisk() }
-                    Button("Save Compose File…") { saveComposeFileToDisk() }
+                    Button("Open Compose File…") { openComposeFileFromDisk() }
+                    if !work.recentFiles.isEmpty {
+                        Menu("Open Recent") {
+                            ForEach(work.recentFiles, id: \.self) { url in
+                                Button((url.path as NSString).abbreviatingWithTildeInPath) {
+                                    work.open(url)
+                                    work.tab = .services
+                                }
+                            }
+                        }
+                    }
+                    Divider()
+                    Button(work.currentFileURL == nil ? "Save…" : "Save") { saveComposeFile(forceChoose: false) }
+                    Button("Save As…") { saveComposeFile(forceChoose: true) }
                 } label: {
                     Label("Templates & Files", systemImage: "doc.on.doc")
                 }
@@ -152,7 +197,7 @@ public struct StacksView: View {
 
                 if existingCountInStack > 0 {
                     Button {
-                        Task { await stopStackServices() }
+                        Task { await work.stop(appState: appState) }
                     } label: {
                         Label("Stop", systemImage: "stop.fill")
                     }
@@ -161,7 +206,7 @@ public struct StacksView: View {
                     .help("Stop all services; they keep their data and can be started again")
 
                     Button(role: .destructive) {
-                        Task { await deleteStackServices() }
+                        Task { await work.remove(appState: appState) }
                     } label: {
                         Label("Remove", systemImage: "trash")
                     }
@@ -171,7 +216,7 @@ public struct StacksView: View {
                 }
 
                 Button {
-                    Task { await deployEntireStack() }
+                    Task { await work.start(appState: appState) }
                 } label: {
                     if work.isDeploying {
                         HStack(spacing: 6) {
@@ -213,6 +258,19 @@ public struct StacksView: View {
                 ForEach(Array(parsedStack.topologicalServices.enumerated()), id: \.element.id) { index, svc in
                     serviceCard(for: svc, stepNumber: index + 1)
                 }
+                Button {
+                    editTarget = .add
+                } label: {
+                    Label(parsedStack.services.isEmpty ? "Add the first service" : "Add another service", systemImage: "plus.circle")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, NordicTheme.Spacing.s)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(accent)
+                .background(
+                    RoundedRectangle(cornerRadius: NordicTheme.Radius.card, style: .continuous)
+                        .strokeBorder(accent.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                )
                 if !work.consoleLines.isEmpty || work.isDeploying {
                     stackConsolePane
                         .frame(height: 180)
@@ -228,9 +286,9 @@ public struct StacksView: View {
             Text("How it works")
                 .font(.system(size: 13, weight: .semibold))
             VStack(alignment: .leading, spacing: 6) {
-                guideLine("1", "Pick a template under Templates & Files, or open your own docker-compose.yml.")
-                guideLine("2", "Check the services below. Edit the Compose File tab to change images, ports or settings.")
-                guideLine("3", "Press Start Stack. Services start in order (a database before the app that needs it).")
+                guideLine("1", "Start from a template or your own compose file (Templates & Files), or from scratch with Add Service.")
+                guideLine("2", "Add, edit or remove services with the form, or type in the Compose File tab. Both stay in sync.")
+                guideLine("3", "Press Start Stack. Services start in order (a database before the app that needs it), and appear grouped under the stack's name in Containers.")
             }
             Text(dnsHint)
                 .font(.system(size: 11.5))
@@ -364,8 +422,25 @@ public struct StacksView: View {
                     }
                 }
 
+                Divider().overlay(NordicTheme.borderSubtle)
+                HStack(spacing: 8) {
+                    Button {
+                        editTarget = .edit(svc)
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                    .controlSize(.small)
+                    .help("Change this service in a form; the compose file is updated")
+                    Button(role: .destructive) {
+                        work.yamlText = ComposeDocument.remove(service: svc.serviceName, from: work.yamlText)
+                    } label: {
+                        Label("Remove", systemImage: "minus.circle")
+                    }
+                    .controlSize(.small)
+                    .disabled(liveContainer != nil)
+                    .help(liveContainer != nil ? "Remove the stack's containers first" : "Remove this service from the compose file")
+                    Spacer()
                 if let liveContainer {
-                    Divider().overlay(NordicTheme.borderSubtle)
                     HStack(spacing: 8) {
                         Button("Inspect in Containers") {
                             appState.selectedContainerID = liveContainer.id
@@ -395,6 +470,7 @@ public struct StacksView: View {
                             .controlSize(.small)
                         }
                     }
+                }
                 }
             }
         }
@@ -429,7 +505,7 @@ public struct StacksView: View {
                     isPaused: $work.logPaused,
                     autoScroll: $work.logAutoScroll,
                     onRefresh: {
-                        Task { await refreshUnifiedLogs() }
+                        Task { await work.refreshLogs(appState: appState) }
                     }
                 )
             }
@@ -466,144 +542,35 @@ public struct StacksView: View {
 
     // MARK: - Orchestration Actions
 
-    private func deployEntireStack() async {
-        work.isDeploying = true
-        work.consoleLines = ["==> Deploying stack '\(parsedStack.projectName)' (\(parsedStack.services.count) services)…"]
-        defer { work.isDeploying = false }
-
-        // 1. Ensure declared named volumes exist
-        let existingVolNames = Set(appState.volumes.map(\.name))
-        for vol in parsedStack.declaredVolumes where !existingVolNames.contains(vol) {
-            work.consoleLines.append("==> Creating named volume '\(vol)'…")
-            try? await appState.runtimeService.createVolume(
-                request: VolumeCreateRequest(name: vol, sizeSpec: "2G")
-            )
-        }
-
-        // 2. Deploy each service in topological order
-        for svc in parsedStack.topologicalServices {
-            if let existing = appState.containers.first(where: { $0.id == svc.containerName }) {
-                if existing.state == .running {
-                    work.consoleLines.append("==> Service '\(svc.serviceName)' (\(svc.containerName)) is already running.")
-                    continue
-                } else {
-                    work.consoleLines.append("==> Removing stopped container '\(svc.containerName)' before re-creating…")
-                    try? await appState.runtimeService.deleteContainer(id: svc.containerName, force: true)
-                }
-            }
-
-            // Give each service its name (plus Compose `aliases:`) as DNS aliases so peers can
-            // reach it as e.g. `db`, the way Compose does.
-            let dnsDomain = appState.systemProperties.dns.domain
-            let resolved = ComposeParser.serviceDNSAliases(
-                for: svc,
-                defaultDNSDomain: dnsDomain,
-                claimedNames: ComposeParser.claimedDNSNames(in: appState.containers, network: "default", defaultDNSDomain: dnsDomain, excluding: svc.containerName)
-            )
-            for note in resolved.notes {
-                work.consoleLines.append("    ! \(note)")
-            }
-            let req = ComposeParser.buildContainerRequest(
-                for: svc,
-                projectName: parsedStack.projectName,
-                networkName: "default",
-                defaultCPUs: appState.preferences.defaultContainerCPUs,
-                defaultMemoryMB: appState.preferences.defaultContainerMemoryMB,
-                dnsAliases: resolved.aliases
-            )
-            if !resolved.aliases.isEmpty {
-                work.consoleLines.append("    DNS aliases: \(resolved.aliases.joined(separator: ", "))")
-            }
-
-            work.consoleLines.append("==> Starting service '\(svc.serviceName)' (\(svc.imageReference))…")
-            do {
-                let id = try await appState.runtimeService.createOrRunContainer(request: req)
-                work.consoleLines.append("    ✓ Started '\(id)'")
-            } catch {
-                work.consoleLines.append("    ✗ Failed to start '\(svc.serviceName)': \(error.localizedDescription)")
-            }
-        }
-
-        await appState.refreshAll(isUserInitiated: false)
-        work.consoleLines.append("==> Stack '\(parsedStack.projectName)' orchestration finished.")
-        await refreshUnifiedLogs()
-    }
-
-    private func stopStackServices() async {
-        work.isDeploying = true
-        work.consoleLines.append("==> Stopping stack '\(parsedStack.projectName)'…")
-        defer { work.isDeploying = false }
-
-        // Stop in reverse dependency order
-        for svc in parsedStack.topologicalServices.reversed() {
-            if appState.containers.first(where: { $0.id == svc.containerName })?.state == .running {
-                work.consoleLines.append("==> Stopping '\(svc.containerName)'…")
-                try? await appState.runtimeService.stopContainer(id: svc.containerName, timeoutSeconds: 5)
-            }
-        }
-        await appState.refreshAll(isUserInitiated: false)
-        work.consoleLines.append("==> Stack stopped.")
-    }
-
-    private func deleteStackServices() async {
-        work.isDeploying = true
-        work.consoleLines.append("==> Deleting all containers in stack '\(parsedStack.projectName)'…")
-        defer { work.isDeploying = false }
-
-        for svc in parsedStack.topologicalServices.reversed() {
-            if appState.containers.contains(where: { $0.id == svc.containerName }) {
-                work.consoleLines.append("==> Deleting '\(svc.containerName)'…")
-                try? await appState.runtimeService.deleteContainer(id: svc.containerName, force: true)
-            }
-        }
-        await appState.refreshAll(isUserInitiated: false)
-        work.consoleLines.append("==> Stack containers deleted.")
-    }
-
-    private func refreshUnifiedLogs() async {
-        work.isLoadingLogs = true
-        defer { work.isLoadingLogs = false }
-        var combined: [String] = []
-        for svc in parsedStack.topologicalServices {
-            guard appState.containers.contains(where: { $0.id == svc.containerName }) else { continue }
-            if let log = try? await appState.runtimeService.fetchContainerLogs(
-                id: svc.containerName,
-                bootLogs: false,
-                tailLines: 60
-            ) {
-                let prefixed = log
-                    .components(separatedBy: .newlines)
-                    .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-                    .map { "[\(svc.serviceName)] \($0)" }
-                    .joined(separator: "\n")
-                if !prefixed.isEmpty {
-                    combined.append(prefixed)
-                }
-            }
-        }
-        work.logsText = combined.joined(separator: "\n")
-    }
-
     private func openComposeFileFromDisk() {
         let panel = NSOpenPanel()
-        panel.title = "Open docker-compose.yml"
+        panel.title = "Open a compose file"
+        panel.message = "docker-compose.yml, compose.yaml or any .yml/.yaml compose file"
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        if panel.runModal() == .OK, let url = panel.url,
-           let content = try? String(contentsOf: url, encoding: .utf8) {
-            work.currentFileURL = url
-            work.yamlText = content
+        panel.allowedContentTypes = [UTType(filenameExtension: "yml"), UTType(filenameExtension: "yaml")].compactMap { $0 }
+        if panel.runModal() == .OK, let url = panel.url {
+            work.open(url)
+            work.tab = .services
         }
     }
 
-    private func saveComposeFileToDisk() {
+    /// Saves to the open file, or asks where (always for Save As).
+    private func saveComposeFile(forceChoose: Bool) {
+        if !forceChoose, let url = work.currentFileURL {
+            try? work.yamlText.write(to: url, atomically: true, encoding: .utf8)
+            work.noteRecent(url)
+            return
+        }
         let panel = NSSavePanel()
-        panel.title = "Save docker-compose.yml"
-        panel.nameFieldStringValue = work.currentFileURL?.lastPathComponent ?? "docker-compose.yml"
+        panel.title = "Save compose file"
+        panel.nameFieldStringValue = work.currentFileURL?.lastPathComponent ?? "compose.yaml"
+        panel.allowedContentTypes = [UTType(filenameExtension: "yaml"), UTType(filenameExtension: "yml")].compactMap { $0 }
         if panel.runModal() == .OK, let url = panel.url {
             try? work.yamlText.write(to: url, atomically: true, encoding: .utf8)
             work.currentFileURL = url
+            work.noteRecent(url)
         }
     }
 }

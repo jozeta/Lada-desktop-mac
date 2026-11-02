@@ -102,34 +102,34 @@ public struct ComposeStackTemplate: Identifiable, Sendable {
     public static let allTemplates: [ComposeStackTemplate] = [
         ComposeStackTemplate(
             id: "web-postgres-redis",
-            title: "Web App + PostgreSQL + Redis",
-            subtitle: "3-tier web stack with Nginx frontend, PostgreSQL 16 database, and Redis 7 cache",
+            title: "Website + PostgreSQL + Redis",
+            subtitle: "An nginx front end with a PostgreSQL database and a Redis cache",
             projectName: "nordic-web",
             yamlContent: """
             name: nordic-web
 
             services:
               db:
-                image: docker.io/library/postgres:16-alpine
+                image: docker.io/library/postgres:17-alpine
                 container_name: nordic-postgres
                 ports:
                   - "5432:5432"
                 environment:
                   POSTGRES_USER: lada
-                  POSTGRES_PASSWORD: lada_secret_password
+                  POSTGRES_PASSWORD: {{secret:db}}
                   POSTGRES_DB: lada_app
                   PGDATA: /var/lib/postgresql/data/pgdata
                 volumes:
                   - pgdata:/var/lib/postgresql/data
 
               redis:
-                image: docker.io/library/redis:7-alpine
+                image: docker.io/library/redis:8-alpine
                 container_name: nordic-redis
                 ports:
                   - "6379:6379"
 
               web:
-                image: docker.io/library/nginx:1.27-alpine
+                image: docker.io/library/nginx:1.31-alpine
                 container_name: nordic-frontend
                 ports:
                   - "8088:80"
@@ -143,8 +143,8 @@ public struct ComposeStackTemplate: Identifiable, Sendable {
         ),
         ComposeStackTemplate(
             id: "wordpress-mysql",
-            title: "WordPress + MySQL 8.4 CMS",
-            subtitle: "Complete WordPress publishing stack backed by MySQL 8.4 with persistent volumes",
+            title: "WordPress + MySQL",
+            subtitle: "A WordPress site on port 8085 with its MySQL database",
             projectName: "wp-studio",
             yamlContent: """
             name: wp-studio
@@ -154,25 +154,23 @@ public struct ComposeStackTemplate: Identifiable, Sendable {
                 image: docker.io/library/mysql:8.4
                 container_name: wp-mysql
                 command: --datadir=/var/lib/mysql/data
-                ports:
-                  - "3306:3306"
                 environment:
-                  MYSQL_ROOT_PASSWORD: root_secret_password
+                  MYSQL_ROOT_PASSWORD: {{secret:root}}
                   MYSQL_DATABASE: wordpress
                   MYSQL_USER: wp_user
-                  MYSQL_PASSWORD: wp_password
+                  MYSQL_PASSWORD: {{secret:wpdb}}
                 volumes:
                   - wp_db:/var/lib/mysql
 
               wordpress:
-                image: docker.io/library/nginx:1.27-alpine
+                image: docker.io/library/wordpress:php8.4-apache
                 container_name: wp-web
                 ports:
                   - "8085:80"
                 environment:
-                  WORDPRESS_DB_HOST: wp-mysql:3306
+                  WORDPRESS_DB_HOST: mysql:3306
                   WORDPRESS_DB_USER: wp_user
-                  WORDPRESS_DB_PASSWORD: wp_password
+                  WORDPRESS_DB_PASSWORD: {{secret:wpdb}}
                   WORDPRESS_DB_NAME: wordpress
                 depends_on:
                   - mysql
@@ -182,9 +180,87 @@ public struct ComposeStackTemplate: Identifiable, Sendable {
             """
         ),
         ComposeStackTemplate(
+            id: "postgres-adminer",
+            title: "PostgreSQL + Adminer",
+            subtitle: "A PostgreSQL database with a web admin UI on port 8084",
+            projectName: "pg-admin",
+            yamlContent: """
+            name: pg-admin
+
+            services:
+              db:
+                image: docker.io/library/postgres:17-alpine
+                container_name: pg-admin-db
+                ports:
+                  - "5432:5432"
+                environment:
+                  POSTGRES_USER: admin
+                  POSTGRES_PASSWORD: {{secret:db}}
+                  POSTGRES_DB: app
+                  PGDATA: /var/lib/postgresql/data/pgdata
+                volumes:
+                  - pg_admin_data:/var/lib/postgresql/data
+
+              adminer:
+                image: docker.io/library/adminer:standalone
+                container_name: pg-admin-ui
+                ports:
+                  - "8084:8080"
+                environment:
+                  ADMINER_DEFAULT_SERVER: db
+                depends_on:
+                  - db
+
+            volumes:
+              pg_admin_data:
+            """
+        ),
+        ComposeStackTemplate(
+            id: "gitea-postgres",
+            title: "Git server (Gitea + PostgreSQL)",
+            subtitle: "Your own Git hosting with a web UI on port 3000 and SSH on 2222",
+            projectName: "git-server",
+            yamlContent: """
+            name: git-server
+
+            services:
+              db:
+                image: docker.io/library/postgres:17-alpine
+                container_name: gitea-db
+                environment:
+                  POSTGRES_USER: gitea
+                  POSTGRES_PASSWORD: {{secret:db}}
+                  POSTGRES_DB: gitea
+                  PGDATA: /var/lib/postgresql/data/pgdata
+                volumes:
+                  - gitea_db:/var/lib/postgresql/data
+
+              gitea:
+                image: docker.io/gitea/gitea:28
+                container_name: gitea
+                ports:
+                  - "3000:3000"
+                  - "2222:22"
+                environment:
+                  GITEA__database__DB_TYPE: postgres
+                  GITEA__database__HOST: db:5432
+                  GITEA__database__NAME: gitea
+                  GITEA__database__USER: gitea
+                  GITEA__database__PASSWD: {{secret:db}}
+                volumes:
+                  - gitea_data:/data
+                depends_on:
+                  - db
+
+            volumes:
+              gitea_db:
+              gitea_data:
+            """
+        ),
+        ComposeStackTemplate(
             id: "observability-prometheus-grafana",
-            title: "Prometheus + Grafana Telemetry",
-            subtitle: "Metrics collection and visualization dashboard stack on ports 9090 and 3001",
+            title: "Prometheus + Grafana",
+            subtitle: "Metrics collection on port 9090 and dashboards on port 3001",
             projectName: "telemetry",
             yamlContent: """
             name: telemetry
@@ -203,41 +279,131 @@ public struct ComposeStackTemplate: Identifiable, Sendable {
                   - "3001:3000"
                 environment:
                   GF_SECURITY_ADMIN_USER: admin
-                  GF_SECURITY_ADMIN_PASSWORD: lada_admin
+                  GF_SECURITY_ADMIN_PASSWORD: {{secret:grafana}}
                 depends_on:
                   - prometheus
             """
         ),
         ComposeStackTemplate(
             id: "python-api-redis",
-            title: "Python Microservice + Redis Queue",
-            subtitle: "Python 3.12 HTTP API service paired with Redis in-memory store",
+            title: "Python API + Redis",
+            subtitle: "A small Python HTTP service on port 8000 next to a Redis store",
             projectName: "py-stack",
             yamlContent: """
             name: py-stack
 
             services:
               cache:
-                image: docker.io/library/redis:7-alpine
+                image: docker.io/library/redis:8-alpine
                 container_name: py-redis
                 ports:
                   - "6380:6379"
 
               api:
-                image: docker.io/library/python:3.12-slim
+                image: docker.io/library/python:3.13-slim
                 container_name: py-api
                 working_dir: /app
                 command: python3 -m http.server 8000
                 ports:
                   - "8000:8000"
                 environment:
-                  REDIS_URL: redis://py-redis:6379/0
+                  REDIS_URL: redis://cache:6379/0
                   PYTHONUNBUFFERED: "1"
                 depends_on:
                   - cache
             """
+        ),
+        ComposeStackTemplate(
+            id: "messaging-nats-valkey",
+            title: "Messaging + cache (NATS + Valkey)",
+            subtitle: "A NATS message bus on 4222 (monitoring on 8222) and a Valkey cache on 6381",
+            projectName: "messaging",
+            yamlContent: """
+            name: messaging
+
+            services:
+              nats:
+                image: docker.io/library/nats:2.15-alpine
+                container_name: messaging-nats
+                command: --jetstream --http_port 8222
+                ports:
+                  - "4222:4222"
+                  - "8222:8222"
+
+              cache:
+                image: docker.io/valkey/valkey:9.0-alpine
+                container_name: messaging-valkey
+                ports:
+                  - "6381:6379"
+                volumes:
+                  - valkey_data:/data
+
+            volumes:
+              valkey_data:
+            """
+        ),
+        ComposeStackTemplate(
+            id: "dev-tools-mailpit-registry",
+            title: "Developer tools (Mailpit + registry)",
+            subtitle: "An email-testing inbox on 8025 (SMTP 1025) and a private image registry on 5000",
+            projectName: "dev-tools",
+            yamlContent: """
+            name: dev-tools
+
+            services:
+              mail:
+                image: docker.io/axllent/mailpit:v1
+                container_name: dev-mailpit
+                ports:
+                  - "8025:8025"
+                  - "1025:1025"
+
+              registry:
+                image: docker.io/library/registry:3
+                container_name: dev-registry
+                ports:
+                  - "5000:5000"
+                volumes:
+                  - registry_data:/var/lib/registry
+
+            volumes:
+              registry_data:
+            """
+        ),
+        ComposeStackTemplate(
+            id: "vault-dev",
+            title: "Secrets manager (Vault, dev mode)",
+            subtitle: "HashiCorp Vault in development mode on port 8200; data is kept in memory",
+            projectName: "vault-dev",
+            yamlContent: """
+            name: vault-dev
+
+            services:
+              vault:
+                image: docker.io/hashicorp/vault:2.2
+                container_name: vault-dev
+                ports:
+                  - "8200:8200"
+                environment:
+                  VAULT_DEV_ROOT_TOKEN_ID: {{secret:token}}
+                  VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+            """
         )
     ]
+
+    /// The template's YAML with each `{{secret:name}}` placeholder replaced by a fresh random value
+    /// (the same name gets the same value, so services that share a password agree).
+    public func instantiate() -> String {
+        var result = yamlContent
+        var values: [String: String] = [:]
+        while let range = result.range(of: #"\{\{secret:([a-z0-9_]+)\}\}"#, options: .regularExpression) {
+            let name = String(result[range].dropFirst(9).dropLast(2))
+            let value = values[name] ?? SecretGenerator.password()
+            values[name] = value
+            result.replaceSubrange(range, with: value)
+        }
+        return result
+    }
 }
 
 // MARK: - Compose YAML Parser
