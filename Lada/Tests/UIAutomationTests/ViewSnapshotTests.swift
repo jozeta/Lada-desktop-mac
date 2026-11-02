@@ -33,7 +33,7 @@ final class ViewSnapshotTests: XCTestCase {
         return state
     }
 
-    private func snapshot<V: View>(_ view: V, name: String, size: CGSize = CGSize(width: 1100, height: 760)) throws {
+    private func snapshot<V: View>(_ view: V, name: String, size: CGSize = CGSize(width: 1100, height: 760), settle: TimeInterval = 0.4) throws {
         let dir = try outputDirectory()
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
             let window = NSWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false)
@@ -43,7 +43,7 @@ final class ViewSnapshotTests: XCTestCase {
             window.contentView = host
             window.orderBack(nil)
             host.layoutSubtreeIfNeeded()
-            RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+            RunLoop.main.run(until: Date().addingTimeInterval(settle))
             host.layoutSubtreeIfNeeded()
             guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { continue }
             host.cacheDisplay(in: host.bounds, to: rep)
@@ -102,5 +102,44 @@ final class ViewSnapshotTests: XCTestCase {
         state.selectedSection = .containers
         state.selectedContainerID = state.containers.first { $0.state == .running }?.id
         try snapshot(MainWindowView(appState: state), name: "main-container-detail", size: CGSize(width: 1400, height: 900))
+    }
+
+    /// The README screenshots (Mock Sandbox data), written as `readme-<name>-<appearance>.png`.
+    func testReadmeScreenshots() async throws {
+        _ = try outputDirectory()
+        let state = await makeAppState()
+        injectVariedTelemetry(into: state)
+        let size = CGSize(width: 1400, height: 900)
+        let running = state.containers.first { $0.state == .running }
+        if let running {
+            // Snapshot only: the mock has no rootfs image on disk to measure.
+            state.containerDisks[running.id] = ContainerDiskSnapshot.make(allocatedBytes: 226_000_000, logicalSizeBytes: 549_755_813_888, hostAvailableBytes: 229_000_000_000)
+        }
+
+        state.selectedSection = .overview
+        try snapshot(MainWindowView(appState: state), name: "readme-overview", size: size)
+
+        state.selectedSection = .containers
+        state.selectedContainerID = running?.id
+        try snapshot(MainWindowView(appState: state), name: "readme-containers-overview", size: size)
+
+        if let running {
+            let workspace = state.workspaces.workspace(for: running.id)
+            workspace.tab = .files
+            workspace.files.entries = (try? await ContainerFileOperations(runtime: state.runtimeService, containerID: running.id).listDirectory("/")) ?? []
+            // Longer settle so the mock directory listing has loaded.
+            try snapshot(MainWindowView(appState: state), name: "readme-container-files", size: size, settle: 2.5)
+            state.workspaces.workspace(for: running.id).tab = .overview
+        }
+
+        state.selectedSection = .stacks
+        state.stacks.useTemplate(ComposeStackTemplate.allTemplates[0])
+        try snapshot(MainWindowView(appState: state), name: "readme-compose-stacks", size: size)
+
+        state.selectedSection = .imageLibrary
+        try snapshot(MainWindowView(appState: state), name: "readme-image-library", size: size)
+
+        state.selectedSection = .dockerfileEditor
+        try snapshot(MainWindowView(appState: state), name: "readme-dockerfile-editor", size: size)
     }
 }

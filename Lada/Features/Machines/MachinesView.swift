@@ -63,7 +63,6 @@ public struct MachinesView: View {
                 .background(Color.clear)
             }
         }
-        .nordicPageBackground()
         .onAppear {
             if appState.selectedMachineID == nil || !appState.machines.contains(where: { $0.id == appState.selectedMachineID }) {
                 appState.selectedMachineID = appState.machines.first?.id

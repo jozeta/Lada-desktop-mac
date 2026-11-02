@@ -28,7 +28,6 @@ public struct RegistriesView: View {
                 registryTable
             }
         }
-        .nordicPageBackground()
         .sheet(isPresented: $showLoginSheet) {
             loginSheet
         }

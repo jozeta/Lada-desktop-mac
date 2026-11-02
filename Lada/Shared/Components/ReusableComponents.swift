@@ -552,7 +552,7 @@ public struct NordicLogViewer: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .frame(minWidth: 110, maxWidth: 190)
-                .nordicPageBackground()
+                .nordicChip(cornerRadius: 4)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
                 .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(NordicTheme.borderSubtle, lineWidth: 1))
 

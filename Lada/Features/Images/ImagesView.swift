@@ -71,7 +71,6 @@ public struct ImagesView: View {
                 .background(Color.clear)
             }
         }
-        .nordicPageBackground()
         .onAppear {
             if appState.selectedImageID == nil || !filteredImages.contains(where: { $0.id == appState.selectedImageID }) {
                 appState.selectedImageID = filteredImages.first?.id

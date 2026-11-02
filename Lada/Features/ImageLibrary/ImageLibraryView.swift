@@ -107,7 +107,6 @@ public struct ImageLibraryView: View {
                     }
                     .padding(18)
                 }
-                .nordicPageBackground()
             }
         }
         .task(id: searchQuery) {

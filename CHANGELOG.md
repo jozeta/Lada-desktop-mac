@@ -6,6 +6,28 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Translucent window: the desktop and windows behind Låda show through, blurred, under a lighter
+  Nordic tint; panels use a thinner glass so the frost is visible (Reduce Transparency makes both
+  solid). Sections no longer stack extra copies of the backdrop
+- Container inspector: a disk donut per container showing what its root filesystem image uses on
+  this Mac and how much it can still grow (measured from the sparse `rootfs.ext4`, so it works
+  for stopped containers)
+- Dockerfile Editor: code completion while typing (instructions, then each instruction's
+  arguments: images, build stages for `COPY --from=`, `ARG`/`ENV` variables, flags, ports,
+  signals, earlier WORKDIRs and USERs, OCI labels), brighter text, and the code on the same glass
+  as other panels instead of an opaque slab; header and inspector restyled to match Stacks
+- Dashboard: Quick Actions removed; Active Containers, disk usage and recent operations pack into
+  columns without gaps (masonry layout) and reflow to one column when narrow
+- Performance: one 2-second poll loop feeds every chart (the dashboard and inspector no longer
+  run their own stats loops); poll results only publish when they changed, `isRefreshing` no
+  longer re-renders the window, telemetry history is published once per poll, and the drag-and-
+  drop helper walks the view tree only when the section changes
+- Files tab: fits the inspector at the default window size (it overflowed and clipped both
+  edges), toolbar buttons fall back to icons when narrow, and the cached listing stays visible
+  while it refreshes
+- README: new screenshots and feature descriptions checked against the code (8-tab inspector,
+  actual linter rules and templates, no Builds page or terminal quick-command bar)
+
 - Dashboard: a hollow pie (donut) of the drive that holds the runtime's data, split into images,
   containers, volumes, other files and free space, with the free space in the middle
 - Every panel uses the same frosted glass (Image Library cards and filter bar, menu-bar rows, drop

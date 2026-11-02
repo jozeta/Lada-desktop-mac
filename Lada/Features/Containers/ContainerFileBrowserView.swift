@@ -72,16 +72,17 @@ public struct ContainerFileBrowserView: View {
             } else {
                 HSplitView {
                     // Left: Directory Listing Table
+                    // Minimums must fit together in the container inspector (about 590 pt at
+                    // the default window size), or the whole tab overflows and is clipped.
                     directoryListPane
-                        .frame(minWidth: 320, idealWidth: 390)
+                        .frame(minWidth: 260, idealWidth: 330)
 
                     // Right: In-Place File Preview & Editor
                     fileInspectorPane
-                        .frame(minWidth: 300, idealWidth: 380)
+                        .frame(minWidth: 220, idealWidth: 300)
                 }
             }
         }
-        .nordicPageBackground()
         .onDrop(of: [.fileURL], isTargeted: $isFileDropTargeted) { providers in
             handleDroppedHostFiles(providers: providers)
         }
@@ -160,33 +161,11 @@ public struct ContainerFileBrowserView: View {
                         .lineLimit(1)
                 }
 
-                Button {
-                    newFolderName = ""
-                    showNewFolderSheet = true
-                } label: {
-                    Label("New Folder", systemImage: "folder.badge.plus")
+                // Full labels when there is room, icons when the inspector is narrow.
+                ViewThatFits(in: .horizontal) {
+                    toolbarActions(iconOnly: false)
+                    toolbarActions(iconOnly: true)
                 }
-                .controlSize(.small)
-                .disabled(container.state != .running)
-                .fixedSize(horizontal: true, vertical: false)
-
-                Button {
-                    uploadFileViaOpenPanel()
-                } label: {
-                    Label("Upload File…", systemImage: "square.and.arrow.up")
-                }
-                .controlSize(.small)
-                .disabled(container.state != .running)
-                .fixedSize(horizontal: true, vertical: false)
-
-                Button {
-                    Task { await loadDirectory(path: state.currentPath) }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .controlSize(.small)
-                .disabled(container.state != .running)
-                .help("Refresh Directory")
             }
 
             // Quick Jump Bar
@@ -194,15 +173,20 @@ public struct ContainerFileBrowserView: View {
                 Text("Quick Jump:")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(NordicTheme.secondaryText)
-                ForEach(["/", "/etc", "/var/log", "/usr/share/nginx/html", "/app", "/tmp"], id: \.self) { preset in
-                    Button(preset) {
-                        Task { await loadDirectory(path: preset) }
+                    .fixedSize()
+                // Scrolls instead of pushing the toolbar wider than the pane.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(["/", "/etc", "/var/log", "/usr/share/nginx/html", "/app", "/tmp"], id: \.self) { preset in
+                            Button(preset) {
+                                Task { await loadDirectory(path: preset) }
+                            }
+                            .controlSize(.mini)
+                            .buttonStyle(.bordered)
+                            .disabled(container.state != .running)
+                        }
                     }
-                    .controlSize(.mini)
-                    .buttonStyle(.bordered)
-                    .disabled(container.state != .running)
                 }
-                Spacer()
                 Text(verbatim: "\(state.entries.count) items")
                     .font(NordicTheme.monoFontSmall)
                     .foregroundStyle(NordicTheme.secondaryText)
@@ -213,11 +197,38 @@ public struct ContainerFileBrowserView: View {
         .nordicBar()
     }
 
+    private func toolbarActions(iconOnly: Bool) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                newFolderName = ""
+                showNewFolderSheet = true
+            } label: {
+                if iconOnly { Image(systemName: "folder.badge.plus") } else { Label("New Folder", systemImage: "folder.badge.plus") }
+            }
+            .help("New Folder")
+            Button {
+                uploadFileViaOpenPanel()
+            } label: {
+                if iconOnly { Image(systemName: "square.and.arrow.up") } else { Label("Upload File…", systemImage: "square.and.arrow.up") }
+            }
+            .help("Upload a file from your Mac")
+            Button {
+                Task { await loadDirectory(path: state.currentPath) }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .help("Refresh Directory")
+        }
+        .controlSize(.small)
+        .disabled(container.state != .running)
+        .fixedSize()
+    }
+
     // MARK: - Directory List Pane
 
     private var directoryListPane: some View {
         VStack(spacing: 0) {
-            if isLoadingDirectory {
+            if isLoadingDirectory && state.entries.isEmpty {  // cached listing stays visible while refreshing
                 VStack(spacing: 8) {
                     ProgressView()
                     Text("Listing \(state.currentPath)…")

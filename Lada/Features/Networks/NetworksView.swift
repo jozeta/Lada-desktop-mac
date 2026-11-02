@@ -55,7 +55,6 @@ public struct NetworksView: View {
                 .background(Color.clear)
             }
         }
-        .nordicPageBackground()
         .onAppear {
             if appState.selectedNetworkID == nil || !appState.networks.contains(where: { $0.id == appState.selectedNetworkID }) {
                 appState.selectedNetworkID = appState.networks.first?.id

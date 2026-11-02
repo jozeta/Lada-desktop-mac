@@ -105,7 +105,6 @@ public struct ActivityView: View {
                 .scrollContentBackground(.hidden)
             }
         }
-        .nordicPageBackground()
     }
 }
 
@@ -218,7 +217,6 @@ public struct SettingsView: View {
             }
             .frame(minWidth: 540, maxWidth: .infinity, maxHeight: .infinity)
         }
-        .nordicPageBackground()
     }
 
     private var generalSection: some View {

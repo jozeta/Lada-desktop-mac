@@ -57,6 +57,8 @@ Xcode project) for a release. `Scripts/generate-app-icon.swift` regenerates `App
 - Never pass `-i` to a detached `container run -d`: Låda has no terminal, and 1.6.1 fails with
   "Operation not supported by device". Detached shell images get `-t` only.
 - Show measured or reported values only: no invented defaults, estimates or seed data.
+- Only window roots (main window, sheets, the menu-bar popover) call `nordicPageBackground()`; the
+  backdrop is translucent, so a section that adds its own copy turns the window opaque again.
 - `Lada.xcodeproj` syncs the whole `Lada/` folder into the app target: add every new file under
   `Lada/Tests/` to the target's `membershipExceptions` in `project.pbxproj`, or the Xcode build fails.
 
@@ -68,4 +70,5 @@ These need the real runtime and are skipped by default:
 LADA_LIVE_CONTAINER=<running-id> swift test --filter LiveFileOperationsTests   # Files tab via container copy
 LADA_LIVE_PRESETS=all swift test --filter LiveImageLibraryPresetTests        # every Image Library preset starts
 LADA_SNAPSHOT_DIR=/tmp/lada-shots swift test --filter ViewSnapshotTests      # PNGs of every section, light + dark
+LADA_SNAPSHOT_DIR=/tmp/lada-shots swift test --filter testReadmeScreenshots  # README images (copy the -dark PNGs to docs/screenshots/)
 ```

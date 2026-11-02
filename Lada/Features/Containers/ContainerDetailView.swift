@@ -145,7 +145,7 @@ public struct ContainerDetailView: View {
             .controlSize(.small)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .nordicPageBackground()
+            .nordicBar()
             .overlay(alignment: .bottom) {
                 Divider().overlay(NordicTheme.borderSubtle)
             }
@@ -211,23 +211,60 @@ public struct ContainerDetailView: View {
         }
         .task(id: container.id) {
             // Cached logs of this container show at once; then refresh.
+            // Telemetry comes from AppState's single poll loop; this loop only tails logs.
             await loadLogs()
-            await appState.sampleContainerTelemetry(for: container.id)
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 guard !Task.isCancelled else { break }
-                if container.state == .running {
-                    await appState.sampleContainerTelemetry(for: container.id)
-                    // Live tail while the Logs tab is open, unless paused.
-                    if workspace.tab == .logs && !logs.isPaused {
-                        await loadLogs()
-                    }
+                // Live tail while the Logs tab is open, unless paused.
+                if container.state == .running && workspace.tab == .logs && !logs.isPaused {
+                    await loadLogs()
                 }
             }
         }
     }
 
     // MARK: - Overview Tab
+
+    /// The container's own disk: what its root filesystem image uses on this Mac and how much it
+    /// can still grow (measured from the image file, so it works for stopped containers too).
+    @ViewBuilder
+    private var containerDiskSection: some View {
+        NordicSectionHeader("Disk", subtitle: "Space used by this container's root filesystem on this Mac.")
+        Group {
+            if let disk = appState.containerDisks[container.id] {
+                VStack(alignment: .leading, spacing: NordicTheme.Spacing.s) {
+                    NordicDonutChart(
+                        slices: [
+                            .init(label: "Used", bytes: disk.usedBytes, color: NordicTheme.accent(for: appState.preferences.accentThemeChoice)),
+                            .init(label: "Free", bytes: disk.freeBytes, color: NordicTheme.secondaryText.opacity(0.25))
+                        ],
+                        centerValue: NordicFormat.bytes(fromByteCount: disk.usedBytes, countStyle: .file),
+                        centerCaption: "used",
+                        title: "Root filesystem · up to \(NordicFormat.bytes(fromByteCount: disk.capacityBytes, countStyle: .file))"
+                    )
+                    Text(disk.limitedByHostDisk
+                         ? "The disk image grows as files are written; this Mac's free space is the limit, not the image size."
+                         : "The disk image grows as files are written, up to its size.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(NordicTheme.secondaryText)
+                    if !container.configuration.mounts.isEmpty {
+                        Text("Volumes and Mac folders mounted into the container are not included.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(NordicTheme.secondaryText)
+                    }
+                }
+            } else {
+                Text("Disk usage isn't available: the container's disk image wasn't found in the runtime's data folder.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(NordicTheme.secondaryText)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .nordicSurface()
+        .accessibilityIdentifier(AccessibilityID.containerDiskDonut)
+    }
 
     @ViewBuilder
     private var overviewTab: some View {
@@ -314,6 +351,8 @@ public struct ContainerDetailView: View {
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .nordicSurface()
+
+                containerDiskSection
 
                 // Performance Graphs (CPU, RAM, Network, HD / Disk I/O)
                 NordicSectionHeader(
@@ -484,7 +523,7 @@ public struct ContainerDetailView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .nordicPageBackground()
+            .nordicBar()
 
             NordicLogViewer(
                 rawLogText: logs.text,

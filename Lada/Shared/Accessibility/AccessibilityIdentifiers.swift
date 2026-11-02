@@ -2,6 +2,7 @@ import Foundation
 
 public enum AccessibilityID {
     public static let sidebar = "lada.sidebar"
+    public static let containerDiskDonut = "lada.container.disk"
     public static let runtimeStatusBadge = "lada.toolbar.runtimeStatus"
     public static let globalSearchField = "lada.toolbar.searchField"
     public static let refreshButton = "lada.toolbar.refreshButton"

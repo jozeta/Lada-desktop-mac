@@ -49,3 +49,43 @@ public enum DiskBreakdown {
         ]
     }
 }
+
+/// A container's own disk: its root filesystem is a sparse `rootfs.ext4` image (512 GiB logical
+/// size on `container` 1.6) in the runtime's data folder. "Used" is what the image really occupies
+/// on the Mac; "free" is what it can still grow into, which is the smaller of the image's remaining
+/// capacity and the Mac's free space.
+public struct ContainerDiskSnapshot: Equatable, Sendable {
+    public let usedBytes: Int64
+    public let capacityBytes: Int64
+    public let freeBytes: Int64
+    /// True when the Mac's free space, not the image size, is what limits growth.
+    public let limitedByHostDisk: Bool
+
+    public static func make(allocatedBytes: Int64, logicalSizeBytes: Int64, hostAvailableBytes: Int64) -> ContainerDiskSnapshot {
+        let used = max(0, allocatedBytes)
+        let capacity = max(used, logicalSizeBytes)
+        let imageRoom = capacity - used
+        let host = max(0, hostAvailableBytes)
+        return ContainerDiskSnapshot(
+            usedBytes: used,
+            capacityBytes: capacity,
+            freeBytes: min(imageRoom, host),
+            limitedByHostDisk: host < imageRoom
+        )
+    }
+
+    /// `<data root>/containers/<id>/rootfs.ext4`.
+    public static func rootfsPath(dataRoot: String, containerID: String) -> String {
+        ((dataRoot as NSString).appendingPathComponent("containers") as NSString)
+            .appendingPathComponent(containerID)
+            .appending("/rootfs.ext4")
+    }
+
+    /// Nil when the image doesn't exist (simulation mode, or a container being created).
+    public static func read(rootfsPath: String, hostAvailableBytes: Int64) -> ContainerDiskSnapshot? {
+        let url = URL(fileURLWithPath: rootfsPath)
+        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .totalFileAllocatedSizeKey]),
+              let logical = values.fileSize, let allocated = values.totalFileAllocatedSize else { return nil }
+        return make(allocatedBytes: Int64(allocated), logicalSizeBytes: Int64(logical), hostAvailableBytes: hostAvailableBytes)
+    }
+}

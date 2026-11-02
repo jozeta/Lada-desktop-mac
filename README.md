@@ -6,7 +6,7 @@
 
 **Låda** (Swedish for *"box"* or *"crate"*) is a native macOS desktop application written in Swift and SwiftUI for managing Apple's official [`container`](https://github.com/apple/container) runtime (`v1.5.0+`; tested against `v1.6.1`).
 
-Designed with a **Technical Nordic** visual identity, Låda exposes Apple's lightweight Linux VM-per-container architecture (`Virtualization.framework`, `vmnet`, `virtiofs`, and `container-apiserver`) with real-time telemetry, multi-container Compose stacks, an in-container file browser & editor, an interactive ANSI PTY terminal, a Docker Hub Image Library, and a live Dockerfile Studio — without modifying or replacing Apple's upstream binaries or data directories.
+Designed with a **Nordic frosted-glass** look (translucent window, glass panels, custom vector icons), Låda exposes Apple's lightweight Linux VM-per-container architecture (`Virtualization.framework`, `vmnet`, `virtiofs`, and `container-apiserver`) with real-time telemetry, multi-container Compose stacks, an in-container file browser & editor, an interactive PTY terminal, a Docker Hub Image Library, and a Dockerfile Editor with code completion — without modifying or replacing Apple's upstream binaries or data directories.
 
 ![Låda Overview Dashboard](docs/screenshots/overview.png)
 
@@ -14,57 +14,59 @@ Designed with a **Technical Nordic** visual identity, Låda exposes Apple's ligh
 
 ## Key Features
 
-### 1. System Overview & Real-Time Telemetry
-- **Aggregated Runtime Telemetry Charts**: Live area and line graphs for CPU utilization (`%`), memory usage (`MiB` / `GiB`), network RX/TX throughput, and block I/O across all running Linux micro-VMs.
-- **Storage Allocation Breakdown**: Visual progress bars and disk footprint cards for OCI images, active containers, and ext4 sparse volumes (`container system df`).
-- **Adaptive Event-Driven Polling**: Automatically switches between high-frequency batched telemetry when the window is active and low-power idle polling when backgrounded or when all containers are stopped.
+### 1. Overview Dashboard
+- **Live Telemetry Charts**: CPU (weighted by each container's vCPUs), memory, network RX/TX and block I/O across all running containers, with a 5-minute history, hover readouts and peak/average.
+- **Disk Space Donut**: This Mac's disk split into images, containers, volumes, other files and free space, next to the `container system df` breakdown with reclaimable space.
+- **Packed Panel Layout**: Active Containers (busiest first), disk usage and recent operations pack into columns without gaps and reflow to one column in a narrow window.
+- **One Poll Loop**: Containers, stats and port health are refreshed every 2 seconds while Låda is the active app (pausing when it is in the background), and views only redraw when a value actually changed.
 
-### 2. Container Management & Live Port Health Probes
-![Containers Overview & Live Telemetry](docs/screenshots/containers-overview.png)
+### 2. Containers & Live Port Health
+![Containers & Inspector](docs/screenshots/containers-overview.png)
 
-- **7-Tab Container Inspector**: Inspect **Overview**, **Files**, **Logs**, **Terminal**, **Inspect**, **Networking**, and **Mounts** for any container.
-- **Live Port-Forwarding & HTTP/TCP Health Probes**: Published host ports (`127.0.0.1:<host> -> <container>/tcp`) are continuously probed in the background and badged with live **`HTTP Ready`**, **`TCP Ready`**, or **`Unreachable`** indicators and 1-click browser launch buttons.
-- **Diagnostic Crash & Boot Inspector**: Automatically captures both standard container output (`container logs`) and Linux micro-VM boot diagnostics (`container logs --boot`) whenever a container exits unexpectedly.
-- **1-Click Native Terminal.app Launch**: Open any running container directly in macOS `Terminal.app` (`container exec -it <id> /bin/sh`) from the container table, inspector header, or right-click context menu.
+- **Container Table with Stack Groups**: Containers started from a stack are grouped under the stack's name in a collapsible row, with Start All / Stop All and Open in Stacks.
+- **8-Tab Inspector**: **Overview**, **Logs**, **Terminal**, **Files**, **Config**, **Network**, **Storage** and **Env**. Each container keeps its own tab, terminal session, folder and logs when you switch containers or sections.
+- **Per-Container Disk Donut**: How much space the container's root filesystem image really uses on this Mac, and how much it can still grow (the smaller of the image's size and the Mac's free space). It is measured from the sparse `rootfs.ext4`, so it works for stopped containers too.
+- **Live Port Health Probes**: Published ports are probed in the background and badged **HTTP Ready**, **TCP Ready** or **Unreachable**, with an Open button for HTTP.
+- **Crash Diagnostics**: When a container exits right after starting, Låda shows its output (`container logs`) and the VM boot log (`container logs --boot`).
+- **Terminal.app Launch**: Open a running container's shell in macOS Terminal (`container exec -it <id> <shell>`).
 
 ### 3. In-Container File Browser & Editor (`Files` Tab)
 ![In-Container File Browser & Editor](docs/screenshots/container-files.png)
 
-- **Agentless Filesystem Navigation**: Browse directories inside any running container VM with breadcrumb navigation, Quick Jump shortcuts (`/`, `/etc`, `/var/log`, `/app`, `/usr/share/nginx/html`, `/tmp`), permissions, ownership, and file sizes.
-- **Built-In Config & Source Editor**: View and edit configuration files (`nginx.conf`, `Caddyfile`, `.env`, scripts, HTML/JSON) directly inside the running container and save changes atomically without installing `vim` or `nano`.
-- **Host Import & Export**: Upload files from macOS into a running container or export container files/directories back to the host.
+- **Agentless Browsing**: Breadcrumbs, Quick Jump (`/`, `/etc`, `/var/log`, `/usr/share/nginx/html`, `/app`, `/tmp`), permissions, owners and sizes, using `container exec` (no shell) and `container copy`.
+- **In-Place Editor**: Edit text files up to 1 MiB inside the running container; saving keeps the file's mode and owner. Binary and larger files are refused rather than truncated.
+- **Upload & Download**: Byte-exact transfers between your Mac and the container, including drag and drop from Finder.
 
-### 4. Interactive ANSI PTY Terminal (`Terminal` Tab)
-![Interactive ANSI PTY Terminal](docs/screenshots/container-terminal.png)
+### 4. Interactive Terminal (`Terminal` Tab)
+- **Real Terminal**: A native POSIX pseudo-terminal (`openpty`) running `container exec -it`, rendered by Låda's own VT100/xterm screen model: 16/256-colour and true-colour SGR, cursor movement, alternate screen (`vim`, `top`, `less`), scrollback and xterm key encoding.
+- **Sessions Stay Open**: Each container keeps its session while you switch containers or sections.
 
-- **Direct Keystroke Capture (`InteractivePTYCanvas`)**: Type directly into the terminal canvas with support for `Tab` completion, arrow-key command history, `Ctrl+C`, `Ctrl+D`, `Ctrl+L`, and `⌘V` clipboard paste.
-- **ANSI Color & Control Sequence Rendering**: Full 16/256-color SGR rendering, cursor backspace handling, and screen clearing backed by a native POSIX pseudo-terminal (`openpty`).
-- **Quick Diagnostic Bar**: 1-click chips for `ls -la`, `ps aux`, `env | sort`, `df -h`, `ip addr`, and `cat /etc/os-release`.
+### 5. Stacks (`docker-compose.yml`)
+![Stacks](docs/screenshots/compose-stacks.png)
 
-### 5. Multi-Container Compose Stacks (`docker-compose.yml`)
-![Multi-Container Compose Stacks](docs/screenshots/compose-stacks.png)
+- **Starts Empty**: Build a stack yourself or start from a template. After a stack starts successfully, the screen clears and the stack lives on in Containers (Open in Stacks reopens its compose file).
+- **Two-Way Stack Builder**: Add or edit services with a form (image with autocomplete or an Image Library preset, ports, settings, storage, start order) or type in the Compose File tab. Both stay in sync, and only the affected service is rewritten, so your comments are kept.
+- **Dependency Order & DNS Aliases**: `depends_on` decides the start order, named volumes are created, and each service gets its name (plus Compose `aliases:`) as a DNS alias on the `default` network, so peers reach it as e.g. `db`. Single-label names need a default DNS domain (`container system dns create test`, then `container system property set dns.domain test`); without one the stack log says which aliases were skipped.
+- **Templates**: Website + PostgreSQL + Redis, WordPress + MySQL, PostgreSQL + Adminer, Gitea + PostgreSQL, Prometheus + Grafana, Python API + Redis, NATS + Valkey, Mailpit + private registry, and Vault (dev mode). Passwords are generated per use. Open and save any `.yml`/`.yaml` compose file, with recent files.
 
-- **Stack Builder**: Build a stack with a form (Add Service: image with autocomplete or an Image Library preset, ports, settings, storage, start order) or by typing in the Compose File tab; both stay in sync, editing only the affected service so your other text and comments are kept. Start, stop and remove the whole stack from one place.
-- **Stacks in Containers**: Started stacks appear in the Containers list as one collapsible group named after the stack, with a summary (start/stop all) when the group is selected.
-- **Topological Dependency Plan**: Automatically resolves `depends_on` service ordering, creates named volumes, and gives each service its name (plus any Compose `aliases:`) as a DNS alias on the `default` network so peers can reach it as e.g. `db`. Single-label names such as `db` need a default DNS domain (`container system dns create test`, then `container system property set dns.domain test`); without one the stack console says which aliases were skipped.
-- **Stack Templates**: Website + PostgreSQL + Redis, WordPress + MySQL, PostgreSQL + Adminer, Gitea + PostgreSQL, Prometheus + Grafana, Python API + Redis, NATS + Valkey, Mailpit + private registry, and Vault (dev mode). Passwords are generated per use. Open and save any `.yml`/`.yaml` compose file, with recent files.
-
-### 6. Docker Hub Image Library & Curated Presets
+### 6. Docker Hub Image Library
 ![Docker Hub Image Library](docs/screenshots/image-library.png)
 
-- **Live Docker Hub Search & Curated Catalog**: Search official and community OCI images or browse curated presets across Web Servers, Databases, Caching & Queues, Dev Runtimes, Base OS, and DevOps tools.
-- **Apple `container` VM Compatibility Tuning**: Automatically configures `PGDATA`, `MYSQL_DATADIR`, or subdirectory mounts for database images (`postgres`, `mysql`, `mariadb`, `mongo`) so ext4 volume root `lost+found` directories never block database initialization, starts presets detached without `-i` (which `container run -d -i -t` rejects from a non-terminal), gives shell images such as `alpine` a TTY so they keep running, and starts runtimes without a long-running default (Bun, Temurin) idle for use from the Terminal tab. Every preset tag has an arm64 build, and all presets were verified to start on `container` 1.6.1.
+- **Search & Curated Catalog**: Search Docker Hub or browse 35 curated presets across web servers, databases, caching & queues, languages & runtimes, base OS images and DevOps tools.
+- **Tuned for Apple `container`**: Database presets use a data subdirectory so the volume's `lost+found` never blocks initialisation, and database passwords are generated at deploy time. Presets start detached without `-i` (which `container run -d -i -t` rejects from a non-terminal), shell images get a TTY so they keep running, and runtimes without a long-running default idle for use from the Terminal tab. Every preset tag has an arm64 build, and all presets were verified to start on `container` 1.6.1.
 
-### 7. Dockerfile & Containerfile Studio + Live Linter
-![Dockerfile Studio & Live Linter](docs/screenshots/dockerfile-studio.png)
+### 7. Dockerfile Editor
+![Dockerfile Editor](docs/screenshots/dockerfile-editor.png)
 
-- **Syntax-Highlighted Editor & Starter Templates**: Author `Dockerfile` / `Containerfile` definitions with starter templates for **Static Web Server**, **Node.js Express**, **Python FastAPI**, **Go Multi-Stage (`arm64`)**, and **PostgreSQL 17 (Apple Container Ext4 Tuned)**.
-- **Live Linter with 1-Click Quick Fixes**: Detects `:latest` floating tags, consecutive `RUN` layers, `apt-get` cache bloat, missing `WORKDIR` paths, and `ADD` vs `COPY` best practices with instant **Apply Fix** actions.
-- **Conflict-Free Deployment Controls**: Customize container name, image tag, host/container port mappings, and volume mounts directly in the studio with live port-conflict warnings before building and running.
-- **Universal Window Drag-and-Drop**: Drop a `Dockerfile`, `Containerfile`, `docker-compose.yml`, or project folder anywhere onto the Låda window to open and configure it immediately.
+- **Code Completion While You Type**: Suggestions follow the cursor's context: instructions at the start of a line, then each instruction's arguments. That includes images on this Mac and from the library after `FROM`, build stages after `COPY --from=`, `ARG`/`ENV` names after `$`, flags (`--mount=type=cache`, `--chown=`, `--platform=`), ports, signals, earlier `WORKDIR`s and `USER`s, and OCI labels.
+- **Syntax Highlighting**: Nordic palette tuned for light and dark mode, on the same glass as the rest of the app, with line numbers.
+- **Starter Templates**: Nginx static site, Python HTTP service, Node.js 22, Swift 6, Go 1.23 and PostgreSQL 16 (ext4-tuned).
+- **Live Linter with Quick Fixes**: Unpinned base image tags, `COPY`/`ADD` before `WORKDIR`, `apt-get install` without `-y`, PostgreSQL without a `PGDATA` subdirectory, and no `EXPOSE`.
+- **Build & Run**: Edit the container name, ports, environment, storage, CPUs and memory with live name and port conflict checks, then build with live BuildKit output and run, or open the settings in the Create Container wizard.
+- **Drag and Drop**: Drop a `Dockerfile`, `Containerfile`, `docker-compose.yml` or project folder anywhere on the window.
 
-### 8. Menu Bar Quick-Control Popover
-- Always-available macOS menu bar extra (`MenuBarExtra`) displaying runtime status, active container counts, live CPU/RAM usage, published port quick-links, and 1-click Start/Stop/Terminal controls.
+### 8. Menu Bar Popover
+- A `MenuBarExtra` with runtime status, running containers with live CPU and memory, and one-click Open in Browser, Terminal, Start and Stop, plus New Container and Stacks.
 
 ---
 
@@ -74,13 +76,13 @@ Designed with a **Technical Nordic** visual identity, Låda exposes Apple's ligh
 |---|---|---|
 | **Host Baseline** | Apple silicon (`arm64`) + macOS 26+ | **Supported** — Verified by `RuntimeDiscoveryService` & `RuntimeHealthService` |
 | **System Lifecycle** | `container system start \| stop \| status \| version \| df \| logs \| property \| dns \| kernel` | **Supported** — Dashboard, Setup Wizard, Menu Bar Popover, and Settings → System & Runtime |
-| **Container Lifecycle** | `container run \| create \| start \| stop \| kill \| delete \| clean \| prune \| ls \| inspect \| logs \| stats \| exec \| export` (Låda's Restart is `stop` + `start`; upstream has no `restart`) | **Supported** — Full table/grid, 5-step creation wizard, 7-tab inspector, live command preview |
+| **Container Lifecycle** | `container run \| create \| start \| stop \| kill \| delete \| clean \| prune \| ls \| inspect \| logs \| stats \| exec \| export` (Låda's Restart is `stop` + `start`; upstream has no `restart`) | **Supported** — Container table with stack groups, creation wizard, 8-tab inspector, live command preview |
 | **In-Container File Browser** | `container copy` for transfers; `container exec` (no shell) for `ls`, `mkdir`, `rm`, `stat` | **Supported** — Directory browser, editor for text files up to 1 MiB (keeps mode and owner on save), byte-exact upload and download |
 | **Multi-Container Stacks** | `docker-compose.yml` / `compose.yaml` orchestration | **Supported** — Topological service ordering, named volumes, service names as DNS aliases on the `default` network (needs a default DNS domain for single-label names) |
 | **DNS Aliases** | `--network <name>,alias=<name>` (1.6.0+) | **Supported** — Create Container wizard (validated against upstream rules), Networking tab, Compose `aliases:` |
-| **Interactive Terminal** | `container exec -i -t <id> <shell>` | **Supported** — Native POSIX pseudo-terminal (`openpty`) + ANSI PTY canvas & macOS `Terminal.app` launcher |
+| **Interactive Terminal** | `container exec -i -t <id> <shell>` | **Supported** — Native POSIX pseudo-terminal (`openpty`) with an xterm-compatible screen model, and a macOS `Terminal.app` launcher |
 | **OCI Images & Docker Hub** | `container image list \| inspect \| pull \| push \| tag \| delete \| prune \| save \| load` | **Supported** — Multi-platform variant inspection, layer history, tar archive save/load, Docker Hub catalog |
-| **Image Builds** | `container build`, `container builder status \| stop` | **Supported** — In the Dockerfile Editor: live BuildKit output, linter, build and run |
+| **Image Builds** | `container build`, `container builder status \| stop` | **Supported** — In the Dockerfile Editor: code completion, linter, live BuildKit output, build and run |
 | **Virtual Networks (`vmnet`)** | `container network list \| create \| inspect \| delete \| prune` | **Supported** — Isolated NAT networks, IPv4/IPv6 CIDR validation, attached container topology |
 | **Named Volumes & VirtioFS** | `container volume list \| create \| inspect \| delete \| prune` | **Supported** — Ext4 sparse volume sizing (`-s`), journal mode (`ordered`, `writeback`, `journal`), Finder reveal |
 | **Container Machines** | `container machine list \| create \| inspect \| stop \| delete \| set \| set-default \| logs \| run` (start = `machine run … true`); `machine.*` defaults from `system property list` | **Supported** — Full lifecycle, CPU/RAM/Home-Mount (`rw`/`ro`/`none`) reconfiguration, console logs |
@@ -101,13 +103,20 @@ Lada/
 ├── App/
 │   ├── LadaApp.swift                      # SwiftUI @main entry point, MenuBarExtra, keyboard shortcuts
 │   ├── AppDelegate.swift                  # Window lifecycle, dock menu, quit behavior
-│   ├── AppState.swift                     # @MainActor state coordinator, adaptive polling & drag-and-drop
+│   ├── AppState.swift                     # @MainActor state coordinator, single poll loop & drag-and-drop
+│   ├── ContainerWorkspaces.swift          # Per-container inspector state (tab, terminal, files, logs)
+│   ├── StackWorkspace.swift               # The Stacks screen's compose file and deploy state
 │   └── MainWindowView.swift               # NavigationSplitView shell, global drop overlay, status bar
 ├── Core/
 │   ├── Models/                            # Typed models & deterministic CLI argument builders
 │   ├── Errors/LadaError.swift             # Structured error taxonomy & actionable remediation
 │   ├── Utilities/
 │   │   ├── ComposeParser.swift            # Multi-container docker-compose.yml parser & topological planner
+│   │   ├── ComposeDocument.swift          # Edits one service block at a time (two-way Stacks sync)
+│   │   ├── DockerfileCompletionEngine.swift # Context-aware Dockerfile completions
+│   │   ├── DiskSpace.swift                # Host and per-container disk measurements for the donuts
+│   │   ├── ImageReferenceSuggester.swift  # Image name autocomplete
+│   │   ├── SecretGenerator.swift          # Random database passwords for presets and templates
 │   │   ├── DockerfileParser.swift         # Dockerfile / Containerfile parser & auto-configuration builder
 │   │   ├── PortHealthProber.swift         # Live TCP & HTTP port reachability prober
 │   │   ├── SecretRedactor.swift           # Automatic secret/token masking for logs & CLI previews
@@ -120,6 +129,7 @@ Lada/
 │   ├── CommandRunner.swift                # Non-shell Process actor with stdout/stderr streaming & cancellation
 │   ├── ContainerRuntimeService.swift      # Service protocol for live & mock implementations
 │   ├── ContainerCLIClient.swift           # Live integration with Apple's `container` CLI
+│   ├── ContainerFileOperations.swift      # Files tab: list, read, write via exec (no shell) and copy
 │   ├── DockerHubService.swift             # Curated OCI catalog & live Docker Hub search API client
 │   ├── MockContainerRuntimeService.swift  # Deterministic simulation service for tests & sandbox preview
 │   ├── RuntimeDiscoveryService.swift      # Hardware/OS sysctl checks & CLI binary discovery
@@ -129,28 +139,34 @@ Lada/
 │       └── ContainerOutputParser.swift    # JSON/text parsers for all `container` subcommands
 ├── Features/
 │   ├── Setup/SetupWizardView.swift
-│   ├── Dashboard/DashboardView.swift      # System overview, telemetry charts, runtime health cards
+│   ├── Dashboard/DashboardView.swift      # Telemetry charts, disk donut, packed panels
 │   ├── Containers/
-│   │   ├── ContainersView.swift           # Container table/grid, port probe pills, quick actions
-│   │   ├── ContainerDetailView.swift      # 7-tab container inspector
+│   │   ├── ContainersView.swift           # Container table with collapsible stack groups
+│   │   ├── StackGroupSummaryView.swift    # Inspector for a selected stack group
+│   │   ├── ContainerDetailView.swift      # 8-tab container inspector
 │   │   ├── ContainerFileBrowserView.swift # In-container file browser, viewer/editor & host import/export
 │   │   └── CreateContainerWizardView.swift
 │   ├── Stacks/StacksView.swift            # Stack builder: services form, compose file, logs
 │   ├── Stacks/StackServiceEditorView.swift # Add/edit one service (writes the compose file)
-│   ├── Terminal/InteractiveTerminalView.swift # Native POSIX PTY + direct-keystroke ANSI terminal canvas
+│   ├── Terminal/InteractiveTerminalView.swift # PTY session and terminal canvas
+│   ├── Terminal/TerminalScreen.swift      # VT100/xterm screen model
+│   ├── Terminal/TerminalScreenRenderer.swift
 │   ├── Images/ImagesView.swift            # Local OCI image manager & layer inspector
 │   ├── ImageLibrary/ImageLibraryView.swift # Docker Hub search & 1-click preset deployment
-│   ├── Editor/DockerfileEditorView.swift  # Dockerfile Studio, live linter & 1-click build/run
+│   ├── Editor/DockerfileEditorView.swift  # Dockerfile Editor: completion, linter, build & run
 │   ├── Networks/NetworksView.swift        # vmnet virtual network manager
 │   ├── Volumes/VolumesView.swift          # Ext4 sparse volume & VirtioFS manager
 │   ├── Machines/MachinesView.swift        # Linux container machine lifecycle & resource controls
 │   ├── Registry/RegistriesView.swift      # OCI registry authentication manager
 │   ├── MenuBar/MenuBarPopoverView.swift   # macOS menu bar quick-control popover
-│   └── Settings/SettingsView.swift        # Activity log + 8-section Settings
+│   └── Settings/SettingsView.swift        # Activity log + 8-tab Settings
 ├── Shared/
-│   ├── DesignSystem/NordicTheme.swift
+│   ├── DesignSystem/NordicTheme.swift     # Tokens, frosted glass, backdrop, syntax palette
 │   ├── Icons/LadaIcons.swift              # Custom 1.5pt geometric SwiftUI Shape vector icons
-│   ├── Components/ReusableComponents.swift
+│   ├── Components/ReusableComponents.swift # Charts, headers, badges, editors
+│   ├── Components/MasonryLayout.swift     # Gap-free packed panel layout
+│   ├── Components/NordicDonutChart.swift  # Hollow pie chart for disk space
+│   ├── Components/ImageReferenceField.swift # Image field with autocomplete
 │   └── Accessibility/AccessibilityIdentifiers.swift
 ├── Resources/
 │   ├── AppIcon.icns
@@ -180,6 +196,8 @@ swift run Lada
 ### Run Automated Test Suites
 ```bash
 swift test
+# README screenshots (Mock Sandbox data), written as readme-<name>-<light|dark>.png:
+LADA_SNAPSHOT_DIR=/tmp/lada-shots swift test --filter testReadmeScreenshots
 ```
 
 ### Package Native `Lada.app` Bundle & `.dmg`

@@ -155,13 +155,14 @@ public enum NordicSyntax {
     /// variant.
     public static func palette(for appearance: NSAppearance) -> Palette {
         if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
-            return Palette(text: rgb(0xD8, 0xDE, 0xE9), keyword: rgb(0x88, 0xC0, 0xD0), alias: rgb(0xB4, 0x8E, 0xAD),
-                           flag: rgb(0x8F, 0xBC, 0xBB), string: rgb(0xA3, 0xBE, 0x8C), variable: rgb(0xD0, 0x87, 0x70),
-                           comment: rgb(0x7B, 0x85, 0x94))
+            // Brightened Nord: snow-white text and lifted accents, so code reads crisply on glass.
+            return Palette(text: rgb(0xF2, 0xF4, 0xF8), keyword: rgb(0x9C, 0xD6, 0xE8), alias: rgb(0xD3, 0xA8, 0xCB),
+                           flag: rgb(0xA6, 0xDB, 0xD5), string: rgb(0xBC, 0xD9, 0x9E), variable: rgb(0xEB, 0xA2, 0x84),
+                           comment: rgb(0x9A, 0xA4, 0xB4))
         }
-        return Palette(text: rgb(0x1E, 0x24, 0x2C), keyword: rgb(0x24, 0x52, 0x7A), alias: rgb(0x6E, 0x45, 0x8F),
-                       flag: rgb(0x1A, 0x66, 0x6E), string: rgb(0x3A, 0x6E, 0x3F), variable: rgb(0x9A, 0x51, 0x1A),
-                       comment: rgb(0x6B, 0x74, 0x80))
+        return Palette(text: rgb(0x0F, 0x14, 0x1A), keyword: rgb(0x1B, 0x4B, 0x76), alias: rgb(0x66, 0x3A, 0x8A),
+                       flag: rgb(0x10, 0x5E, 0x66), string: rgb(0x2E, 0x66, 0x33), variable: rgb(0x92, 0x47, 0x10),
+                       comment: rgb(0x5B, 0x64, 0x70))
     }
 }
 
@@ -308,8 +309,10 @@ private struct NordicGlassSurface: ViewModifier {
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        // Thin material: more of the backdrop shows through, so the frost reads as glass. Reduce
+        // Transparency still makes it solid.
         content
-            .background(.regularMaterial, in: shape)
+            .background(.thinMaterial, in: shape)
             .clipShape(shape)
             .overlay(
                 shape.strokeBorder(
@@ -337,6 +340,10 @@ public struct NordicBackdrop: View {
     public var body: some View {
         let dark = colorScheme == .dark
         ZStack {
+            // The desktop and windows behind Låda, blurred (behind-window vibrancy). The tint
+            // below is partly transparent so they show through; Reduce Transparency turns this
+            // layer solid and the backdrop becomes the plain gradient.
+            NordicWindowMaterial()
             LinearGradient(
                 colors: dark
                     ? [Color(red: 0.067, green: 0.082, blue: 0.106), Color(red: 0.094, green: 0.106, blue: 0.129)]
@@ -344,16 +351,38 @@ public struct NordicBackdrop: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
+            .opacity(Self.tintOpacity(dark: dark))
             RadialGradient(
-                colors: [Color(red: 0.36, green: 0.58, blue: 0.77).opacity(dark ? 0.22 : 0.18), .clear],
+                colors: [Color(red: 0.36, green: 0.58, blue: 0.77).opacity(dark ? 0.30 : 0.26), .clear],
                 center: .topLeading, startRadius: 0, endRadius: 700
             )
             RadialGradient(
-                colors: [Color(red: 0.53, green: 0.75, blue: 0.82).opacity(dark ? 0.12 : 0.14), .clear],
+                colors: [Color(red: 0.53, green: 0.75, blue: 0.82).opacity(dark ? 0.18 : 0.22), .clear],
                 center: .bottomTrailing, startRadius: 0, endRadius: 600
             )
         }
     }
+}
+
+extension NordicBackdrop {
+    /// How much of the Nordic tint covers the blurred desktop: low enough to see what's behind,
+    /// high enough that text on the page keeps its contrast.
+    static func tintOpacity(dark: Bool) -> Double { dark ? 0.55 : 0.5 }
+}
+
+/// Blurred view of what is behind the window, under the page backdrop.
+public struct NordicWindowMaterial: NSViewRepresentable {
+    public init() {}
+
+    public func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .underWindowBackground
+        view.blendingMode = .behindWindow
+        view.state = .followsWindowActiveState
+        return view
+    }
+
+    public func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
 
 /// Behind-window vibrancy (the translucent sidebar of Finder or Mail).

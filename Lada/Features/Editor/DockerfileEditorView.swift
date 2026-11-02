@@ -356,6 +356,7 @@ public struct DockerfileEditorView: View {
                         cursorLine: $cursorLine,
                         currentWordPrefix: $currentWordPrefix,
                         pendingInsertion: $pendingInsertion,
+                        localImages: appState.images.map(\.fullReference),
                         onFileDrop: { url in
                             if let content = try? String(contentsOf: url, encoding: .utf8) {
                                 currentFileURL = url
@@ -376,6 +377,9 @@ public struct DockerfileEditorView: View {
                             .frame(height: 175)
                     }
                 }
+                // The code is a glass panel like every other one, inset from the window edges.
+                .nordicSurface()
+                .padding(NordicTheme.Spacing.m)
                 .frame(minWidth: 440)
 
                 // Right: Editable Deployment Settings & Conflict Resolver
@@ -383,7 +387,6 @@ public struct DockerfileEditorView: View {
                     .frame(minWidth: 330, idealWidth: 365, maxWidth: 430)
             }
         }
-        .nordicPageBackground()
         .onChange(of: currentWordPrefix) { _, newPrefix in
             updateCompletions(for: newPrefix)
         }
@@ -406,91 +409,82 @@ public struct DockerfileEditorView: View {
 
     // MARK: - Toolbar
 
+    /// Same header pattern as Stacks: page title and one-line description, then the file, its
+    /// lint state and the actions.
     private var editorToolbar: some View {
         let diags = activeDiagnostics
-        return HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 8) {
-                    Text("Dockerfile & Containerfile Studio")
-                        .font(.system(size: 16, weight: .semibold))
+        let accent = NordicTheme.accent(for: appState.preferences.accentThemeChoice)
+        return VStack(alignment: .leading, spacing: NordicTheme.Spacing.m) {
+            HStack(alignment: .firstTextBaseline, spacing: NordicTheme.Spacing.s) {
+                Text("Dockerfile Editor")
+                    .font(NordicTheme.titleFont)
+                    .foregroundStyle(NordicTheme.primaryText)
+                Text("Write a Dockerfile with live linting, then build the image and run it as a container.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(NordicTheme.secondaryText)
+                    .lineLimit(2)
+            }
+            HStack(spacing: NordicTheme.Spacing.m) {
+                HStack(spacing: NordicTheme.Spacing.s) {
+                    Label(currentFileURL?.lastPathComponent ?? "Unsaved Dockerfile", systemImage: "doc.text")
+                        .font(.system(size: 12.5, weight: .semibold))
                         .foregroundStyle(NordicTheme.primaryText)
-
+                        .lineLimit(1)
                     NordicStatusBadge(
-                        label: diags.isEmpty ? "Lint Clean" : "\(diags.count) \(diags.count == 1 ? "Advisory" : "Advisories")",
+                        label: diags.isEmpty ? "Lint clean" : "\(diags.count) \(diags.count == 1 ? "suggestion" : "suggestions")",
                         tone: diags.isEmpty ? .positive : .warning
                     )
-
-                    if let currentFileURL {
-                        Text(currentFileURL.lastPathComponent)
-                            .font(NordicTheme.monoFontSmall)
-                            .foregroundStyle(NordicTheme.secondaryText)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(Color.primary.opacity(0.06)))
+                }
+                Spacer()
+                Menu {
+                    Menu("Start from a Template") {
+                        ForEach(DockerfileTemplate.allTemplates) { tpl in
+                            Button("\(tpl.title) — \(tpl.subtitle)") {
+                                dockerfileText = tpl.content
+                                currentFileURL = nil
+                                syncSettingsFromDockerfile(autoResolveConflicts: true)
+                            }
+                        }
                     }
+                    Divider()
+                    Button("Open Dockerfile…") { openDockerfileFromDisk() }
+                    Button("Save…") { saveDockerfileToDisk() }
+                } label: {
+                    Label("Templates & Files", systemImage: "doc.on.doc")
                 }
-                Text("Write or paste a Dockerfile with syntax highlighting, row numbers, live linting, and editable deployment settings.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(NordicTheme.secondaryText)
-            }
+                .fixedSize()
+                .controlSize(.small)
+                .accessibilityIdentifier("lada.editor.templatesAndFiles")
 
-            Spacer()
-
-            Menu("Templates") {
-                ForEach(DockerfileTemplate.allTemplates) { tpl in
-                    Button("\(tpl.title) — \(tpl.subtitle)") {
-                        dockerfileText = tpl.content
-                        currentFileURL = nil
-                        syncSettingsFromDockerfile(autoResolveConflicts: true)
-                    }
+                Button {
+                    openInCreateContainerWizard()
+                } label: {
+                    Label("Configure & Deploy…", systemImage: "slider.horizontal.3")
                 }
-            }
-            .controlSize(.small)
-            .frame(width: 110)
+                .controlSize(.small)
+                .help("Open the container wizard with these settings")
 
-            Button("Open File…") {
-                openDockerfileFromDisk()
-            }
-            .controlSize(.small)
-
-            Button("Save…") {
-                saveDockerfileToDisk()
-            }
-            .controlSize(.small)
-
-            Divider().frame(height: 18)
-
-            Button {
-                openInCreateContainerWizard()
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "slider.horizontal.3")
-                    Text("Configure & Deploy…")
-                }
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-
-            Button {
-                buildAndRunImmediately()
-            } label: {
-                HStack(spacing: 5) {
+                Button {
+                    buildAndRunImmediately()
+                } label: {
                     if isBuildingAndRunning {
-                        ProgressView().controlSize(.small)
-                        Text("Deploying…")
+                        HStack(spacing: 5) {
+                            ProgressView().controlSize(.small)
+                            Text("Building…")
+                        }
                     } else {
-                        Image(systemName: "play.fill")
-                        Text("Build & Run Now")
+                        Label("Build & Run", systemImage: "play.fill")
                     }
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+                .controlSize(.small)
+                .disabled(isBuildingAndRunning || dockerfileText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .accessibilityIdentifier("lada.editor.buildAndRun")
             }
-            .buttonStyle(.borderedProminent)
-            .tint(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
-            .controlSize(.small)
-            .disabled(isBuildingAndRunning || dockerfileText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, NordicTheme.Spacing.l)
+        .padding(.vertical, NordicTheme.Spacing.m)
         .nordicBar()
     }
 
@@ -581,7 +575,7 @@ public struct DockerfileEditorView: View {
                     Button("Sync from Dockerfile") {
                         syncSettingsFromDockerfile(autoResolveConflicts: false)
                     }
-                    .controlSize(.mini)
+                    .controlSize(.small)
                     .help("Re-populate fields from the current Dockerfile instructions")
                 }
 
@@ -592,7 +586,7 @@ public struct DockerfileEditorView: View {
                             Image(systemName: "wand.and.stars")
                                 .foregroundStyle(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
                             Text(verbatim: "Dockerfile Linter (\(diags.count))")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.system(size: 12.5, weight: .semibold))
                                 .foregroundStyle(NordicTheme.primaryText)
                             Spacer()
                         }
@@ -620,7 +614,7 @@ public struct DockerfileEditorView: View {
                                         dockerfileText = fixedText
                                         syncSettingsFromDockerfile(autoResolveConflicts: true)
                                     }
-                                    .controlSize(.mini)
+                                    .controlSize(.small)
                                     .buttonStyle(.borderedProminent)
                                     .fixedSize(horizontal: true, vertical: false)
                                 }
@@ -640,7 +634,7 @@ public struct DockerfileEditorView: View {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(NordicTheme.statusAmber)
                             Text("Name or Port Conflict Detected")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.system(size: 12.5, weight: .semibold))
                                 .foregroundStyle(NordicTheme.primaryText)
                             Spacer()
                             Button("Auto-Resolve") {
@@ -648,7 +642,7 @@ public struct DockerfileEditorView: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(NordicTheme.statusAmber)
-                            .controlSize(.mini)
+                            .controlSize(.small)
                         }
 
                         if hasNameConflict {
@@ -667,21 +661,17 @@ public struct DockerfileEditorView: View {
                             .font(.system(size: 11))
                             .controlSize(.small)
                     }
-                    .padding(10)
-                    .background(NordicTheme.statusAmber.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(NordicTheme.statusAmber.opacity(0.45), lineWidth: 1)
-                    )
+                    .padding(NordicTheme.Spacing.m)
+                    .background(NordicTheme.statusAmber.opacity(0.10), in: RoundedRectangle(cornerRadius: NordicTheme.Radius.card, style: .continuous))
+                    .nordicSurface()
                 }
 
                 // Container Identity & Resources
                 NordicCard {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("CONTAINER NAME")
-                                .font(.system(size: 9, weight: .bold))
+                            Text("Container name")
+                                .font(.system(size: 12.5, weight: .semibold))
                                 .foregroundStyle(NordicTheme.secondaryText)
                             Spacer()
                             Button("Unique Name") {
@@ -730,8 +720,8 @@ public struct DockerfileEditorView: View {
                 NordicCard {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text(verbatim: "PORT MAPPINGS (\(customPorts.count))")
-                                .font(.system(size: 10, weight: .bold))
+                            Text(verbatim: "Ports (\(customPorts.count))")
+                                .font(.system(size: 12.5, weight: .semibold))
                                 .foregroundStyle(NordicTheme.secondaryText)
                             Spacer()
                             Button {
@@ -809,8 +799,8 @@ public struct DockerfileEditorView: View {
                 NordicCard {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text(verbatim: "ENVIRONMENT VARIABLES (\(customEnvVars.count))")
-                                .font(.system(size: 10, weight: .bold))
+                            Text(verbatim: "Environment variables (\(customEnvVars.count))")
+                                .font(.system(size: 12.5, weight: .semibold))
                                 .foregroundStyle(NordicTheme.secondaryText)
                             Spacer()
                             Button {
@@ -856,8 +846,8 @@ public struct DockerfileEditorView: View {
                 NordicCard {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text(verbatim: "VOLUMES & MOUNTS (\(customMounts.count))")
-                                .font(.system(size: 10, weight: .bold))
+                            Text(verbatim: "Storage (\(customMounts.count))")
+                                .font(.system(size: 12.5, weight: .semibold))
                                 .foregroundStyle(NordicTheme.secondaryText)
                             Spacer()
                             Button {
@@ -892,7 +882,7 @@ public struct DockerfileEditorView: View {
                                                 m.source = url.path
                                             }
                                         }
-                                        .controlSize(.mini)
+                                        .controlSize(.small)
                                         .help("Browse host directory")
                                         Button {
                                             customMounts.removeAll { $0.id == m.id }
@@ -924,8 +914,8 @@ public struct DockerfileEditorView: View {
 
     private func inspectorRow(label: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label.uppercased())
-                .font(.system(size: 9, weight: .bold))
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(NordicTheme.secondaryText)
             Text(value)
                 .font(NordicTheme.monoFontSmall)
@@ -937,8 +927,8 @@ public struct DockerfileEditorView: View {
     private var buildConsoleView: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("BUILD & DEPLOYMENT CONSOLE")
-                    .font(.system(size: 10, weight: .bold))
+                Label("Build output", systemImage: "terminal")
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(NordicTheme.secondaryText)
                 Spacer()
                 Button("Clear") {
@@ -963,7 +953,7 @@ public struct DockerfileEditorView: View {
                 }
                 .padding(10)
             }
-            .background(NordicTheme.codeSurface)
+            .background(Color.primary.opacity(0.04))
         }
     }
 
@@ -1121,6 +1111,8 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
     @Binding var cursorLine: Int
     @Binding var currentWordPrefix: String
     @Binding var pendingInsertion: String?
+    /// Local image references, offered after FROM.
+    var localImages: [String] = []
     var onFileDrop: ((URL) -> Void)? = nil
 
     public func makeCoordinator() -> Coordinator {
@@ -1133,8 +1125,11 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
+        // Transparent: the code sits on the same frosted glass as every other panel.
+        scrollView.drawsBackground = false
 
         let textView = DockerfileNSTextView()
+        textView.drawsBackground = false
         textView.onFileDrop = onFileDrop
         textView.isEditable = true
         textView.isSelectable = true
@@ -1144,7 +1139,7 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
-        textView.font = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
+        textView.font = NSFont.monospacedSystemFont(ofSize: DockerfileNSTextView.fontSize, weight: .regular)
         textView.textContainerInset = NSSize(width: 8, height: 10)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = true
@@ -1152,8 +1147,10 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.delegate = context.coordinator
+        textView.insertionPointColor = NordicSyntax.palette(for: textView.effectiveAppearance).text
         textView.onAppearanceChange = { [weak textView, coordinator = context.coordinator] in
             guard let textView else { return }
+            textView.insertionPointColor = NordicSyntax.palette(for: textView.effectiveAppearance).text
             coordinator.applySyntaxHighlighting(to: textView)
         }
 
@@ -1176,6 +1173,7 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
     public func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? DockerfileNSTextView else { return }
         textView.onFileDrop = onFileDrop
+        context.coordinator.parent = self
 
         if let insertion = pendingInsertion {
             DispatchQueue.main.async {
@@ -1203,8 +1201,20 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
             self.parent = parent
         }
 
+        /// Set when the next change is one typed character (not a paste, delete or completion).
+        private var lastChangeWasTypedCharacter = false
+
+        public func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
+            lastChangeWasTypedCharacter = affectedCharRange.length == 0 && (replacementString?.utf16.count ?? 0) == 1
+            return true
+        }
+
         public func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
+            if lastChangeWasTypedCharacter, let editor = textView as? DockerfileNSTextView {
+                lastChangeWasTypedCharacter = false
+                autoComplete(in: editor)
+            }
             parent.text = textView.string
             applySyntaxHighlighting(to: textView)
             updateCursorContext(in: textView)
@@ -1228,10 +1238,45 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
                   charRange.location + charRange.length <= nsString.length else {
                 return []
             }
-            let partial = nsString.substring(with: charRange).lowercased()
-            return DockerfileCompletionItem.allCatalog
-                .map(\.insertText)
-                .filter { $0.lowercased().hasPrefix(partial) }
+            index?.pointee = 0
+            return suggestions(in: textView, upTo: NSMaxRange(charRange))
+        }
+
+        /// Engine suggestions for the token ending at `cursor`.
+        func suggestions(in textView: NSTextView, upTo cursor: Int) -> [String] {
+            let nsString = textView.string as NSString
+            let cursor = min(cursor, nsString.length)
+            let lineRange = nsString.lineRange(for: NSRange(location: cursor, length: 0))
+            let lineBefore = nsString.substring(with: NSRange(location: lineRange.location, length: cursor - lineRange.location))
+            var previous: String?
+            if lineRange.location > 0 {
+                let prevRange = nsString.lineRange(for: NSRange(location: lineRange.location - 1, length: 0))
+                previous = nsString.substring(with: prevRange).trimmingCharacters(in: .newlines)
+            }
+            return DockerfileCompletionEngine.suggestions(
+                lineBeforeCursor: lineBefore,
+                previousLine: previous,
+                document: textView.string,
+                localImages: parent.localImages
+            )
+        }
+
+        /// Opens the completion list while typing (after a typed character, not on delete or
+        /// paste), when something fits.
+        func autoComplete(in textView: DockerfileNSTextView) {
+            guard !textView.isInsertingCompletion, !textView.hasMarkedText(),
+                  textView.selectedRange().length == 0 else { return }
+            let cursor = textView.selectedRange().location
+            guard cursor > 0 else { return }
+            let typed = (textView.string as NSString).character(at: cursor - 1)
+            // Whitespace and newlines end a word; complete again only after a space following an
+            // instruction or argument (e.g. "FROM ", "EXPOSE ").
+            if typed == 0x0A { return }
+            guard !suggestions(in: textView, upTo: cursor).isEmpty else { return }
+            DispatchQueue.main.async { [weak textView] in
+                guard let textView, !textView.isInsertingCompletion else { return }
+                textView.complete(nil)
+            }
         }
 
         func insertCompletion(_ insertion: String, in textView: NSTextView) {
@@ -1280,9 +1325,9 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
             let fullRange = NSRange(location: 0, length: (fullText as NSString).length)
             guard fullRange.length > 0 else { return }
 
-            let baseFont = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
+            let baseFont = NSFont.monospacedSystemFont(ofSize: DockerfileNSTextView.fontSize, weight: .regular)
             let palette = NordicSyntax.palette(for: textView.effectiveAppearance)
-            let boldFont = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .bold)
+            let boldFont = NSFont.monospacedSystemFont(ofSize: DockerfileNSTextView.fontSize, weight: .semibold)
 
             storage.beginEditing()
             storage.setAttributes([
@@ -1351,7 +1396,27 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
 
 /// Custom `NSTextView` subclass that triggers code completion via `Opt+Esc` and routes dropped Dockerfile URLs to Låda's deployment workflow.
 final class DockerfileNSTextView: NSTextView {
+    static let fontSize: CGFloat = 13
     var onFileDrop: ((URL) -> Void)?
+    /// True while AppKit inserts a (partial) completion, so that edit doesn't reopen the list.
+    private(set) var isInsertingCompletion = false
+
+    /// The word being completed, by the engine's rules (`--from=bu`, `${VE`, `nginx:1.2`), not
+    /// AppKit's word boundaries, which stop at `-`, `=`, `:` and `$`.
+    override var rangeForUserCompletion: NSRange {
+        let ns = string as NSString
+        let cursor = min(selectedRange().location, ns.length)
+        let lineStart = ns.lineRange(for: NSRange(location: cursor, length: 0)).location
+        let lineBefore = ns.substring(with: NSRange(location: lineStart, length: cursor - lineStart))
+        let start = lineStart + DockerfileCompletionEngine.tokenStart(in: lineBefore)
+        return NSRange(location: start, length: cursor - start)
+    }
+
+    override func insertCompletion(_ word: String, forPartialWordRange charRange: NSRange, movement: Int, isFinal flag: Bool) {
+        isInsertingCompletion = true
+        defer { isInsertingCompletion = false }
+        super.insertCompletion(word, forPartialWordRange: charRange, movement: movement, isFinal: flag)
+    }
     /// Re-highlights with the new appearance's palette (light/dark switch).
     var onAppearanceChange: (() -> Void)?
 
@@ -1414,10 +1479,8 @@ final class DockerfileLineNumberRulerView: NSRulerView {
               let layoutManager = textView.layoutManager,
               let textContainer = textView.textContainer else { return }
 
-        NSColor.windowBackgroundColor.withAlphaComponent(0.6).setFill()
-        rect.fill()
-
-        NSColor.separatorColor.setStroke()
+        // No fill: the gutter shares the editor's glass; a hairline separates it from the code.
+        NSColor.separatorColor.withAlphaComponent(0.5).setStroke()
         let borderPath = NSBezierPath()
         borderPath.move(to: NSPoint(x: bounds.maxX - 0.5, y: rect.minY))
         borderPath.line(to: NSPoint(x: bounds.maxX - 0.5, y: rect.maxY))
@@ -1430,8 +1493,8 @@ final class DockerfileLineNumberRulerView: NSRulerView {
         let fullString = textView.string as NSString
 
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .regular),
-            .foregroundColor: NSColor.secondaryLabelColor
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
+            .foregroundColor: NSColor.secondaryLabelColor.withAlphaComponent(0.85)
         ]
 
         var lineNumber = 1

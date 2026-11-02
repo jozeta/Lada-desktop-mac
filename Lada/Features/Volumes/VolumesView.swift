@@ -56,7 +56,6 @@ public struct VolumesView: View {
                 .background(Color.clear)
             }
         }
-        .nordicPageBackground()
         .onAppear {
             if appState.selectedVolumeID == nil || !appState.volumes.contains(where: { $0.id == appState.selectedVolumeID }) {
                 appState.selectedVolumeID = appState.volumes.first?.id

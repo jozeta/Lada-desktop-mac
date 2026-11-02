@@ -94,7 +94,6 @@ public struct StacksView: View {
                 unifiedLogsPane
             }
         }
-        .nordicPageBackground()
         .onAppear {
             if let draftYAML = appState.editorDraftComposeYAML, !draftYAML.isEmpty {
                 work.yamlText = draftYAML

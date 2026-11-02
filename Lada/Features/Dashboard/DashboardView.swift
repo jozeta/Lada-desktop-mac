@@ -86,29 +86,16 @@ public struct DashboardView: View {
                 // Live Cluster Performance Graphs (CPU, RAM, Network, Block I/O)
                 livePerformanceGraphsSection
 
-                // Quick Actions & Disk Usage Row
-                HStack(alignment: .top, spacing: 14) {
-                    quickActionsPanel
-                    diskUsagePanel
-                }
-
-                // Active Containers & Recent Operations
-                HStack(alignment: .top, spacing: 14) {
+                // Panels pack into the shortest column (masonry), so differing heights leave no gaps.
+                MasonryLayout(minColumnWidth: 380, maxColumns: 2, spacing: 14) {
                     runningContainersPanel
+                    diskUsagePanel
                     recentActivityPanel
                 }
             }
             .padding(20)
         }
         .background(Color.clear)
-        .task {
-            await appState.sampleAllRunningContainersTelemetry()
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(2))
-                guard !Task.isCancelled else { break }
-                await appState.sampleAllRunningContainersTelemetry()
-            }
-        }
     }
 
     @ViewBuilder
@@ -300,69 +287,6 @@ public struct DashboardView: View {
                 .foregroundStyle(NordicTheme.secondaryText)
                 .lineLimit(1)
                 .truncationMode(.middle)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .nordicSurface()
-    }
-
-    @ViewBuilder
-    private var quickActionsPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            NordicSectionHeader("Quick Actions", subtitle: "Common container & image workflows")
-
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                Button {
-                    appState.createContainerInitialRequest = nil
-                    appState.showCreateContainerSheet = true
-                } label: {
-                    Label("Run / Create Container…", systemImage: "plus.square")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .controlSize(.regular)
-
-                Button {
-                    appState.showPullImageSheet = true
-                } label: {
-                    Label("Pull OCI Image…", systemImage: "arrow.down.circle")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .controlSize(.regular)
-
-                Button {
-                    appState.selectedSection = .dockerfileEditor
-                } label: {
-                    Label("Build an Image…", systemImage: "hammer")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .controlSize(.regular)
-
-                Button {
-                    appState.selectedSection = .machines
-                } label: {
-                    Label("Manage Linux Machines…", systemImage: "terminal")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .controlSize(.regular)
-            }
-
-            Divider().overlay(NordicTheme.borderSubtle)
-
-            HStack {
-                Text("Default DNS Domain:")
-                    .font(.system(size: 12))
-                    .foregroundStyle(NordicTheme.secondaryText)
-                Text(appState.systemProperties.dns.domain.map { ".\($0)" } ?? "Unset")
-                    .font(NordicTheme.monoFontRegular)
-                    .foregroundStyle(NordicTheme.primaryText)
-                Spacer()
-                Text("Default Registry:")
-                    .font(.system(size: 12))
-                    .foregroundStyle(NordicTheme.secondaryText)
-                Text(appState.systemProperties.registry.domain)
-                    .font(NordicTheme.monoFontRegular)
-                    .foregroundStyle(NordicTheme.primaryText)
-            }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)

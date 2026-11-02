@@ -37,7 +37,9 @@ public final class AppState: ObservableObject {
     @Published public var activeError: LadaError? = nil
     @Published public var statusFeedbackMessage: String? = nil
     @Published public var startingContainerIDs: Set<String> = []
-    @Published public var isRefreshing: Bool = false
+    /// Not published: it flips twice per poll and no view shows it, so publishing it only
+    /// re-rendered the whole window.
+    public private(set) var isRefreshing: Bool = false
 
     // MARK: - Runtime & Prerequisite State
 
@@ -49,6 +51,8 @@ public final class AppState: ObservableObject {
     @Published public var diskUsage: DiskUsageSummary = .init()
     /// Capacity of the drive holding the runtime's data (for the dashboard's disk donut).
     @Published public var hostDiskSpace: DiskSpaceSnapshot?
+    /// Each container's root filesystem image: used on the Mac and room left (per-container donut).
+    @Published public var containerDisks: [String: ContainerDiskSnapshot] = [:]
     @Published public var systemProperties: SystemProperties = .init()
     @Published public var dnsDomains: [String] = []
     @Published public var latestReleaseInfo: ReleaseAssetInfo? = nil
@@ -156,7 +160,7 @@ public final class AppState: ObservableObject {
         pollingTask?.cancel()
         pollingTask = Task { [weak self] in
             while !Task.isCancelled {
-                let fastInterval = 3
+                let fastInterval = Self.pollIntervalSeconds
                 try? await Task.sleep(for: .seconds(fastInterval))
                 guard !Task.isCancelled, let self else { break }
                 guard NSApplication.shared.isActive, !self.isRefreshing else { continue }
@@ -171,6 +175,16 @@ public final class AppState: ObservableObject {
         }
     }
 
+    /// One poll cadence for the container list and telemetry. Charts keep
+    /// `telemetryHistoryLength` points of this interval; views no longer run their own stats loops.
+    static let pollIntervalSeconds = 2
+
+    /// Assigns only when the value changed, so an unchanged poll result doesn't publish (each
+    /// publish re-renders every view observing `AppState`).
+    func assignIfChanged<T: Equatable>(_ keyPath: ReferenceWritableKeyPath<AppState, T>, _ value: T) {
+        if self[keyPath: keyPath] != value { self[keyPath: keyPath] = value }
+    }
+
     /// Lightweight adaptive poll that refreshes only containers, single-call batched stats, and live port health probes.
     public func refreshFastWorkloadState() async {
         guard !isRefreshing, installation.isInstalled, systemStatus.state == .running else { return }
@@ -182,7 +196,7 @@ public final class AppState: ObservableObject {
         async let statsTask = try? active.getContainerStats(ids: [])
 
         if let c = await containersTask {
-            self.containers = c
+            assignIfChanged(\.containers, c)
         }
         if let stats = await statsTask, !stats.isEmpty {
             ingestStatsSnapshot(stats)
@@ -214,7 +228,7 @@ public final class AppState: ObservableObject {
                 updated[result.hostPort] = result
             }
         }
-        self.portHealthMap = updated
+        assignIfChanged(\.portHealthMap, updated)
     }
 
     public func refreshAll(isUserInitiated: Bool = true) async {
@@ -235,23 +249,23 @@ public final class AppState: ObservableObject {
         )) ?? RuntimeInstallation(isInstalled: false, executablePath: nil)
 
         if preferences.useSimulationWhenCLIMissing && !discoveredInstall.isInstalled && currentInjectedService == nil {
-            self.installation = (try? await mockService.discoverRuntime()) ?? discoveredInstall
+            assignIfChanged(\.installation, (try? await mockService.discoverRuntime()) ?? discoveredInstall)
         } else {
-            self.installation = discoveredInstall
+            assignIfChanged(\.installation, discoveredInstall)
         }
 
         let active = runtimeService
-        self.capabilities = active.getCapabilities(installation: self.installation, host: detectedHost)
+        assignIfChanged(\.capabilities, active.getCapabilities(installation: self.installation, host: detectedHost))
 
         let status = (try? await active.getSystemStatus()) ?? RuntimeSystemStatus(
             state: self.installation.isInstalled ? .stopped : .missingCLI
         )
-        self.systemStatus = status
-        self.prerequisites = healthService.evaluatePrerequisites(
+        assignIfChanged(\.systemStatus, status)
+        assignIfChanged(\.prerequisites, healthService.evaluatePrerequisites(
             host: detectedHost,
             installation: self.installation,
             systemStatus: status
-        )
+        ))
 
         guard self.installation.isInstalled else {
             if isUserInitiated {
@@ -279,27 +293,41 @@ public final class AppState: ObservableObject {
             async let statsTask = try? active.getContainerStats(ids: [])
             async let dnsTask = try? active.listDNSDomains()
 
-            if let c = await containersTask { self.containers = c }
-            if let i = await imagesTask { self.images = i }
-            if let n = await networksTask { self.networks = n }
-            if let v = await volumesTask { self.volumes = v }
-            if let m = await machinesTask { self.machines = m }
-            if let r = await registriesTask { self.registries = r }
-            if let df = await dfTask { self.diskUsage = df }
+            if let c = await containersTask { assignIfChanged(\.containers, c) }
+            if let i = await imagesTask { assignIfChanged(\.images, i) }
+            if let n = await networksTask { assignIfChanged(\.networks, n) }
+            if let v = await volumesTask { assignIfChanged(\.volumes, v) }
+            if let m = await machinesTask { assignIfChanged(\.machines, m) }
+            if let r = await registriesTask { assignIfChanged(\.registries, r) }
+            if let df = await dfTask { assignIfChanged(\.diskUsage, df) }
             let dataRoot = installation.appRootPath ?? (NSHomeDirectory() as NSString).appendingPathComponent("Library/Application Support/com.apple.container")
-            self.hostDiskSpace = DiskSpaceSnapshot.read(path: dataRoot)
-            if let p = await propsTask { self.systemProperties = p }
-            if let b = await builderTask { self.builderStatus = b }
-            if let dns = await dnsTask { self.dnsDomains = dns }
+            assignIfChanged(\.hostDiskSpace, DiskSpaceSnapshot.read(path: dataRoot))
+            assignIfChanged(\.containerDisks, Self.readContainerDisks(ids: containers.map(\.id), dataRoot: dataRoot, hostAvailable: hostDiskSpace?.availableBytes ?? 0))
+            if let p = await propsTask { assignIfChanged(\.systemProperties, p) }
+            if let b = await builderTask { assignIfChanged(\.builderStatus, b) }
+            if let dns = await dnsTask { assignIfChanged(\.dnsDomains, dns) }
             if let stats = await statsTask {
                 ingestStatsSnapshot(stats)
             }
             await probeAllPublishedPorts()
         } else {
             // Even when API server is stopped, registry list and system properties work offline
-            if let r = try? await active.listRegistries() { self.registries = r }
-            if let p = try? await active.getSystemProperties() { self.systemProperties = p }
+            if let r = try? await active.listRegistries() { assignIfChanged(\.registries, r) }
+            if let p = try? await active.getSystemProperties() { assignIfChanged(\.systemProperties, p) }
         }
+    }
+
+    /// One `stat` per container image; no CLI call.
+    nonisolated static func readContainerDisks(ids: [String], dataRoot: String, hostAvailable: Int64) -> [String: ContainerDiskSnapshot] {
+        var result: [String: ContainerDiskSnapshot] = [:]
+        // IDs come from CLI output and become part of a file path: only plain names, no "../".
+        for id in ids where ValidationUtils.isValidContainerName(id) {
+            let path = ContainerDiskSnapshot.rootfsPath(dataRoot: dataRoot, containerID: id)
+            if let disk = ContainerDiskSnapshot.read(rootfsPath: path, hostAvailableBytes: hostAvailable) {
+                result[id] = disk
+            }
+        }
+        return result
     }
 
     public func sampleContainerTelemetry(for containerID: String) async {
@@ -324,6 +352,8 @@ public final class AppState: ObservableObject {
     private func ingestStatsSnapshot(_ statsList: [ContainerStatsModel], onlyUpdateIDs: Set<String>? = nil) {
         let now = Date()
         var updatedStatsMap = onlyUpdateIDs == nil ? [String: ContainerStatsModel]() : self.containerStats
+        // Mutated locally and published once, not once per container.
+        var historyMap = self.containerTelemetryHistory
 
         for s in statsList {
             let prevStat = self.containerStats[s.id]
@@ -364,15 +394,16 @@ public final class AppState: ObservableObject {
                 allocatedCPUs: containerCPUs
             )
 
-            var history = self.containerTelemetryHistory[s.id] ?? []
+            var history = historyMap[s.id] ?? []
             history.append(sample)
             if history.count > Self.telemetryHistoryLength {
                 history.removeFirst(history.count - Self.telemetryHistoryLength)
             }
-            self.containerTelemetryHistory[s.id] = history
+            historyMap[s.id] = history
         }
 
-        self.containerStats = updatedStatsMap
+        assignIfChanged(\.containerTelemetryHistory, historyMap)
+        assignIfChanged(\.containerStats, updatedStatsMap)
         // A single-container refresh (inspector) must not produce a system point mixing one fresh
         // value with stale ones.
         if onlyUpdateIDs == nil {

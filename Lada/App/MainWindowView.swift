@@ -418,7 +418,11 @@ private struct WindowDropPassthroughConfiguringView: NSViewRepresentable {
         return view
     }
 
+    /// Runs on every window re-render, so it only walks the view tree when the section (and so
+    /// its tables) changed; walking it on every poll was a measurable share of idle CPU.
     func updateNSView(_ nsView: PassthroughHelperNSView, context: Context) {
+        guard nsView.lastConfiguredSection != selectedSection else { return }
+        nsView.lastConfiguredSection = selectedSection
         nsView.configureWindowSubviews()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             nsView.configureWindowSubviews()
@@ -426,6 +430,8 @@ private struct WindowDropPassthroughConfiguringView: NSViewRepresentable {
     }
 
     final class PassthroughHelperNSView: NSView {
+        var lastConfiguredSection: NavigationSection?
+
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             configureWindowSubviews()
