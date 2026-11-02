@@ -233,6 +233,16 @@ public struct DashboardView: View {
                 .controlSize(.small)
             }
 
+            if setupWarnings.contains(where: { $0.actionType == .restartSystemService }) {
+                Button("Restart Services") {
+                    Task { await appState.restartContainerServices() }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .help("Stops and starts the container services so the API server matches the installed CLI. Running containers are stopped.")
+                .accessibilityIdentifier(AccessibilityID.restartServicesButton)
+            }
+
             Button("Open Setup Wizard…") {
                 appState.showSetupWizard = true
             }

@@ -45,8 +45,8 @@ public final class MockContainerRuntimeService: ContainerRuntimeService, @unchec
             executablePath: isInstalled ? "/usr/local/bin/container" : nil,
             installRootPath: isInstalled ? "/usr/local" : nil,
             appRootPath: ("~/Library/Application Support/com.apple.container" as NSString).expandingTildeInPath,
-            cliVersion: isInstalled ? SemanticVersion(major: 1, minor: 5, patch: 0) : nil,
-            rawVersionString: isInstalled ? "1.5.0" : nil,
+            cliVersion: isInstalled ? SemanticVersion(major: 1, minor: 6, patch: 1) : nil,
+            rawVersionString: isInstalled ? "1.6.1" : nil,
             buildType: "release",
             commitHash: "150a9c3",
             helperPluginsPresent: isInstalled,
@@ -314,9 +314,9 @@ public final class MockContainerRuntimeService: ContainerRuntimeService, @unchec
             let running = simulatedContainers.filter { $0.state == .running }.count
             return RuntimeSystemStatus(
                 state: simulatedServiceState,
-                clientVersion: RuntimeComponentVersion(appName: "container", version: "1.5.0", buildType: "release", commit: "150a9c3"),
+                clientVersion: RuntimeComponentVersion(appName: "container", version: "1.6.1", buildType: "release", commit: "aa8d76b"),
                 serverVersion: simulatedServiceState == .running
-                    ? RuntimeComponentVersion(appName: "container-apiserver", version: "container-apiserver version 1.5.0 (build: release, commit: 150a9c3)", buildType: "release", commit: "150a9c3")
+                    ? RuntimeComponentVersion(appName: "container-apiserver", version: "container-apiserver version 1.6.1 (build: release, commit: aa8d76b)", buildType: "release", commit: "aa8d76b")
                     : nil,
                 appRoot: simulatedInstallation.appRootPath,
                 installRoot: simulatedInstallation.installRootPath,
@@ -331,8 +331,8 @@ public final class MockContainerRuntimeService: ContainerRuntimeService, @unchec
     public func getSystemVersions() async throws -> [RuntimeComponentVersion] {
         try record("getSystemVersions")
         return [
-            RuntimeComponentVersion(appName: "container", version: "1.5.0", buildType: "release", commit: "150a9c3"),
-            RuntimeComponentVersion(appName: "container-apiserver", version: "1.5.0", buildType: "release", commit: "150a9c3")
+            RuntimeComponentVersion(appName: "container", version: "1.6.1", buildType: "release", commit: "aa8d76b"),
+            RuntimeComponentVersion(appName: "container-apiserver", version: "1.6.1", buildType: "release", commit: "aa8d76b")
         ]
     }
 
@@ -370,7 +370,7 @@ public final class MockContainerRuntimeService: ContainerRuntimeService, @unchec
     public func fetchSystemLogs(lastPeriod: String) async throws -> String {
         try record("fetchSystemLogs:\(lastPeriod)")
         return """
-        2026-10-16 10:00:01.102+0200 Info container-apiserver: [com.apple.container:APIServer] container-apiserver v1.5.0 initialized
+        2026-10-16 10:00:01.102+0200 Info container-apiserver: [com.apple.container:APIServer] container-apiserver v1.6.1 initialized
         2026-10-16 10:00:02.410+0200 Info container-network-vmnet: [com.apple.container:NetworkVmnetHelper] allocated subnet 192.168.64.0/24 [id=default]
         2026-10-16 10:01:12.008+0200 Info container-runtime-linux: [com.apple.container:RuntimeLinuxHelper] started container [uuid=nginx-ingress]
         """

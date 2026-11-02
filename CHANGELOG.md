@@ -6,6 +6,11 @@ Releases follow the project's git tags. Entries were reconstructed from the comm
 
 ## [Unreleased]
 
+- Health check: warn when the API server runs a different release than the CLI (for example
+  after upgrading to 1.6.1 without restarting services), with a "Restart Services" action in the
+  Setup wizard and on the dashboard
+- Health check: runtimes older than 1.6.0 are flagged for GHSA-vgrw-36j7-r93w and
+  GHSA-fqxg-rrf3-358v; the recommended runtime is now 1.6.1 (Mock Sandbox reports 1.6.1 too)
 - Fix: telemetry charts showed invented values. The first CPU value was derived from the raw
   counter, first network/disk rates were totals divided by 30, ten jittered seed points were
   back-filled, and CPU never went below 0.2 %. Charts now start after two real snapshots and

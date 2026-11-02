@@ -82,16 +82,16 @@ final class RuntimeCapabilitiesAndHealthTests: XCTestCase {
             executablePath: "/usr/local/bin/container",
             installRootPath: "/usr/local",
             appRootPath: "/Users/dev/Library/Application Support/com.apple.container",
-            cliVersion: SemanticVersion(major: 1, minor: 5, patch: 0),
-            rawVersionString: "container version 1.5.0",
+            cliVersion: SemanticVersion(major: 1, minor: 6, patch: 1),
+            rawVersionString: "container CLI version 1.6.1",
             helperPluginsPresent: true,
             defaultKernelInstalled: true,
             kernelBinaryPath: "/Users/dev/Library/Application Support/com.apple.container/kernels/default.kernel"
         )
         let runningStatus = RuntimeSystemStatus(
             state: .running,
-            clientVersion: RuntimeComponentVersion(appName: "container", version: "1.5.0", buildType: "release", commit: "a1b2c3d"),
-            serverVersion: RuntimeComponentVersion(appName: "container-apiserver", version: "1.5.0", buildType: "release", commit: "a1b2c3d"),
+            clientVersion: RuntimeComponentVersion(appName: "container", version: "1.6.1", buildType: "release", commit: "a1b2c3d"),
+            serverVersion: RuntimeComponentVersion(appName: "container-apiserver", version: "1.6.1", buildType: "release", commit: "a1b2c3d"),
             containersTotal: 2,
             containersRunning: 1
         )
@@ -123,5 +123,70 @@ final class RuntimeCapabilitiesAndHealthTests: XCTestCase {
             XCTAssertEqual(error.category, .permissionError)
             XCTAssertTrue(error.explanation.contains("untrusted origin"))
         }
+    }
+
+    // MARK: - Version checks (container 1.6.x)
+
+    private func m4Host() -> HostEnvironmentInfo {
+        HostEnvironmentInfo(
+            cpuArchitecture: "arm64", cpuBrandString: "Apple M4 Pro", isAppleSilicon: true,
+            supportsNestedVirtualizationChip: true, macOSMajorVersion: 26, macOSMinorVersion: 0,
+            macOSPatchVersion: 0, macOSVersionString: "Version 26.0", macOSBuildString: "25A354",
+            physicalMemoryBytes: 32 * 1024 * 1024 * 1024, processorCount: 14,
+            availableDiskSpaceBytes: 120 * 1024 * 1024 * 1024, hypervisorFrameworkAvailable: true
+        )
+    }
+
+    private func install(_ version: SemanticVersion) -> RuntimeInstallation {
+        RuntimeInstallation(
+            isInstalled: true, executablePath: "/usr/local/bin/container", cliVersion: version,
+            rawVersionString: "container CLI version \(version)", helperPluginsPresent: true, defaultKernelInstalled: true
+        )
+    }
+
+    private func status(client: String, server: String) -> RuntimeSystemStatus {
+        RuntimeSystemStatus(
+            state: .running,
+            clientVersion: RuntimeComponentVersion(appName: "container", version: client, buildType: "release", commit: "aa8d76b"),
+            serverVersion: RuntimeComponentVersion(appName: "container-apiserver", version: server, buildType: "release", commit: "d265d66")
+        )
+    }
+
+    func testDetectsApiServerStillRunningOldReleaseAfterUpgrade() throws {
+        // Exactly what `container system status` reported on a Mac upgraded to 1.6.1 without a restart.
+        let items = RuntimeHealthService().evaluatePrerequisites(
+            host: m4Host(), installation: install(SemanticVersion(major: 1, minor: 6, patch: 1)),
+            systemStatus: status(client: "1.6.1", server: "1.5.0")
+        )
+        let item = try XCTUnwrap(items.first { $0.id == "runtime.serverVersion" })
+        XCTAssertEqual(item.status, .needsAttention)
+        XCTAssertEqual(item.actionType, .restartSystemService)
+        XCTAssertEqual(item.detectedStatusText, "CLI v1.6.1, API server v1.5.0")
+        XCTAssertFalse(item.isRequired)
+    }
+
+    func testNoMismatchItemWhenVersionsMatchOrAreUnknown() {
+        XCTAssertNil(RuntimeHealthService.versionMismatch(in: status(client: "1.6.1", server: "1.6.1")))
+        // The mock and some releases report the server as a full version sentence.
+        XCTAssertNil(RuntimeHealthService.versionMismatch(in: status(client: "1.6.1", server: "container-apiserver version 1.6.1 (build: release)")))
+        XCTAssertNil(RuntimeHealthService.versionMismatch(in: RuntimeSystemStatus(state: .running)))
+        XCTAssertNil(RuntimeHealthService.versionMismatch(in: RuntimeSystemStatus(state: .stopped, clientVersion: nil, serverVersion: nil)))
+    }
+
+    func testVersionsBeforeSecurityBaselineNeedAttention() throws {
+        let items = RuntimeHealthService().evaluatePrerequisites(
+            host: m4Host(), installation: install(SemanticVersion(major: 1, minor: 5, patch: 0)),
+            systemStatus: status(client: "1.5.0", server: "1.5.0")
+        )
+        let item = try XCTUnwrap(items.first { $0.id == "cli.version" })
+        XCTAssertEqual(item.status, .needsAttention)
+        XCTAssertEqual(item.actionType, .installCLI)
+        XCTAssertTrue(item.recommendedRemediation.contains("GHSA-vgrw-36j7-r93w"))
+
+        let current = RuntimeHealthService().evaluatePrerequisites(
+            host: m4Host(), installation: install(SemanticVersion(major: 1, minor: 6, patch: 0)),
+            systemStatus: status(client: "1.6.0", server: "1.6.0")
+        )
+        XCTAssertEqual(current.first { $0.id == "cli.version" }?.status, .ready)
     }
 }

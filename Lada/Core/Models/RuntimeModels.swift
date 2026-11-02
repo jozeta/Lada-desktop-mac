@@ -395,6 +395,7 @@ public enum PrerequisiteActionType: String, Codable, Sendable, Equatable {
     case none
     case installCLI
     case startSystemService
+    case restartSystemService
     case installDefaultKernel
     case openReleasePage
     case recheck

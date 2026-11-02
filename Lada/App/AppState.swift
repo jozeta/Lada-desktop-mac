@@ -461,6 +461,20 @@ public final class AppState: ObservableObject {
         )
     }
 
+    /// Restarts the container services so the API server runs the installed CLI's release
+    /// (`container system stop`, then `container system start`).
+    public func restartContainerServices() async {
+        await performOperation(
+            category: "Runtime",
+            title: "Restart Container Services",
+            redactedCommand: "container system stop && container system start"
+        ) {
+            try await runtimeService.stopSystemService()
+            try await runtimeService.startSystemService(enableKernelInstall: false)
+            return "Container services restarted."
+        }
+    }
+
     public func performOperation(
         category: String,
         title: String,

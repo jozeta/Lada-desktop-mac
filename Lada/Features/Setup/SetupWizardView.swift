@@ -275,6 +275,8 @@ public struct SetupWizardView: View {
                     return "Container API server started and verified."
                 }
             }
+        case .restartSystemService:
+            Task { await appState.restartContainerServices() }
         case .installDefaultKernel:
             Task {
                 await appState.performOperation(

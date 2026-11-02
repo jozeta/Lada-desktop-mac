@@ -4,7 +4,12 @@ import AppKit
 
 public final class RuntimeHealthService: Sendable {
     public static let minimumSupportedRuntimeVersion = SemanticVersion(major: 0, minor: 4, patch: 0)
-    public static let recommendedRuntimeVersion = SemanticVersion(major: 1, minor: 5, patch: 0)
+    public static let recommendedRuntimeVersion = SemanticVersion(major: 1, minor: 6, patch: 1)
+    /// Oldest release without known security advisories. 1.6.0 fixed GHSA-vgrw-36j7-r93w (pulling
+    /// by digest did not verify the registry returned the pinned digest) and GHSA-fqxg-rrf3-358v
+    /// (`container build` could serve files outside the build context via a swapped symlink).
+    public static let securityBaselineVersion = SemanticVersion(major: 1, minor: 6, patch: 0)
+    public static let securityAdvisoryIDs = ["GHSA-vgrw-36j7-r93w", "GHSA-fqxg-rrf3-358v"]
     public static let officialReleasesURL = URL(string: "https://github.com/apple/container/releases")!
     public static let officialLatestReleaseAPIURL = URL(string: "https://api.github.com/repos/apple/container/releases/latest")!
 
@@ -116,9 +121,17 @@ public final class RuntimeHealthService: Sendable {
         // 7. Runtime Version Compatible with Låda
         let versionStatus: PrerequisiteStatus
         let versionText: String
+        var belowSecurityBaseline = false
         if let ver = installation.cliVersion {
             versionText = "v\(ver.description)"
-            versionStatus = ver >= Self.minimumSupportedRuntimeVersion ? .ready : .incompatible
+            if ver < Self.minimumSupportedRuntimeVersion {
+                versionStatus = .incompatible
+            } else if ver < Self.securityBaselineVersion {
+                versionStatus = .needsAttention
+                belowSecurityBaseline = true
+            } else {
+                versionStatus = .ready
+            }
         } else if installation.isInstalled {
             versionText = installation.rawVersionString ?? "Unknown version"
             versionStatus = .needsAttention
@@ -134,10 +147,12 @@ public final class RuntimeHealthService: Sendable {
             explanation: "Låda supports Apple container runtime \(Self.minimumSupportedRuntimeVersion.description)+ and is optimized for v\(Self.recommendedRuntimeVersion.description).",
             recommendedRemediation: versionStatus == .ready
                 ? "Installed runtime version is compatible."
-                : "Install or upgrade to Apple `container` v\(Self.recommendedRuntimeVersion.description).",
+                : belowSecurityBaseline
+                    ? "Versions before \(Self.securityBaselineVersion.description) have known security issues (\(Self.securityAdvisoryIDs.joined(separator: ", "))). Upgrade to v\(Self.recommendedRuntimeVersion.description)."
+                    : "Install or upgrade to Apple `container` v\(Self.recommendedRuntimeVersion.description).",
             status: versionStatus,
-            actionTitle: versionStatus == .incompatible ? "Update Runtime…" : nil,
-            actionType: versionStatus == .incompatible ? .installCLI : .none
+            actionTitle: (versionStatus == .incompatible || belowSecurityBaseline) ? "Update Runtime…" : nil,
+            actionType: (versionStatus == .incompatible || belowSecurityBaseline) ? .installCLI : .none
         ))
 
         // 8. Required Helper Components Installed
@@ -182,6 +197,21 @@ public final class RuntimeHealthService: Sendable {
             actionType: (installation.isInstalled && !apiResponsive) ? .startSystemService : .none
         ))
 
+        // 9b. CLI and API server from the same release
+        if let mismatch = Self.versionMismatch(in: systemStatus) {
+            items.append(PrerequisiteItem(
+                id: "runtime.serverVersion",
+                name: "Runtime Services Up to Date",
+                detectedStatusText: "CLI v\(mismatch.client), API server v\(mismatch.server)",
+                isRequired: false,
+                explanation: "After upgrading `container`, the background services keep running the old version until they are restarted, so the CLI and `container-apiserver` disagree and new features may not work.",
+                recommendedRemediation: "Restart the container services (`container system stop`, then `container system start`). Running containers and machines are stopped.",
+                status: .needsAttention,
+                actionTitle: "Restart Services",
+                actionType: .restartSystemService
+            ))
+        }
+
         // 10. Required Linux Kernel Available
         let kernelReady = installation.defaultKernelInstalled || apiResponsive
         let kernelStatus: PrerequisiteStatus
@@ -209,6 +239,17 @@ public final class RuntimeHealthService: Sendable {
         ))
 
         return items
+    }
+
+    /// Client and server versions when the running API server is not the same release as the
+    /// CLI (typical right after upgrading without restarting services); nil when they match or
+    /// either is unknown.
+    public static func versionMismatch(in status: RuntimeSystemStatus) -> (client: String, server: String)? {
+        guard status.state == .running,
+              let clientRaw = status.clientVersion?.version, let serverRaw = status.serverVersion?.version,
+              let client = SemanticVersion(parsing: clientRaw), let server = SemanticVersion(parsing: serverRaw),
+              client != server else { return nil }
+        return (client.description, server.description)
     }
 
     // MARK: - Official Release Discovery & Verification
