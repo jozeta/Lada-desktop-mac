@@ -24,7 +24,7 @@ need macOS 26+ on Apple silicon and the `container` CLI in `/usr/local/bin` or
 
 `Scripts/package-app.sh` builds a release `Lada.app`, a `.dmg` and a distribution zip in `build/`
 (gitignored), and notarizes and staples them with `xcrun notarytool` (keychain profile from
-`LADA_NOTARY_PROFILE`, default `MySpacesNotary`). Artifact names take the version from
+`LADA_NOTARY_PROFILE`, default `LadaNotary`). Artifact names take the version from
 `Lada/Resources/Info.plist`, so bump `CFBundleShortVersionString` (and `MARKETING_VERSION` in the
 Xcode project) for a release. `Scripts/generate-app-icon.swift` regenerates `AppIcon.icns`.
 

@@ -12,7 +12,7 @@ ZIP_PATH="${BUILD_DIR}/Lada-${APP_VERSION}-macOS-arm64.zip"
 NOTARIZE_ZIP="${BUILD_DIR}/Lada-notarize.zip"
 # notarytool keychain profile. The default is the developer's shared profile (also used by MySpaces);
 # override with LADA_NOTARY_PROFILE.
-NOTARY_PROFILE="${LADA_NOTARY_PROFILE:-MySpacesNotary}"
+NOTARY_PROFILE="${LADA_NOTARY_PROFILE:-LadaNotary}"
 CONTENTS_DIR="${APP_BUNDLE}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"

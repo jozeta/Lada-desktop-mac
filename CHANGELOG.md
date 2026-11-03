@@ -6,6 +6,11 @@ From 1.6.0 every commit bumps the version (`Scripts/bump-version.sh`); entries u
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-11-03
+
+- Release packaging uses the notarytool keychain profile `LadaNotary` by default (was
+  `MySpacesNotary`, left over from another project); override with `LADA_NOTARY_PROFILE`
+
 ## [1.7.0] - 2026-11-02
 
 - Compose `mem_limit:` and `cpus:` are honoured (and written back by the stack builder); before,
