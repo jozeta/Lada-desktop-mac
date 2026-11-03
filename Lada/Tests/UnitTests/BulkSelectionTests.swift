@@ -72,3 +72,42 @@ final class BulkSelectionTests: XCTestCase {
         XCTAssertNil(appState.selectedContainerID, "a deleted selection is cleared")
     }
 }
+
+final class StackSelectionCascadeTests: XCTestCase {
+    private let rows: [ContainerListRow] = [
+        .stack(ContainerStackGroup(name: "shop", members: [
+            ContainerModel(id: "shop-web", imageReference: "nginx", state: .running),
+            ContainerModel(id: "shop-db", imageReference: "postgres", state: .stopped),
+        ])),
+        .container(ContainerModel(id: "solo", imageReference: "alpine", state: .running)),
+    ]
+
+    func testSelectingAStackSelectsItsContainers() {
+        XCTAssertEqual(BulkSelection.cascade(from: [], to: ["stack:shop"], rows: rows),
+                       ["stack:shop", "shop-web", "shop-db"])
+        XCTAssertEqual(BulkSelection.cascade(from: ["solo"], to: ["solo", "stack:shop"], rows: rows),
+                       ["solo", "stack:shop", "shop-web", "shop-db"])
+    }
+
+    func testDeselectingAStackDeselectsItsContainers() {
+        XCTAssertEqual(BulkSelection.cascade(from: ["stack:shop", "shop-web", "shop-db", "solo"], to: ["shop-web", "shop-db", "solo"], rows: rows),
+                       ["solo"])
+    }
+
+    func testDeselectingOneMemberDropsTheStackOnly() {
+        XCTAssertEqual(BulkSelection.cascade(from: ["stack:shop", "shop-web", "shop-db"], to: ["stack:shop", "shop-web"], rows: rows),
+                       ["shop-web"])
+    }
+
+    func testCascadeIsStableOnceApplied() {
+        let full: Set<String> = ["stack:shop", "shop-web", "shop-db"]
+        XCTAssertEqual(BulkSelection.cascade(from: [], to: full, rows: rows), full)
+        XCTAssertEqual(BulkSelection.cascade(from: full, to: full, rows: rows), full)
+    }
+
+    func testAStackWithItsContainersIsStillOneSelection() {
+        XCTAssertEqual(BulkSelection.soleStack(in: ["stack:shop", "shop-web", "shop-db"], rows: rows), "stack:shop")
+        XCTAssertNil(BulkSelection.soleStack(in: ["stack:shop", "shop-web", "shop-db", "solo"], rows: rows))
+        XCTAssertNil(BulkSelection.soleStack(in: ["shop-web", "shop-db"], rows: rows))
+    }
+}

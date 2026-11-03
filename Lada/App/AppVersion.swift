@@ -3,8 +3,8 @@ import Foundation
 /// Låda's version. `Scripts/bump-version.sh` keeps this, `Lada/Resources/Info.plist` and the
 /// Xcode project in step (a test checks they match); every commit bumps it.
 public enum AppVersion {
-    public static let marketing = "1.8.0"
-    public static let build = 155
+    public static let marketing = "1.8.1"
+    public static let build = 156
 
     static let bundleIdentifier = "app.lada.desktop"
 

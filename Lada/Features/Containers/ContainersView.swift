@@ -157,7 +157,10 @@ public struct ContainersView: View {
         return ids.compactMap { id in appState.containers.first { $0.id == id } }
     }
 
-    private var isBulkSelection: Bool { selection.count > 1 }
+    /// Several rows, other than one stack with its own containers (that still opens the stack).
+    private var isBulkSelection: Bool {
+        selection.count > 1 && BulkSelection.soleStack(in: selection, rows: listRows) == nil
+    }
 
     private func selectAll() {
         selection = Set(listRows.map(\.id))
@@ -503,8 +506,16 @@ public struct ContainersView: View {
             }
         }
         // A single selected row drives the inspector; with several, the bulk panel takes over.
-        .onChange(of: selection) { _, newValue in
-            if newValue.count == 1, let only = newValue.first, appState.selectedContainerID != only {
+        .onChange(of: selection) { oldValue, newValue in
+            // Selecting a stack selects its containers too (and deselecting it, them).
+            let cascaded = BulkSelection.cascade(from: oldValue, to: newValue, rows: listRows)
+            if cascaded != newValue {
+                selection = cascaded
+                return
+            }
+            if let stack = BulkSelection.soleStack(in: newValue, rows: listRows) {
+                if appState.selectedContainerID != stack { appState.selectedContainerID = stack }
+            } else if newValue.count == 1, let only = newValue.first, appState.selectedContainerID != only {
                 appState.selectedContainerID = only
             } else if newValue.isEmpty, appState.selectedContainerID != nil {
                 appState.selectedContainerID = nil
@@ -514,7 +525,7 @@ public struct ContainersView: View {
         .onChange(of: appState.selectedContainerID) { _, newValue in
             if let id = newValue, !selection.contains(id) {
                 selection = [id]
-            } else if newValue == nil, selection.count == 1 {
+            } else if newValue == nil, !isBulkSelection {
                 selection = []
             }
         }

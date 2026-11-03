@@ -6,6 +6,12 @@ From 1.6.0 every commit bumps the version (`Scripts/bump-version.sh`); entries u
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-11-03
+
+- Containers: selecting a stack row selects its containers too, and deselecting it deselects
+  them; deselecting one container drops the stack's own tick. A stack with just its own
+  containers still opens the stack summary instead of the bulk panel
+
 ## [1.8.0] - 2026-11-03
 
 - Containers and Images: select several rows with the new checkboxes, ⌘-click, ⇧-click or ⌘A,
