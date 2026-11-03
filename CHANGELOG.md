@@ -6,6 +6,19 @@ From 1.6.0 every commit bumps the version (`Scripts/bump-version.sh`); entries u
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-11-03
+
+- Node Graph: a node stayed highlighted and every other node dimmed, as if selected, and clearing
+  the selection seemed to do nothing. The hover handler was attached after `.position`, so each
+  chip's hover area was the whole canvas. Hover, click and drag now respond on the chip only,
+  and leaving the canvas ends any hover
+- Node Graph: hovering only outlines a node; the info card and the dimming of unrelated nodes
+  follow a click, so moving the pointer no longer makes the graph blink. The card sits in the
+  top-right corner instead of over the nodes
+- Node Graph zoom scales the node chips with the distances between them (chips used to stop at
+  55%–115%, so zooming spread them apart or piled them up), and pinching zooms around the
+  pointer instead of the middle of the view
+
 ## [1.7.1] - 2026-11-03
 
 - Release packaging uses the notarytool keychain profile `LadaNotary` by default (was

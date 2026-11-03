@@ -115,9 +115,12 @@ public struct NodeGraphView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                             .padding(NordicTheme.Spacing.m)
                     }
-                    if let id = hoveredID ?? state.selectedID, let node = graph.nodes.first(where: { $0.id == id }) {
-                        hoverCard(node, graph: graph, viewport: geo.size)
+                    if let id = state.selectedID, let node = graph.nodes.first(where: { $0.id == id }) {
+                        // Pinned top right, so it never covers the nodes it describes.
+                        hoverCard(node, graph: graph)
                             .allowsHitTesting(false)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                            .padding(NordicTheme.Spacing.m)
                     }
                     legend(full: full)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
@@ -129,6 +132,8 @@ public struct NodeGraphView: View {
                 .clipped()
                 .contentShape(Rectangle())
                 .gesture(zoomGesture)
+                // Leaving the canvas ends any hover, so no node stays highlighted.
+                .onHover { inside in if !inside { hoveredID = nil } }
                 // Esc clears the selection.
                 .focusable()
                 .focusEffectDisabled()
@@ -227,7 +232,9 @@ public struct NodeGraphView: View {
         CGPoint(x: p.x * state.zoom + state.pan.width, y: p.y * state.zoom + state.pan.height)
     }
 
-    private var focusID: String? { hoveredID ?? state.selectedID }
+    /// Only a click focuses a node (dims the rest, shows its card); hover just outlines the chip, so
+    /// moving the pointer across the canvas doesn't make the whole graph blink.
+    private var focusID: String? { state.selectedID }
 
     private func edgesLayer(_ graph: ResourceGraph) -> some View {
         let focus = focusID
@@ -265,7 +272,7 @@ public struct NodeGraphView: View {
         return NodeChipView(
             node: node,
             position: screen(state.positions[node.id] ?? .zero),
-            scale: min(1.15, max(0.55, state.zoom)),
+            scale: state.zoom,
             isSelected: state.selectedID == node.id,
             isHovered: hoveredID == node.id,
             isDimmed: !related,
@@ -302,12 +309,9 @@ public struct NodeGraphView: View {
         .accessibilityIdentifier("lada.nodeGraph.selection")
     }
 
-    private func hoverCard(_ node: ResourceGraph.Node, graph: ResourceGraph, viewport: CGSize) -> some View {
-        let anchor = screen(state.positions[node.id] ?? .zero)
+    private func hoverCard(_ node: ResourceGraph.Node, graph: ResourceGraph) -> some View {
         let links = graph.edges.filter { $0.from == node.id || $0.to == node.id }
         let width: CGFloat = 290
-        let x = min(max(anchor.x + 110, width / 2 + 8), viewport.width - width / 2 - 8)
-        let y = min(max(anchor.y, 120), viewport.height - 140)
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 LadaIcon(Self.icon(for: node.kind), size: 15).foregroundStyle(Self.color(for: node.kind))
@@ -345,7 +349,6 @@ public struct NodeGraphView: View {
         .padding(12)
         .frame(width: width, alignment: .leading)
         .nordicSurface()
-        .position(x: x, y: y)
         .transition(.opacity)
     }
 
@@ -419,7 +422,7 @@ public struct NodeGraphView: View {
         MagnifyGesture()
             .onChanged { value in
                 if zoomOrigin == nil { zoomOrigin = state.zoom }
-                setZoom(zoomOrigin! * value.magnification)
+                setZoom(zoomOrigin! * value.magnification, around: value.startLocation)
             }
             .onEnded { _ in zoomOrigin = nil }
     }
@@ -428,10 +431,11 @@ public struct NodeGraphView: View {
         withAnimation(NordicTheme.Motion.quick) { setZoom(state.zoom * factor) }
     }
 
-    /// Zooms around the middle of the view.
-    private func setZoom(_ newZoom: CGFloat) {
+    /// Zooms around `anchor` (the pinch location), or the middle of the view: the point under it
+    /// stays put, and chips scale with the zoom so the gaps between nodes keep their proportions.
+    private func setZoom(_ newZoom: CGFloat, around anchor: CGPoint? = nil) {
         let clamped = min(2.5, max(0.25, newZoom))
-        let center = CGPoint(x: viewport.width / 2, y: viewport.height / 2)
+        let center = anchor ?? CGPoint(x: viewport.width / 2, y: viewport.height / 2)
         let world = CGPoint(x: (center.x - state.pan.width) / state.zoom, y: (center.y - state.pan.height) / state.zoom)
         state.zoom = clamped
         state.pan = CGSize(width: center.x - world.x * clamped, height: center.y - world.y * clamped)
@@ -554,8 +558,10 @@ private struct NodeChipView: View, Equatable {
         .background(shape.fill(Color(nsColor: .windowBackgroundColor).opacity(0.78)))
         .overlay(shape.strokeBorder(isSelected ? color : (isHovered ? color.opacity(0.6) : NordicTheme.borderSubtle), lineWidth: isSelected ? 1.8 : 1))
         .opacity((isDimmed ? 0.28 : 1) * (node.isActive ? 1 : 0.7))
-        .scaleEffect(scale)
-        .position(position)
+        // Everything interactive goes on the chip itself, before `.position`: a positioned view's
+        // frame is the whole canvas, so `.onHover` placed after it reported every chip as hovered
+        // everywhere and the last one stuck, which looked like a selection that couldn't be cleared.
+        .contentShape(shape)
         .onHover(perform: onHover)
         .gesture(
             DragGesture(minimumDistance: 3)
@@ -569,5 +575,7 @@ private struct NodeChipView: View, Equatable {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(node.kind.rawValue) \(node.title)")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .scaleEffect(scale)
+        .position(position)
     }
 }
