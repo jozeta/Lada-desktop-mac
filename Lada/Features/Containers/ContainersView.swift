@@ -9,6 +9,10 @@ public struct ContainersView: View {
     ]
     @State private var containerPendingDeletion: ContainerModel? = nil
     @State private var confirmPruneStopped: Bool = false
+    /// The table's selection: rows picked with a click, ⌘/⇧-click or the checkboxes. One row drives
+    /// the inspector as before (`appState.selectedContainerID`); two or more switch to bulk actions.
+    @State private var selection: Set<String> = []
+    @State private var confirmBulkDelete = false
 
     // MARK: - Stack group cells
 
@@ -44,27 +48,155 @@ public struct ContainersView: View {
             .lineLimit(1)
     }
 
-    private func stackActionsCell(_ stack: ContainerStackGroup) -> some View {
-        HStack(spacing: 6) {
-            if stack.runningCount > 0 {
-                Button {
-                    Task { await StackGroupSummaryView.stopAll(stack, appState: appState) }
-                } label: {
-                    Image(systemName: "stop.fill")
+    // MARK: - Row actions
+
+    /// Four fixed columns on every row: terminal · start · stop · delete. Each icon always shows
+    /// (greyed out when it doesn't apply), so every start icon sits straight above the next one,
+    /// and the same for stop, terminal and delete.
+    private func containerActionsCell(_ container: ContainerModel) -> some View {
+        let isRunning = container.state == .running
+        let isStarting = appState.startingContainerIDs.contains(container.id)
+        return HStack(spacing: Self.actionSpacing) {
+            ActionSlot {
+                actionButton("apple.terminal",
+                             tint: isRunning ? NordicTheme.accent(for: appState.preferences.accentThemeChoice) : NordicTheme.secondaryText,
+                             help: isRunning ? "Open Real Terminal Connected to Container" : "Start & Open Terminal") {
+                    if isRunning {
+                        appState.openExternalTerminalForContainer(id: container.id)
+                    } else {
+                        Task {
+                            await appState.startContainerWithVerification(id: container.id)
+                            if appState.containers.first(where: { $0.id == container.id })?.state == .running {
+                                appState.openExternalTerminalForContainer(id: container.id)
+                            }
+                        }
+                    }
                 }
-                .buttonStyle(.borderless)
-                .help("Stop every container in this stack")
             }
-            if stack.runningCount < stack.members.count {
-                Button {
-                    Task { await StackGroupSummaryView.startAll(stack, appState: appState) }
-                } label: {
-                    Image(systemName: "play.fill").foregroundStyle(NordicTheme.statusGreen)
+            ActionSlot {
+                if isStarting {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    actionButton("play.fill", tint: NordicTheme.statusGreen, enabled: !isRunning,
+                                 help: isRunning ? "Already running" : "Start Container") {
+                        Task { await appState.startContainerWithVerification(id: container.id) }
+                    }
                 }
-                .buttonStyle(.borderless)
-                .help("Start every container in this stack")
+            }
+            ActionSlot {
+                actionButton("stop.fill", tint: NordicTheme.primaryText, enabled: isRunning,
+                             help: isRunning ? "Stop Container" : "Not running") {
+                    Task {
+                        await appState.performOperation(
+                            category: "Containers",
+                            title: "Stop \(container.id)",
+                            redactedCommand: "container stop \(container.id)"
+                        ) {
+                            try await appState.runtimeService.stopContainer(id: container.id, timeoutSeconds: 5)
+                            return "Stopped '\(container.id)'."
+                        }
+                    }
+                }
+            }
+            ActionSlot {
+                actionButton("trash", tint: NordicTheme.statusRed, help: "Delete Container") {
+                    containerPendingDeletion = container
+                }
             }
         }
+    }
+
+    /// The same four columns for a stack row: start the stopped members, stop the running ones.
+    private func stackActionsCell(_ stack: ContainerStackGroup) -> some View {
+        HStack(spacing: Self.actionSpacing) {
+            ActionSlot { Color.clear }
+            ActionSlot {
+                actionButton("play.fill", tint: NordicTheme.statusGreen, enabled: stack.runningCount < stack.members.count,
+                             help: "Start every container in this stack") {
+                    Task { await StackGroupSummaryView.startAll(stack, appState: appState) }
+                }
+            }
+            ActionSlot {
+                actionButton("stop.fill", tint: NordicTheme.primaryText, enabled: stack.runningCount > 0,
+                             help: "Stop every container in this stack") {
+                    Task { await StackGroupSummaryView.stopAll(stack, appState: appState) }
+                }
+            }
+            ActionSlot { Color.clear }
+        }
+    }
+
+    /// A borderless icon button; disabled ones stay in place, faded, so the columns never shift.
+    private func actionButton(_ symbol: String, tint: Color, enabled: Bool = true, help: String,
+                              action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).foregroundStyle(tint)
+        }
+        .buttonStyle(.borderless)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.25)
+        .help(help)
+    }
+
+    private static let actionsWidth: CGFloat = 4 * 18 + 3 * actionSpacing + 6
+    private static let actionSpacing: CGFloat = 4
+
+    // MARK: - Selection
+
+    private func toggleSelection(_ id: String) {
+        if selection.contains(id) { selection.remove(id) } else { selection.insert(id) }
+    }
+
+    private func checkbox(for row: ContainerListRow, title: String) -> some View {
+        SelectionCheckbox(isOn: selection.contains(row.id), title: title) { toggleSelection(row.id) }
+    }
+
+    /// The containers the selection covers (a stack row counts as all its members).
+    private var selectedContainers: [ContainerModel] {
+        let ids = BulkSelection.containerIDs(in: selection, rows: listRows)
+        return ids.compactMap { id in appState.containers.first { $0.id == id } }
+    }
+
+    private var isBulkSelection: Bool { selection.count > 1 }
+
+    private func selectAll() {
+        selection = Set(listRows.map(\.id))
+    }
+
+    @ViewBuilder
+    private var bulkActions: some View {
+        let targets = selectedContainers
+        let stopped = targets.filter { $0.state != .running }.map(\.id)
+        let running = targets.filter { $0.state == .running }.map(\.id)
+        Button {
+            Task { await appState.startContainers(ids: stopped) }
+        } label: {
+            Label("Start\(stopped.isEmpty ? "" : " \(stopped.count)")", systemImage: "play.fill")
+        }
+        .controlSize(.small)
+        .disabled(stopped.isEmpty)
+        .help("Start the selected containers that aren't running")
+        .accessibilityIdentifier(AccessibilityID.containerBulkStart)
+
+        Button {
+            Task { await appState.stopContainers(ids: running) }
+        } label: {
+            Label("Stop\(running.isEmpty ? "" : " \(running.count)")", systemImage: "stop.fill")
+        }
+        .controlSize(.small)
+        .disabled(running.isEmpty)
+        .help("Stop the selected running containers")
+        .accessibilityIdentifier(AccessibilityID.containerBulkStop)
+
+        Button(role: .destructive) {
+            confirmBulkDelete = true
+        } label: {
+            Label("Delete \(targets.count)…", systemImage: "trash")
+        }
+        .controlSize(.small)
+        .disabled(targets.isEmpty)
+        .help("Delete the selected containers")
+        .accessibilityIdentifier(AccessibilityID.containerBulkDelete)
     }
 
     public enum StateFilter: String, CaseIterable, Identifiable {
@@ -148,6 +280,17 @@ public struct ContainersView: View {
             // Left / Top: Container Table
             VStack(spacing: 0) {
                 // Filter & Action Bar
+                if isBulkSelection {
+                    BulkSelectionBar(count: selectedContainers.count, noun: "container",
+                                     onSelectAll: selection.count < listRows.count ? { selectAll() } : nil,
+                                     onClear: { selection = [] }) { bulkActions }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .frame(minHeight: 40)
+                    .nordicBar()
+                    .overlay(alignment: .bottom) { Divider().overlay(NordicTheme.borderSubtle) }
+                    .accessibilityIdentifier(AccessibilityID.containerSelectionBar)
+                } else {
                 HStack(spacing: 10) {
                     // Segmented when it fits, a compact menu when the inspector narrows the table.
                     ViewThatFits(in: .horizontal) {
@@ -196,6 +339,7 @@ public struct ContainersView: View {
                 .overlay(alignment: .bottom) {
                     Divider().overlay(NordicTheme.borderSubtle)
                 }
+                }
 
                 if filteredContainers.isEmpty {
                     NordicEmptyState(
@@ -211,11 +355,12 @@ public struct ContainersView: View {
                         }
                     )
                 } else {
-                    Table(of: ContainerListRow.self, selection: $appState.selectedContainerID, sortOrder: $sortOrder) {
+                    Table(of: ContainerListRow.self, selection: $selection, sortOrder: $sortOrder) {
                         TableColumn("Name", value: \.sortName) { row in
                             switch row {
                             case .container(let container):
                             HStack(spacing: 7) {
+                                checkbox(for: row, title: container.id)
                                 LadaIcon(.containers, size: 14)
                                     .foregroundStyle(container.state == .running ? NordicTheme.statusGreen : NordicTheme.secondaryText)
                                 // Inside a stack group, the service name (db, web…) reads better than
@@ -226,10 +371,13 @@ public struct ContainersView: View {
                                     .help(container.id)
                             }
                             case .stack(let stack):
-                                stackNameCell(stack)
+                                HStack(spacing: 7) {
+                                    checkbox(for: row, title: "stack \(stack.name)")
+                                    stackNameCell(stack)
+                                }
                             }
                         }
-                        .width(min: 120, ideal: 150)
+                        .width(min: 130, ideal: 160)
 
                         TableColumn("Status", value: \.sortState) { row in
                             switch row {
@@ -286,73 +434,12 @@ public struct ContainersView: View {
                         TableColumn("Actions") { row in
                             switch row {
                             case .container(let container):
-                            HStack(spacing: 6) {
-                                Button {
-                                    if container.state == .running {
-                                        appState.openExternalTerminalForContainer(id: container.id)
-                                    } else {
-                                        Task {
-                                            await appState.startContainerWithVerification(id: container.id)
-                                            if appState.containers.first(where: { $0.id == container.id })?.state == .running {
-                                                appState.openExternalTerminalForContainer(id: container.id)
-                                            }
-                                        }
-                                    }
-                                } label: {
-                                    Image(systemName: "apple.terminal")
-                                        .foregroundStyle(container.state == .running ? NordicTheme.accent(for: appState.preferences.accentThemeChoice) : NordicTheme.secondaryText)
-                                }
-                                .buttonStyle(.borderless)
-                                .help(container.state == .running ? "Open Real Terminal Connected to Container" : "Start & Open Terminal")
-
-                                if container.state == .running {
-                                    Button {
-                                        Task {
-                                            await appState.performOperation(
-                                                category: "Containers",
-                                                title: "Stop \(container.id)",
-                                                redactedCommand: "container stop \(container.id)"
-                                            ) {
-                                                try await appState.runtimeService.stopContainer(id: container.id, timeoutSeconds: 5)
-                                                return "Stopped '\(container.id)'."
-                                            }
-                                        }
-                                    } label: {
-                                        Image(systemName: "stop.fill")
-                                    }
-                                    .buttonStyle(.borderless)
-                                    .help("Stop Container")
-                                } else {
-                                    if appState.startingContainerIDs.contains(container.id) {
-                                        ProgressView().controlSize(.mini)
-                                    } else {
-                                        Button {
-                                            Task {
-                                                await appState.startContainerWithVerification(id: container.id)
-                                            }
-                                        } label: {
-                                            Image(systemName: "play.fill")
-                                                .foregroundStyle(NordicTheme.statusGreen)
-                                        }
-                                        .buttonStyle(.borderless)
-                                        .help("Start Container")
-                                    }
-                                }
-
-                                Button {
-                                    containerPendingDeletion = container
-                                } label: {
-                                    Image(systemName: "trash")
-                                        .foregroundStyle(NordicTheme.statusRed)
-                                }
-                                .buttonStyle(.borderless)
-                                .help("Delete Container")
-                            }
+                                containerActionsCell(container)
                             case .stack(let stack):
                                 stackActionsCell(stack)
                             }
                         }
-                        .width(88)
+                        .width(Self.actionsWidth)
                     } rows: {
                         ForEach(listRows) { row in
                             if case .stack(let stack) = row {
@@ -375,7 +462,17 @@ public struct ContainersView: View {
             .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
 
             // Right / Bottom: Contextual Container Detail Panel
-            if let selected = selectedContainer {
+            if isBulkSelection {
+                BulkSelectionPanel(
+                    icon: .containers,
+                    noun: "container",
+                    items: selectedContainers.map {
+                        BulkSelectionItem(id: $0.id, title: $0.id, detail: "\($0.state.rawValue.capitalized) · \($0.shortImageReference)",
+                              isActive: $0.state == .running)
+                    }
+                ) { bulkActions }
+                .frame(minWidth: 460, idealWidth: 540, maxWidth: .infinity, maxHeight: .infinity)
+            } else if let selected = selectedContainer {
                 ContainerDetailView(appState: appState, container: selected)
                     .frame(minWidth: 460, idealWidth: 540, maxWidth: .infinity, maxHeight: .infinity)
             } else if let id = appState.selectedContainerID, id.hasPrefix(ContainerListRow.stackPrefix),
@@ -396,11 +493,47 @@ public struct ContainersView: View {
             if !isValidSelection(appState.selectedContainerID) {
                 appState.selectedContainerID = listRows.first?.id
             }
+            selection = appState.selectedContainerID.map { [$0] } ?? []
         }
-        .onChange(of: appState.containers.count) { _, _ in
-            if !isValidSelection(appState.selectedContainerID) {
+        .onChange(of: appState.containers) { _, _ in
+            let kept = BulkSelection.pruned(selection, rows: listRows)
+            if kept != selection { selection = kept }
+            if !isBulkSelection, !isValidSelection(appState.selectedContainerID) {
                 appState.selectedContainerID = listRows.first?.id
             }
+        }
+        // A single selected row drives the inspector; with several, the bulk panel takes over.
+        .onChange(of: selection) { _, newValue in
+            if newValue.count == 1, let only = newValue.first, appState.selectedContainerID != only {
+                appState.selectedContainerID = only
+            } else if newValue.isEmpty, appState.selectedContainerID != nil {
+                appState.selectedContainerID = nil
+            }
+        }
+        // Selections made elsewhere (search, Dashboard, Stacks) replace the table's selection.
+        .onChange(of: appState.selectedContainerID) { _, newValue in
+            if let id = newValue, !selection.contains(id) {
+                selection = [id]
+            } else if newValue == nil, selection.count == 1 {
+                selection = []
+            }
+        }
+        .confirmationDialog(
+            "Delete \(selectedContainers.count) Containers?",
+            isPresented: $confirmBulkDelete
+        ) {
+            let targets = selectedContainers
+            let runningCount = targets.filter { $0.state == .running }.count
+            Button(runningCount > 0 ? "Delete, Force-Stopping \(runningCount) Running" : "Delete \(targets.count) Containers",
+                   role: .destructive) {
+                let ids = targets.map(\.id)
+                selection = []
+                Task { await appState.deleteContainers(ids: ids) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            let targets = selectedContainers
+            Text("Deletes \(targets.map(\.id).joined(separator: ", ")) and their container disks. Host bind mounts and named volumes are kept.")
         }
         .confirmationDialog(
             "Delete Container '\(containerPendingDeletion?.id ?? "")'?",

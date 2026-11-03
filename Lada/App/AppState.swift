@@ -1154,6 +1154,59 @@ public final class AppState: ObservableObject {
         await verifyContainerRunningOrDiagnoseExit(id: id)
     }
 
+    // MARK: - Bulk actions (multi-selection in Containers and Images)
+
+    /// Starts each container in turn, with the same exit diagnosis as a single start.
+    public func startContainers(ids: [String]) async {
+        for id in ids { await startContainerWithVerification(id: id) }
+    }
+
+    public func stopContainers(ids: [String]) async {
+        await bulkOperation(category: "Containers", verb: "Stopped", title: "Stop", noun: "container", items: ids,
+                            command: { "container stop \($0)" }) { id in
+            try await self.runtimeService.stopContainer(id: id, timeoutSeconds: 5)
+        }
+    }
+
+    /// Deletes containers; running ones are force-deleted (the confirmation says so).
+    public func deleteContainers(ids: [String]) async {
+        let running = Set(containers.filter { $0.state == .running }.map(\.id))
+        await bulkOperation(category: "Containers", verb: "Deleted", title: "Delete", noun: "container", items: ids,
+                            command: { "container delete \(running.contains($0) ? "--force " : "")\($0)" }) { id in
+            try await self.runtimeService.deleteContainer(id: id, force: running.contains(id))
+        }
+        if let selected = selectedContainerID, ids.contains(selected) { selectedContainerID = nil }
+    }
+
+    /// Deletes images by reference; `forced` are the ones containers still use.
+    public func deleteImages(references: [String], forced: Set<String>) async {
+        await bulkOperation(category: "Images", verb: "Deleted", title: "Delete", noun: "image", items: references,
+                            command: { "container image delete \(forced.contains($0) ? "--force " : "")\($0)" }) { reference in
+            try await self.runtimeService.deleteImage(reference: reference, force: forced.contains(reference))
+        }
+        if let selected = selectedImageID, !images.contains(where: { $0.id == selected }) { selectedImageID = nil }
+    }
+
+    /// One Activity entry for the whole batch. Every item is attempted; if some fail, the entry
+    /// (and the error banner) lists which ones and why.
+    private func bulkOperation(category: String, verb: String, title: String, noun: String, items: [String],
+                               command: (String) -> String, perform: (String) async throws -> Void) async {
+        guard !items.isEmpty else { return }
+        await performOperation(
+            category: category,
+            title: "\(title) \(items.count) \(items.count == 1 ? noun : noun + "s")",
+            redactedCommand: items.map(command).joined(separator: "\n")
+        ) {
+            let outcome = await BulkSelection.run(items, perform: perform)
+            let summary = outcome.summary(verb: verb, noun: noun)
+            guard outcome.failed.isEmpty else {
+                throw LadaError(category: .containerLifecycleFailure, explanation: summary,
+                                suggestedRemediation: "The other \(noun)s were done. Check the failed ones in Activity, then try again.")
+            }
+            return summary
+        }
+    }
+
     public func verifyContainerRunningOrDiagnoseExit(id: String) async {
         // Directly query container state when talking to the live CLI daemon, bypassing refreshAll's isRefreshing guard
         if currentInjectedService == nil {

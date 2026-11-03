@@ -13,6 +13,9 @@ public struct ImagesView: View {
     @State private var pullScheme = "https"
     @State private var isPulling = false
     @State private var pullProgressLines: [String] = []
+    /// Rows picked with a click, ⌘/⇧-click or the checkboxes; two or more switch to bulk delete.
+    @State private var selection: Set<String> = []
+    @State private var confirmBulkDelete = false
 
     public init(appState: AppState) {
         self.appState = appState
@@ -28,10 +31,57 @@ public struct ImagesView: View {
         }
     }
 
+    private var isBulkSelection: Bool { selection.count > 1 }
+
+    private var selectedImages: [ImageModel] { filteredImages.filter { selection.contains($0.id) } }
+
+    private func toggleSelection(_ id: String) {
+        if selection.contains(id) { selection.remove(id) } else { selection.insert(id) }
+    }
+
+    private var bulkDeleteButton: some View {
+        Button(role: .destructive) {
+            confirmBulkDelete = true
+        } label: {
+            Label("Delete \(selectedImages.count)…", systemImage: "trash")
+        }
+        .controlSize(.small)
+        .disabled(selectedImages.isEmpty)
+        .help("Delete the selected images")
+        .accessibilityIdentifier(AccessibilityID.imageBulkDelete)
+    }
+
+    private var bulkBar: some View {
+        let selectAll: (() -> Void)? = selection.count < filteredImages.count
+            ? { selection = Set(filteredImages.map(\.id)) } : nil
+        return BulkSelectionBar(count: selectedImages.count, noun: "image", onSelectAll: selectAll,
+                                onClear: { selection = [] }) { bulkDeleteButton }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .nordicBar()
+            .overlay(alignment: .bottom) { Divider().overlay(NordicTheme.borderSubtle) }
+            .accessibilityIdentifier(AccessibilityID.imageSelectionBar)
+    }
+
+    private func bulkItem(_ image: ImageModel) -> BulkSelectionItem {
+        let users = containersReferencing(image).count
+        let detail = users == 0 ? image.shortDigest : "used by \(users) container\(users == 1 ? "" : "s")"
+        return .init(id: image.id, title: image.fullReference, detail: detail, isActive: users > 0)
+    }
+
+    private var bulkPanel: some View {
+        BulkSelectionPanel(icon: .images, noun: "image", items: selectedImages.map(bulkItem)) { bulkDeleteButton }
+            .frame(minWidth: 420, idealWidth: 480, maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     public var body: some View {
         HSplitView {
             VStack(spacing: 0) {
-                headerToolbar
+                if isBulkSelection {
+                    bulkBar
+                } else {
+                    headerToolbar
+                }
                 if filteredImages.isEmpty {
                     NordicEmptyState(
                         icon: .images,
@@ -48,7 +98,9 @@ public struct ImagesView: View {
             }
             .frame(minWidth: 480, maxWidth: .infinity, maxHeight: .infinity)
 
-            if let selectedId = appState.selectedImageID,
+            if isBulkSelection {
+                bulkPanel
+            } else if let selectedId = appState.selectedImageID,
                let image = appState.images.first(where: { $0.id == selectedId }) {
                 imageInspector(for: inspectedImage?.id == image.id ? (inspectedImage ?? image) : image)
                     .frame(minWidth: 420, idealWidth: 480, maxWidth: .infinity, maxHeight: .infinity)
@@ -66,10 +118,46 @@ public struct ImagesView: View {
             if appState.selectedImageID == nil || !filteredImages.contains(where: { $0.id == appState.selectedImageID }) {
                 appState.selectedImageID = filteredImages.first?.id
             }
+            selection = appState.selectedImageID.map { [$0] } ?? []
         }
-        .onChange(of: appState.images.count) { _, _ in
-            if appState.selectedImageID == nil || !filteredImages.contains(where: { $0.id == appState.selectedImageID }) {
+        .onChange(of: appState.images) { _, images in
+            let kept = selection.intersection(images.map(\.id))
+            if kept != selection { selection = kept }
+            if !isBulkSelection, appState.selectedImageID == nil || !filteredImages.contains(where: { $0.id == appState.selectedImageID }) {
                 appState.selectedImageID = filteredImages.first?.id
+            }
+        }
+        // One selected row drives the inspector; with several, the bulk panel takes over.
+        .onChange(of: selection) { _, newValue in
+            if newValue.count == 1, let only = newValue.first, appState.selectedImageID != only {
+                appState.selectedImageID = only
+            } else if newValue.isEmpty, appState.selectedImageID != nil {
+                appState.selectedImageID = nil
+            }
+        }
+        .onChange(of: appState.selectedImageID) { _, newValue in
+            if let id = newValue, !selection.contains(id) {
+                selection = [id]
+            } else if newValue == nil, selection.count == 1 {
+                selection = []
+            }
+        }
+        .confirmationDialog("Delete \(selectedImages.count) Images?", isPresented: $confirmBulkDelete) {
+            let targets = selectedImages
+            let forced = Set(targets.filter { !containersReferencing($0).isEmpty }.map(\.fullReference))
+            Button(forced.isEmpty ? "Delete \(targets.count) Images" : "Delete, Forcing \(forced.count) In Use", role: .destructive) {
+                let references = targets.map(\.fullReference)
+                selection = []
+                Task { await appState.deleteImages(references: references, forced: forced) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            let targets = selectedImages
+            let inUse = targets.filter { !containersReferencing($0).isEmpty }
+            if inUse.isEmpty {
+                Text("Removes \(targets.map(\.fullReference).joined(separator: ", ")) from the local image store.")
+            } else {
+                Text("Removes \(targets.count) images. Containers still use \(inUse.map(\.fullReference).joined(separator: ", ")); those are force-deleted and the containers can't be recreated until the image is pulled again.")
             }
         }
         .sheet(isPresented: $appState.showPullImageSheet) {
@@ -177,9 +265,10 @@ public struct ImagesView: View {
     }
 
     private var imageTable: some View {
-        Table(filteredImages, selection: $appState.selectedImageID) {
+        Table(filteredImages, selection: $selection) {
             TableColumn("Image") { img in
                 HStack(spacing: 8) {
+                    SelectionCheckbox(isOn: selection.contains(img.id), title: img.fullReference) { toggleSelection(img.id) }
                     LadaIcon(.images, size: 14)
                         .foregroundStyle(NordicTheme.accent(for: appState.preferences.accentThemeChoice))
                     Text(img.repository)

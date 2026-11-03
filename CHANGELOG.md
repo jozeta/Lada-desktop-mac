@@ -6,6 +6,18 @@ From 1.6.0 every commit bumps the version (`Scripts/bump-version.sh`); entries u
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-03
+
+- Containers and Images: select several rows with the new checkboxes, ⌘-click, ⇧-click or ⌘A,
+  then start, stop or delete them together (Images: delete). A selected stack row counts as all
+  its members. The toolbar and inspector switch to the selection's count and actions; every item
+  is attempted, one Activity entry records the batch, and failures name the items and reasons.
+  Running containers and images still in use are force-deleted only after a confirmation that
+  says so
+- Containers: the row actions sit in four fixed columns (terminal · start · stop · delete) on
+  every row, greyed out where they don't apply, so each icon lines up straight down the list;
+  stack rows use the same start and stop columns
+
 ## [1.7.2] - 2026-11-03
 
 - Node Graph: a node stayed highlighted and every other node dimmed, as if selected, and clearing

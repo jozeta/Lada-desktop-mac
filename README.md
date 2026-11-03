@@ -24,6 +24,7 @@ Designed with a **Nordic frosted-glass** look (translucent window, glass panels,
 ![Containers & Inspector](docs/screenshots/containers-overview.png)
 
 - **Container Table with Stack Groups**: Containers started from a stack are grouped under the stack's name in a collapsible row, with Start All / Stop All and Open in Stacks.
+- **Select Several at Once**: Tick the row checkboxes (or ⌘-click / ⇧-click, ⌘A) to start, stop or delete many containers in one go; a stack row stands for all its members. The Images list works the same way for deleting images. Row actions (terminal · start · stop · delete) sit in four fixed columns, greyed out where they don't apply, so each icon lines up down the list.
 - **8-Tab Inspector**: **Overview**, **Logs**, **Terminal**, **Files**, **Config**, **Network**, **Storage** and **Env**. Each container keeps its own tab, terminal session, folder and logs when you switch containers or sections.
 - **Per-Container Disk Donut**: How much space the container's root filesystem image really uses on this Mac, and how much it can still grow (the smaller of the image's size and the Mac's free space). It is measured from the sparse `rootfs.ext4`, so it works for stopped containers too.
 - **Live Port Health Probes**: Published ports are probed in the background and badged **HTTP Ready**, **TCP Ready** or **Unreachable**, with an Open button for HTTP.
