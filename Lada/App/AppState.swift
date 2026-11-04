@@ -35,15 +35,15 @@ public final class AppState: ObservableObject {
     @Published public private(set) var isUserRefreshing = false
     @Published public var showSetupWizard: Bool = false
     @Published public var showCreateContainerSheet: Bool = false
-    @Published public var createContainerInitialRequest: ContainerCreateRequest? = nil
-    @Published public var editorDraftDockerfileText: String? = nil
-    @Published public var editorDraftSourceURL: URL? = nil
-    @Published public var editorDraftComposeYAML: String? = nil
-    @Published public var editorDraftComposeURL: URL? = nil
+    @Published public var createContainerInitialRequest: ContainerCreateRequest?
+    @Published public var editorDraftDockerfileText: String?
+    @Published public var editorDraftSourceURL: URL?
+    @Published public var editorDraftComposeYAML: String?
+    @Published public var editorDraftComposeURL: URL?
     @Published public var showPullImageSheet: Bool = false
     @Published public var showBuildImageSheet: Bool = false
-    @Published public var activeError: LadaError? = nil
-    @Published public var statusFeedbackMessage: String? = nil
+    @Published public var activeError: LadaError?
+    @Published public var statusFeedbackMessage: String?
     @Published public var startingContainerIDs: Set<String> = []
     /// Not published: it flips twice per poll and no view shows it, so publishing it only
     /// re-rendered the whole window.
@@ -63,14 +63,14 @@ public final class AppState: ObservableObject {
     @Published public var containerDisks: [String: ContainerDiskSnapshot] = [:]
     @Published public var systemProperties: SystemProperties = .init()
     @Published public var dnsDomains: [String] = []
-    @Published public var latestReleaseInfo: ReleaseAssetInfo? = nil
+    @Published public var latestReleaseInfo: ReleaseAssetInfo?
 
     // MARK: - Resource Inventories
 
     @Published public var containers: [ContainerModel] = [] {
         didSet { workspaces.reconcile(with: containers) }
     }
-    @Published public var selectedContainerID: String? = nil
+    @Published public var selectedContainerID: String?
     /// Per-container inspector state (tab, terminal session, files, logs) that survives switching
     /// containers and leaving the Containers section.
     public let workspaces = ContainerWorkspaceStore()
@@ -85,16 +85,16 @@ public final class AppState: ObservableObject {
     private var previousStatsTimestamp: [String: Date] = [:]
 
     @Published public var images: [ImageModel] = []
-    @Published public var selectedImageID: String? = nil
+    @Published public var selectedImageID: String?
 
     @Published public var builderStatus: BuilderStatusModel = BuilderStatusModel(isRunning: false)
     @Published public var buildHistory: [BuildRecord] = []
 
     @Published public var networks: [NetworkModel] = []
-    @Published public var selectedNetworkID: String? = nil
+    @Published public var selectedNetworkID: String?
 
     @Published public var volumes: [VolumeModel] = []
-    @Published public var selectedVolumeID: String? = nil
+    @Published public var selectedVolumeID: String?
 
     @Published public var machines: [MachineModel] = [] {
         didSet { machineWorkspaces.reconcile(with: machines) }
@@ -103,7 +103,7 @@ public final class AppState: ObservableObject {
     public let machineWorkspaces = MachineWorkspaceStore()
     /// Node Graph layout, filters and zoom (kept while you visit other pages).
     public let nodeGraph = NodeGraphState()
-    @Published public var selectedMachineID: String? = nil
+    @Published public var selectedMachineID: String?
 
     @Published public var registries: [RegistryModel] = []
     @Published public var activityEvents: [ActivityEvent] = []
@@ -1106,7 +1106,7 @@ public final class AppState: ObservableObject {
         )
 
         let reqToRun = effectiveRequest
-        var createdContainerID: String? = nil
+        var createdContainerID: String?
         await performOperation(
             category: "Containers",
             title: reqToRun.startImmediately ? "Run Container" : "Create Container",

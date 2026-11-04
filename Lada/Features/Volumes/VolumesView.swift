@@ -3,7 +3,7 @@ import SwiftUI
 public struct VolumesView: View {
     @ObservedObject var appState: AppState
     @State private var showCreateSheet = false
-    @State private var volumePendingDeletion: VolumeModel? = nil
+    @State private var volumePendingDeletion: VolumeModel?
     @State private var confirmPruneUnused = false
 
     @State private var createName = ""

@@ -1199,5 +1199,3 @@ public struct NordicPerformanceChartCard: View {
         }
     }
 }
-
-

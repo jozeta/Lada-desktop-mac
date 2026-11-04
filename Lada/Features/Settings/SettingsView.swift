@@ -558,7 +558,6 @@ public struct SettingsView: View {
     }
 }
 
-
 /// Accent themes as colour swatches (each shown in the current light/dark appearance).
 struct AccentSwatchGrid: View {
     @Binding var selection: String
@@ -597,7 +596,6 @@ struct AccentSwatchGrid: View {
         }
     }
 }
-
 
 /// Settings → About: the app's version, the runtime it talks to, this Mac, and where the code
 /// and licences live.

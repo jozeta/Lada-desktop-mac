@@ -29,7 +29,7 @@ public struct SemanticVersion: Comparable, Codable, Sendable, Equatable, CustomS
               let patch = Int(trimmed[patchRange]) else {
             return nil
         }
-        var pre: String? = nil
+        var pre: String?
         if match.range(at: 4).location != NSNotFound,
            let preRange = Range(match.range(at: 4), in: trimmed) {
             pre = String(trimmed[preRange])

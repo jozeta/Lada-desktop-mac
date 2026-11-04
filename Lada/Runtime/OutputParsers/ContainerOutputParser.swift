@@ -148,7 +148,7 @@ public enum ContainerOutputParser {
 
         // Image
         var imageRef = "unknown"
-        var imageDigest: String? = nil
+        var imageDigest: String?
         if let imageObj = configDict["image"] as? [String: Any] {
             imageRef = (imageObj["reference"] as? String) ?? (imageObj["name"] as? String) ?? "unknown"
             if let desc = imageObj["descriptor"] as? [String: Any] {
@@ -160,7 +160,7 @@ public enum ContainerOutputParser {
 
         // Status & networks
         var rawState = "stopped"
-        var startedDate: Date? = nil
+        var startedDate: Date?
         var networkAttachments: [ContainerNetworkAttachment] = []
 
         if let statusObj = dict["status"] as? [String: Any] {
@@ -229,7 +229,7 @@ public enum ContainerOutputParser {
                 let options = (m["options"] as? [String]) ?? []
                 let readOnly = options.contains("ro") || options.contains("readonly")
                 var kind: MountKind = .bind
-                var volName: String? = nil
+                var volName: String?
                 if let typeObj = m["type"] as? [String: Any] {
                     if typeObj["tmpfs"] != nil {
                         kind = .tmpfs
@@ -645,7 +645,7 @@ public enum ContainerOutputParser {
                 memoryBytes = UInt64(max(0, mInt))
             }
 
-            var diskSizeBytes: UInt64? = nil
+            var diskSizeBytes: UInt64?
             if let d = dict["diskSize"] as? UInt64 {
                 diskSizeBytes = d
             } else if let dInt = dict["diskSize"] as? Int {

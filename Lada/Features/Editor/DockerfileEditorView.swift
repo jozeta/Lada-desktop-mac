@@ -303,14 +303,14 @@ public struct DockerfileEditorView: View {
     @ObservedObject var appState: AppState
 
     @State private var dockerfileText: String = DockerfileTemplate.allTemplates[0].content
-    @State private var currentFileURL: URL? = nil
+    @State private var currentFileURL: URL?
     @State private var cursorLine: Int = 1
     @State private var currentWordPrefix: String = ""
     @State private var completionSuggestions: [DockerfileCompletionItem] = []
     @State private var isBuildingAndRunning: Bool = false
     @State private var buildConsoleLines: [String] = []
     @State private var showConsolePane: Bool = false
-    @State private var pendingInsertion: String? = nil
+    @State private var pendingInsertion: String?
 
     // Editable Deployment Configuration (synced from Dockerfile, customizable by user)
     @State private var customContainerName: String = ""
@@ -1114,7 +1114,7 @@ public struct DockerfileCodeEditorRepresentable: NSViewRepresentable {
     @Binding var pendingInsertion: String?
     /// Local image references, offered after FROM.
     var localImages: [String] = []
-    var onFileDrop: ((URL) -> Void)? = nil
+    var onFileDrop: ((URL) -> Void)?
 
     public func makeCoordinator() -> Coordinator {
         Coordinator(self)

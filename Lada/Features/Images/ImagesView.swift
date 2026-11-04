@@ -3,10 +3,10 @@ import SwiftUI
 
 public struct ImagesView: View {
     @ObservedObject var appState: AppState
-    @State private var inspectedImage: ImageModel? = nil
-    @State private var showTagSheetFor: ImageModel? = nil
+    @State private var inspectedImage: ImageModel?
+    @State private var showTagSheetFor: ImageModel?
     @State private var newTagInput = ""
-    @State private var imagePendingDeletion: ImageModel? = nil
+    @State private var imagePendingDeletion: ImageModel?
     @State private var confirmPruneUnused = false
     @State private var pullImageRef = ""
     @State private var pullPlatform = ""

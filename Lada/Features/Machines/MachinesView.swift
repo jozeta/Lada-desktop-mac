@@ -3,7 +3,7 @@ import SwiftUI
 public struct MachinesView: View {
     @ObservedObject var appState: AppState
     @State private var showCreateSheet = false
-    @State private var machinePendingDeletion: MachineModel? = nil
+    @State private var machinePendingDeletion: MachineModel?
 
     @State private var createName = ""
     @State private var createImage = "alpine:latest"

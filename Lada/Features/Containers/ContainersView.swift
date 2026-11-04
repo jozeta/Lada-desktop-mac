@@ -7,7 +7,7 @@ public struct ContainersView: View {
     @State private var sortOrder: [KeyPathComparator<ContainerListRow>] = [
         .init(\.sortName, order: .forward)
     ]
-    @State private var containerPendingDeletion: ContainerModel? = nil
+    @State private var containerPendingDeletion: ContainerModel?
     @State private var confirmPruneStopped: Bool = false
     /// The table's selection: rows picked with a click, ⌘/⇧-click or the checkboxes. One row drives
     /// the inspector as before (`appState.selectedContainerID`); two or more switch to bulk actions.

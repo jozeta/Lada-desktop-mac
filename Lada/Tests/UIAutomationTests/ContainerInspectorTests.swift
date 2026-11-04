@@ -279,4 +279,3 @@ final class ContainerInspectorTests: XCTestCase {
         }
     }
 }
-

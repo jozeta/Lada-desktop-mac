@@ -521,4 +521,3 @@ private struct SidebarNavRow: View {
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
 }
-

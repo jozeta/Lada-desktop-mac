@@ -92,8 +92,8 @@ struct NordicSheet<Content: View>: View {
 /// One labelled field: title (with an optional ⓘ), the control, and a hint below.
 struct NordicFormField<Content: View>: View {
     let title: String
-    var hint: String? = nil
-    var info: String? = nil
+    var hint: String?
+    var info: String?
     @ViewBuilder let content: () -> Content
 
     var body: some View {

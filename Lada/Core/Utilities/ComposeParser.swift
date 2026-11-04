@@ -1037,7 +1037,7 @@ public enum ComposeParser {
         }
 
         var topSection: TopSection = .none
-        var currentService: ComposeServiceSpec? = nil
+        var currentService: ComposeServiceSpec?
         var subSection: ServiceSubsection = .none
         var inNetworkAliases = false
 
@@ -1432,7 +1432,6 @@ public enum ComposeParser {
     }
 }
 
-
 /// Splits command strings the way Compose (and a POSIX shell) does, without running a shell.
 public enum ShellWords {
     /// `sh -c "echo hi && run"` → ["sh", "-c", "echo hi && run"]. Single quotes are literal,
@@ -1453,9 +1452,7 @@ public enum ShellWords {
             case "\"":
                 if ch == "\"" { quote = nil } else if ch == "\\" { escaping = true } else { current.append(ch) }
             default:
-                if ch == "\\" { escaping = true; inWord = true }
-                else if ch == "'" || ch == "\"" { quote = ch; inWord = true }
-                else if ch == " " || ch == "\t" || ch == "\n" {
+                if ch == "\\" { escaping = true; inWord = true } else if ch == "'" || ch == "\"" { quote = ch; inWord = true } else if ch == " " || ch == "\t" || ch == "\n" {
                     if inWord { words.append(current); current = ""; inWord = false }
                 } else { current.append(ch); inWord = true }
             }

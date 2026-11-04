@@ -291,8 +291,7 @@ public struct TerminalScreen: Sendable {
         case "s": saveCursor()
         case "u": restoreCursor()
         case "n":
-            if p(0, 0) == 6 { pendingReplies.append("\u{1B}[\(cursorRow + 1);\(cursorColumn + 1)R") }
-            else if p(0, 0) == 5 { pendingReplies.append("\u{1B}[0n") }
+            if p(0, 0) == 6 { pendingReplies.append("\u{1B}[\(cursorRow + 1);\(cursorColumn + 1)R") } else if p(0, 0) == 5 { pendingReplies.append("\u{1B}[0n") }
         case "c": pendingReplies.append("\u{1B}[?1;2c") // "VT100 with advanced video"
         default: break
         }

@@ -161,7 +161,7 @@ public struct ContainerFileOperations: Sendable {
 
             let isDir = perms.hasPrefix("d")
             let isLink = perms.hasPrefix("l")
-            var symlinkTarget: String? = nil
+            var symlinkTarget: String?
             if isLink, let arrowRange = rawName.range(of: " -> ") {
                 symlinkTarget = String(rawName[arrowRange.upperBound...])
                 rawName = String(rawName[..<arrowRange.lowerBound])

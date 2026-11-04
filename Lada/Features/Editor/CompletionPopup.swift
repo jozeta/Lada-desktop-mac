@@ -147,7 +147,6 @@ private struct CompletionListView: View {
     }
 }
 
-
 /// The reference pane: what the instruction does, how it works, syntax, parameters (the one
 /// being completed highlighted) and an example.
 private struct DockerfileDocPane: View {

@@ -9,8 +9,8 @@ public struct SetupWizardView: View {
     @State private var isFetchingRelease = false
     @State private var isDownloadingInstaller = false
     @State private var installerProgressText: String = ""
-    @State private var downloadedInstallerURL: URL? = nil
-    @State private var installerError: LadaError? = nil
+    @State private var downloadedInstallerURL: URL?
+    @State private var installerError: LadaError?
 
     public init(appState: AppState) {
         self.appState = appState

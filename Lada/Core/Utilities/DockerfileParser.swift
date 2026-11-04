@@ -92,7 +92,7 @@ public enum DockerfileParser {
             switch instruction {
             case "FROM":
                 let tokens = rest.split(whereSeparator: { $0.isWhitespace }).map(String.init)
-                var imageCandidate: String? = nil
+                var imageCandidate: String?
                 var i = 0
                 while i < tokens.count {
                     let tok = tokens[i]
@@ -175,7 +175,7 @@ public enum DockerfileParser {
                 let parsedPairs = parseKeyValueInstruction(rest)
                 for (k, v) in parsedPairs where !k.isEmpty {
                     labels.append(KeyValueEntry(key: k, value: v))
-                    if (k == "lada.mount" || k == "lada.bind_mount" || k == "bind.mount"),
+                    if k == "lada.mount" || k == "lada.bind_mount" || k == "bind.mount",
                        v.contains(":") {
                         let parts = v.split(separator: ":", maxSplits: 1).map(String.init)
                         if parts.count == 2, parts[0].hasPrefix("/"), parts[1].hasPrefix("/") {

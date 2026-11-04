@@ -5,7 +5,6 @@ import UniformTypeIdentifiers
 public struct StacksView: View {
     @ObservedObject var appState: AppState
 
-
     @ObservedObject private var work: StackWorkspace
     @State private var editTarget: ServiceEditTarget?
     @State private var nameDraft = ""
@@ -607,7 +606,6 @@ public struct StacksView: View {
             return NordicTheme.secondaryText
         }
     }
-
 
     private var unifiedLogsPane: some View {
         VStack(spacing: 0) {

@@ -403,8 +403,6 @@ public struct NordicSidebarMaterial: NSViewRepresentable {
     public func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
 
-
-
 // MARK: - Density
 
 private struct NordicDensityKey: EnvironmentKey {

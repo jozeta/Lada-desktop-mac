@@ -3,7 +3,7 @@ import SwiftUI
 public struct NetworksView: View {
     @ObservedObject var appState: AppState
     @State private var showCreateSheet = false
-    @State private var networkPendingDeletion: NetworkModel? = nil
+    @State private var networkPendingDeletion: NetworkModel?
     @State private var confirmPruneUnused = false
 
     @State private var createName = ""

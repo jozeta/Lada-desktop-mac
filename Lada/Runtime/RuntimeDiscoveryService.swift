@@ -103,7 +103,7 @@ public final class RuntimeDiscoveryService: Sendable {
             "\(defaultAppRoot)/kernels"
         ]
         var kernelPresent = false
-        var resolvedKernelPath: String? = nil
+        var resolvedKernelPath: String?
         for kp in kernelCandidates {
             var isDir: ObjCBool = false
             if fm.fileExists(atPath: kp, isDirectory: &isDir) {
@@ -122,10 +122,10 @@ public final class RuntimeDiscoveryService: Sendable {
         }
 
         // Query CLI version via `container system version --format json` or fallback `container --version`
-        var cliVersion: SemanticVersion? = nil
-        var rawVersion: String? = nil
-        var buildType: String? = nil
-        var commitHash: String? = nil
+        var cliVersion: SemanticVersion?
+        var rawVersion: String?
+        var buildType: String?
+        var commitHash: String?
 
         if let verResult = try? await runner.execute(
             executablePath: resolvedPath,

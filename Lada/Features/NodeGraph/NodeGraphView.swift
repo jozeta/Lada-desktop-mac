@@ -508,7 +508,6 @@ public struct NodeGraphView: View {
     }
 }
 
-
 /// One node on the canvas. Equatable, so moving or hovering one node redraws only the chips whose
 /// inputs changed. Drawn with a light translucent fill instead of a blur material and shadow per
 /// chip, which got slow with many overlapping nodes.

@@ -91,4 +91,3 @@ final class TelemetryTests: XCTestCase {
         XCTAssertEqual(AppState.telemetryHistoryLength * 2, 300)
     }
 }
-

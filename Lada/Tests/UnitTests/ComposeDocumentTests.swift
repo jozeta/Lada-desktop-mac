@@ -121,4 +121,3 @@ final class ComposeDocumentTests: XCTestCase {
         XCTAssertTrue(wp.services.first { $0.serviceName == "wordpress" }?.imageReference.contains("wordpress") == true, "WordPress runs the wordpress image, not nginx")
     }
 }
-

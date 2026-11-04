@@ -155,7 +155,7 @@ public struct ImageModel: Identifiable, Codable, Sendable, Equatable {
         let parts = working.split(separator: "/").map(String.init)
         if parts.count >= 2,
            let first = parts.first,
-           (first.contains(".") || first.contains(":") || first == "localhost") {
+           first.contains(".") || first.contains(":") || first == "localhost" {
             let repo = parts.dropFirst().joined(separator: "/")
             return (first, repo, tag)
         }

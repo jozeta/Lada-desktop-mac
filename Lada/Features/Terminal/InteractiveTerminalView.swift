@@ -41,7 +41,7 @@ public final class PTYTerminalSession: ObservableObject {
             setBuffer("""
             \u{001B}[1;36mConnected to \(container.id) (\(container.imageReference)) via \(shellToRun)\u{001B}[0m
             Type directly in the terminal window or use the command bar below.
-            / # 
+            / #
             """)
             return
         }
@@ -63,7 +63,7 @@ public final class PTYTerminalSession: ObservableObject {
             statusMessage = "Interactive Machine Session (\(machine.id))"
             setBuffer("""
             Connected to container machine '\(machine.id)' (\(machine.imageReference ?? "linux"))
-            \(machine.username ?? NSUserName())@\(machine.id):~$ 
+            \(machine.username ?? NSUserName())@\(machine.id):~$
             """)
             return
         }
@@ -425,7 +425,7 @@ public enum TerminalTarget: Equatable, Sendable {
 public struct InteractiveTerminalView: View {
     public let target: TerminalTarget
     public let executablePath: String?
-    public var onOpenExternalTerminal: ((String) -> Void)? = nil
+    public var onOpenExternalTerminal: ((String) -> Void)?
     /// Owned by the container's workspace, so the shell outlives this view (tab and container
     /// switches, other sections) and its screen is there when you come back.
     @ObservedObject private var session: PTYTerminalSession
@@ -599,4 +599,3 @@ final class PTYOutputDecoder: @unchecked Sendable {
         return String(decoding: data, as: UTF8.self)
     }
 }
-

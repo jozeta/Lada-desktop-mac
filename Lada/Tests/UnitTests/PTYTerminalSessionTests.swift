@@ -105,4 +105,3 @@ final class PTYTerminalSessionTests: XCTestCase {
         a.terminateSession(); b.terminateSession()
     }
 }
-

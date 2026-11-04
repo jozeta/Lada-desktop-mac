@@ -11,7 +11,7 @@ public struct ImageLibraryView: View {
     @State private var repositories: [DockerHubRepositoryItem] = DockerHubService.curatedCatalog
     @State private var selectedTagBySlug: [String: String] = [:]
     @State private var isSearching: Bool = false
-    @State private var pullingSlug: String? = nil
+    @State private var pullingSlug: String?
     @State private var pullStatusMessage: String = ""
 
     public init(appState: AppState) {

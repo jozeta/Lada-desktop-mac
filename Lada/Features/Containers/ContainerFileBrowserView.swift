@@ -41,11 +41,11 @@ public struct ContainerFileBrowserView: View {
     public let target: FileBrowserTarget
 
     @State private var isLoadingDirectory: Bool = false
-    @State private var directoryError: String? = nil
+    @State private var directoryError: String?
 
     // File Editor / Preview state
     @State private var isSavingFile: Bool = false
-    @State private var fileStatusBanner: String? = nil
+    @State private var fileStatusBanner: String?
     @State private var isFileDropTargeted: Bool = false
     @State private var showNewFolderSheet: Bool = false
     @State private var newFolderName: String = ""
