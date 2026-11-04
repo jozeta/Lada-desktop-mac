@@ -80,3 +80,9 @@ LADA_LIVE_PRESETS=all swift test --filter LiveImageLibraryPresetTests        # e
 LADA_SNAPSHOT_DIR=/tmp/lada-shots swift test --filter ViewSnapshotTests      # PNGs of every section, light + dark
 LADA_SNAPSHOT_DIR=/tmp/lada-shots swift test --filter testReadmeScreenshots  # README images (copy the -dark PNGs to docs/screenshots/)
 ```
+
+## App standards
+
+This repo follows the app standards in `~/Desktop/code/tools/standards/STANDARDS.md` (rule IDs,
+severities; decisions and waivers in `.claude-standards`). `claude-check --repo .` checks it.
+Lint with `swiftlint lint` (`brew install swiftlint`): errors must be fixed, warnings are listed.

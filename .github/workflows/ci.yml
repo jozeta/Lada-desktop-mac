@@ -15,5 +15,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: swift --version
+      - name: Lint (SwiftLint; settings in .swiftlint.yml)
+        run: |
+          command -v swiftlint >/dev/null || brew install swiftlint
+          swiftlint lint --quiet
       - name: Build and test (SwiftPM)
         run: swift test

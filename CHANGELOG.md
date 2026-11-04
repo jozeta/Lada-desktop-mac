@@ -6,6 +6,9 @@ From 1.6.0 every commit bumps the version (`Scripts/bump-version.sh`); entries u
 
 ## [Unreleased]
 
+- SwiftLint (`.swiftlint.yml`; naming and size rules off for the existing code); CI runs it before
+  the tests
+
 ## [1.8.2] - 2026-11-03
 
 - Tests: the large-graph timing check is skipped on CI (shared runners took 1.05–1.38 s against

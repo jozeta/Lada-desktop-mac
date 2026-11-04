@@ -1,0 +1,22 @@
+# SwiftLint (app standards QA-LINT-1; brew install swiftlint). For this existing code base the
+# naming, length and size rules are off; the rest stay on: errors fail CI, warnings are listed.
+excluded:
+  - .build
+  - "*/.build"
+  - build
+  - build-release
+  - DerivedData
+disabled_rules:
+  - identifier_name
+  - type_name
+  - line_length
+  - trailing_comma
+  - function_body_length
+  - type_body_length
+  - file_length
+  - cyclomatic_complexity
+  - large_tuple
+  - function_parameter_count
+  - nesting
+  - todo
+  - superfluous_disable_command   # the code disables some of the rules above inline already
