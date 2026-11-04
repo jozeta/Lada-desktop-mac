@@ -145,8 +145,8 @@ public struct ContainerFileOperations: Sendable {
             if line.trimmingCharacters(in: .whitespaces).isEmpty || line.hasPrefix("total ") { continue }
 
             var scanner = FieldScanner(line)
-            guard let perms = scanner.next(), let _ = scanner.next(),
-                  let owner = scanner.next(), let _ = scanner.next(),
+            guard let perms = scanner.next(), scanner.next() != nil,
+                  let owner = scanner.next(), scanner.next() != nil,
                   var sizeField = scanner.next() else { continue }
 
             let isDevice = perms.hasPrefix("c") || perms.hasPrefix("b")

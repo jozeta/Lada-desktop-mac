@@ -20,3 +20,5 @@ disabled_rules:
   - nesting
   - todo
   - superfluous_disable_command   # the code disables some of the rules above inline already
+  - multiple_closures_with_trailing_closure   # SwiftUI's Button(action:) { label } style
+  - optional_data_string_conversion          # String(decoding:as:) on purpose: process output must never become nil

@@ -2,9 +2,9 @@ import Foundation
 import SwiftUI
 
 public enum AppAppearanceMode: String, Codable, CaseIterable, Sendable {
-    case system = "system"
-    case light = "light"
-    case dark = "dark"
+    case system
+    case light
+    case dark
 
     public var displayName: String {
         switch self {
@@ -24,8 +24,8 @@ public enum AppAppearanceMode: String, Codable, CaseIterable, Sendable {
 }
 
 public enum UIDensityMode: String, Codable, CaseIterable, Sendable {
-    case comfortable = "comfortable"
-    case compact = "compact"
+    case comfortable
+    case compact
 
     public var displayName: String {
         switch self {
@@ -43,16 +43,16 @@ public enum UIDensityMode: String, Codable, CaseIterable, Sendable {
 }
 
 public enum AccentThemeChoice: String, Codable, CaseIterable, Sendable {
-    case nordicFjord = "nordicFjord"
-    case arcticTeal = "arcticTeal"
-    case slateSteel = "slateSteel"
-    case frostCyan = "frostCyan"
-    case auroraGreen = "auroraGreen"
-    case auroraViolet = "auroraViolet"
-    case lingonberry = "lingonberry"
-    case cloudberry = "cloudberry"
-    case birchGold = "birchGold"
-    case midnightIndigo = "midnightIndigo"
+    case nordicFjord
+    case arcticTeal
+    case slateSteel
+    case frostCyan
+    case auroraGreen
+    case auroraViolet
+    case lingonberry
+    case cloudberry
+    case birchGold
+    case midnightIndigo
 
     public var displayName: String {
         switch self {

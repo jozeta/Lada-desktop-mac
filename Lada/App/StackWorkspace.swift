@@ -202,11 +202,10 @@ public final class StackWorkspace: ObservableObject {
         defer { isDeploying = false }
 
         // Stop in reverse dependency order
-        for svc in parsed.topologicalServices.reversed() {
-            if appState.containers.first(where: { $0.id == svc.containerName })?.state == .running {
-                consoleLines.append("==> Stopping '\(svc.containerName)'…")
-                try? await appState.runtimeService.stopContainer(id: svc.containerName, timeoutSeconds: 5)
-            }
+        for svc in parsed.topologicalServices.reversed()
+        where appState.containers.first(where: { $0.id == svc.containerName })?.state == .running {
+            consoleLines.append("==> Stopping '\(svc.containerName)'…")
+            try? await appState.runtimeService.stopContainer(id: svc.containerName, timeoutSeconds: 5)
         }
         await appState.refreshAll(isUserInitiated: false)
         consoleLines.append("==> Stack stopped.")
@@ -218,11 +217,10 @@ public final class StackWorkspace: ObservableObject {
         consoleLines.append("==> Deleting all containers in stack '\(parsed.projectName)'…")
         defer { isDeploying = false }
 
-        for svc in parsed.topologicalServices.reversed() {
-            if appState.containers.contains(where: { $0.id == svc.containerName }) {
-                consoleLines.append("==> Deleting '\(svc.containerName)'…")
-                try? await appState.runtimeService.deleteContainer(id: svc.containerName, force: true)
-            }
+        for svc in parsed.topologicalServices.reversed()
+        where appState.containers.contains(where: { $0.id == svc.containerName }) {
+            consoleLines.append("==> Deleting '\(svc.containerName)'…")
+            try? await appState.runtimeService.deleteContainer(id: svc.containerName, force: true)
         }
         await appState.refreshAll(isUserInitiated: false)
         consoleLines.append("==> Stack containers deleted.")

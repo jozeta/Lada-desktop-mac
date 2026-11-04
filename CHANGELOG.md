@@ -6,6 +6,10 @@ From 1.6.0 every commit bumps the version (`Scripts/bump-version.sh`); entries u
 
 ## [Unreleased]
 
+- SwiftLint clean: redundant enum raw values removed, `for … where` loops, the PTY code says
+  controlling/terminal side instead of master/slave (also in two error messages). Two rules are off
+  with reasons in `.swiftlint.yml` (SwiftUI trailing closures; lossless output decoding on purpose)
+
 - SwiftLint (`.swiftlint.yml`; naming and size rules off for the existing code); CI runs it before
   the tests
 

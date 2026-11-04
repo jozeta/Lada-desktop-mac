@@ -3,12 +3,12 @@ import Foundation
 // MARK: - Container Lifecycle State
 
 public enum ContainerState: String, Codable, Sendable, Equatable, CaseIterable {
-    case running = "running"
-    case stopped = "stopped"
-    case stopping = "stopping"
-    case created = "created"
-    case exited = "exited"
-    case unknown = "unknown"
+    case running
+    case stopped
+    case stopping
+    case created
+    case exited
+    case unknown
 
     public init(rawRuntimeState: String) {
         switch rawRuntimeState.lowercased() {
@@ -100,10 +100,10 @@ public struct SocketMapping: Codable, Sendable, Equatable, Identifiable {
 // MARK: - Mounts & Filesystems
 
 public enum MountKind: String, Codable, Sendable, Equatable, CaseIterable {
-    case bind = "bind"
-    case volume = "volume"
-    case tmpfs = "tmpfs"
-    case block = "block"
+    case bind
+    case volume
+    case tmpfs
+    case block
 
     public var displayName: String {
         switch self {

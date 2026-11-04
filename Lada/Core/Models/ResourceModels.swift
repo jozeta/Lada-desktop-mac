@@ -100,9 +100,9 @@ public struct NetworkCreateRequest: Codable, Sendable, Equatable {
 // MARK: - Volume Models (`container volume`)
 
 public enum Ext4JournalMode: String, Codable, Sendable, CaseIterable {
-    case ordered = "ordered"
-    case writeback = "writeback"
-    case journal = "journal"
+    case ordered
+    case writeback
+    case journal
 
     public var displayDescription: String {
         switch self {
@@ -197,9 +197,9 @@ public struct VolumeCreateRequest: Codable, Sendable, Equatable {
 // MARK: - Container Machine Models (`container machine`)
 
 public enum HomeMountMode: String, Codable, Sendable, CaseIterable {
-    case rw = "rw"
-    case ro = "ro"
-    case none = "none"
+    case rw
+    case ro
+    case none
 
     public var displayTitle: String {
         switch self {

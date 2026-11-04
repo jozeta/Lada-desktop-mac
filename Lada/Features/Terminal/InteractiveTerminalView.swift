@@ -15,7 +15,7 @@ public final class PTYTerminalSession: ObservableObject {
     @Published public var rows: UInt16 = 28
 
     private var process: Process?
-    private var masterFD: Int32 = -1
+    private var ptyFD: Int32 = -1
     private var readSource: DispatchSourceRead?
     private var screen = TerminalScreen(columns: 100, rows: 28)
 
@@ -85,24 +85,24 @@ public final class PTYTerminalSession: ObservableObject {
             statusMessage = "Failed to allocate pseudo-terminal (posix_openpt errno \(errno))."
             return
         }
-        guard grantpt(mfd) == 0, unlockpt(mfd) == 0, let slaveNamePtr = ptsname(mfd) else {
+        guard grantpt(mfd) == 0, unlockpt(mfd) == 0, let ttyNamePtr = ptsname(mfd) else {
             close(mfd)
-            statusMessage = "Failed to initialize pseudo-terminal slave device."
+            statusMessage = "Failed to initialize the pseudo-terminal device."
             return
         }
 
-        let slavePath = String(cString: slaveNamePtr)
-        let sfd = open(slavePath, O_RDWR | O_NOCTTY)
+        let ttyPath = String(cString: ttyNamePtr)
+        let sfd = open(ttyPath, O_RDWR | O_NOCTTY)
         guard sfd >= 0 else {
             close(mfd)
-            statusMessage = "Unable to open PTY slave path \(slavePath)."
+            statusMessage = "Unable to open the PTY terminal path \(ttyPath)."
             return
         }
 
         var ws = winsize(ws_row: rows, ws_col: columns, ws_xpixel: 0, ws_ypixel: 0)
         _ = ioctl(mfd, TIOCSWINSZ, &ws)
 
-        let slaveHandle = FileHandle(fileDescriptor: sfd, closeOnDealloc: true)
+        let ttyHandle = FileHandle(fileDescriptor: sfd, closeOnDealloc: true)
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: executablePath)
         proc.arguments = arguments
@@ -110,11 +110,11 @@ public final class PTYTerminalSession: ObservableObject {
         env["TERM"] = "xterm-256color"
         env["LANG"] = "en_US.UTF-8"
         proc.environment = env
-        proc.standardInput = slaveHandle
-        proc.standardOutput = slaveHandle
-        proc.standardError = slaveHandle
+        proc.standardInput = ttyHandle
+        proc.standardOutput = ttyHandle
+        proc.standardError = ttyHandle
 
-        self.masterFD = mfd
+        self.ptyFD = mfd
         self.process = proc
         setBuffer(banner)
 
@@ -161,7 +161,7 @@ public final class PTYTerminalSession: ObservableObject {
 
         do {
             try proc.run()
-            try? slaveHandle.close()
+            try? ttyHandle.close()
             self.isRunning = true
             self.statusMessage = "Connected (PID \(proc.processIdentifier) • \(columns)×\(rows))"
         } catch {
@@ -185,34 +185,34 @@ public final class PTYTerminalSession: ObservableObject {
     private func ingestPTYChunk(_ chunk: String) {
         screen.feed(chunk)
         // Answer queries such as "where is the cursor?" (ESC[6n) like a real terminal.
-        for reply in screen.takeReplies() where masterFD >= 0 {
+        for reply in screen.takeReplies() where ptyFD >= 0 {
             let bytes = Array(reply.utf8)
-            _ = bytes.withUnsafeBytes { write(masterFD, $0.baseAddress, $0.count) }
+            _ = bytes.withUnsafeBytes { write(ptyFD, $0.baseAddress, $0.count) }
         }
         outputBuffer = screen.text
-        attributedOutput = TerminalScreenRenderer.render(screen, showCursor: isRunning || masterFD >= 0)
+        attributedOutput = TerminalScreenRenderer.render(screen, showCursor: isRunning || ptyFD >= 0)
     }
 
     public func resizeTerminal(columns: UInt16, rows: UInt16) {
         self.columns = max(20, columns)
         self.rows = max(8, rows)
         screen.resize(columns: Int(self.columns), rows: Int(self.rows))
-        guard masterFD >= 0 else { return }
+        guard ptyFD >= 0 else { return }
         var ws = winsize(ws_row: self.rows, ws_col: self.columns, ws_xpixel: 0, ws_ypixel: 0)
-        _ = ioctl(masterFD, TIOCSWINSZ, &ws)
+        _ = ioctl(ptyFD, TIOCSWINSZ, &ws)
         if isRunning, let pid = process?.processIdentifier {
             statusMessage = "Connected (PID \(pid) • \(self.columns)×\(self.rows))"
         }
     }
 
-    /// Sends raw keystrokes or command strings directly to the PTY master descriptor.
+    /// Sends raw keystrokes or command strings directly to the PTY's controlling descriptor.
     public func sendInput(_ text: String) {
         guard isRunning else { return }
-        if masterFD >= 0 {
+        if ptyFD >= 0 {
             let data = Array(text.utf8)
             _ = data.withUnsafeBytes { ptr in
                 guard let base = ptr.baseAddress else { return 0 }
-                return write(masterFD, base, ptr.count)
+                return write(ptyFD, base, ptr.count)
             }
         } else {
             // Sandbox interactive shell fallback
@@ -253,7 +253,7 @@ public final class PTYTerminalSession: ObservableObject {
 
     public func clearBuffer() {
         setBuffer("")
-        if isRunning && masterFD >= 0 {
+        if isRunning && ptyFD >= 0 {
             sendInput("\u{0C}") // Form feed (Ctrl-L) to redraw prompt
         }
     }
@@ -271,7 +271,7 @@ public final class PTYTerminalSession: ObservableObject {
     private func cleanupDescriptors() {
         readSource?.cancel()
         readSource = nil
-        masterFD = -1
+        ptyFD = -1
     }
 
 }
@@ -384,7 +384,12 @@ struct InteractivePTYCanvasRepresentable: NSViewRepresentable {
             if flags.contains(.control), let ch = event.charactersIgnoringModifiers?.lowercased().unicodeScalars.first {
                 // Ctrl-A … Ctrl-Z → 0x01 … 0x1A; Ctrl-[ \ ] → ESC, FS, GS.
                 if ch.value >= 0x61 && ch.value <= 0x7A { return String(UnicodeScalar(ch.value - 0x60)!) }
-                switch ch { case "[": return "\u{1B}"; case "\\": return "\u{1C}"; case "]": return "\u{1D}"; default: return nil }
+                switch ch {
+                case "[": return "\u{1B}"
+                case "\\": return "\u{1C}"
+                case "]": return "\u{1D}"
+                default: return nil
+                }
             }
             if let chars = event.characters, !chars.isEmpty { return chars }
             return nil
